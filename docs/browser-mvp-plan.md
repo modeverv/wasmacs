@@ -371,11 +371,14 @@ UI. `scripts/probe-browser-worker-repeated-undo.mjs` and
 followed by two real Emacs `undo-only` commands. `C-?` now maps to real Emacs
 `undo-redo 1`; `scripts/probe-browser-worker-redo.mjs` and
 `logs/browser-redo-ui-smoke.txt` prove insert/undo/redo through the worker and
-browser UI. The worker now treats the active file-visiting buffer as
-Emacs-owned after boot, skipping browser image rematerialization for that path
-before subsequent commands so `save-buffer` does not see its visited file as
-externally changed. Clipboard / kill-ring and minibuffer commands remain
-explicit unavailable boundaries.
+browser UI. `scripts/probe-browser-worker-redo-interleaving.mjs` records the
+next known blocker: multi-edit `A`, `B`, `undo-only`, `undo-redo` currently
+returns `No undone changes to redo`, so redo bookkeeping still needs a
+multi-edit command-loop pass. The worker now treats the active file-visiting
+buffer as Emacs-owned after boot, skipping browser image rematerialization for
+that path before subsequent commands so `save-buffer` does not see its visited
+file as externally changed. Clipboard / kill-ring and minibuffer commands
+remain explicit unavailable boundaries.
 
 ## Validation
 

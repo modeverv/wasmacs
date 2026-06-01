@@ -659,3 +659,7 @@
 - Added `?redo-smoke=1` browser UI evidence. The in-app browser PASS is
   recorded in `logs/browser-redo-ui-smoke.txt` and included in the editing
   evidence summary.
+- Added `scripts/probe-browser-worker-redo-interleaving.mjs` and wired it into
+  `npm test` as a known blocker. Single-edit insert/undo/redo passes, but
+  multi-edit `A`, `B`, `undo-only`, `undo-redo` currently returns safe
+  `EVAL_STATUS:1` with `(error user-error No undone changes to redo)`.
