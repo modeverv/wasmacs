@@ -5,8 +5,8 @@ import vm from "node:vm";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
 const artifactDir = `${repoRoot}/artifacts/emacs-browser-persistent-spike`;
-const logPath = `${repoRoot}/logs/wasm-browser-worker-real-undo.txt`;
-const path = "/home/user/worker-real-undo.txt";
+const logPath = `${repoRoot}/logs/wasm-browser-worker-repeated-undo.txt`;
+const path = "/home/user/worker-repeated-undo.txt";
 
 const quote = (value) => `"${String(value)
   .replace(/\\/g, "\\\\")
@@ -88,41 +88,41 @@ await ready;
 
 context.Module.FS_createPath("/", "home", true, true);
 context.Module.FS_createPath("/home", "user", true, true);
-context.Module.FS_createDataFile("/home/user", "worker-real-undo.txt", new TextEncoder().encode(""), true, true, true);
+context.Module.FS_createDataFile("/home/user", "worker-repeated-undo.txt", new TextEncoder().encode(""), true, true, true);
 
 const boot = context.Module.callMain(["--batch", "--eval", '(princ "boot\\n")']);
-const insertEval = context.Module.ccall(
-  "wasmacs_eval_string",
-  "number",
-  ["string"],
-  [workerLikeEval(`(insert ${quote("U")})`)],
-);
-const insertReadback = context.Module.ccall("wasmacs_last_result", "string", [], []);
-const undoEval = context.Module.ccall(
-  "wasmacs_eval_string",
-  "number",
-  ["string"],
-  [workerLikeEval("(undo-only 1)", 1)],
-);
-const undoReadback = context.Module.ccall("wasmacs_last_result", "string", [], []);
+
+function runStep(name, commandForm, pointIndex) {
+  const status = context.Module.ccall(
+    "wasmacs_eval_string",
+    "number",
+    ["string"],
+    [workerLikeEval(commandForm, pointIndex)],
+  );
+  const readback = context.Module.ccall("wasmacs_last_result", "string", [], []);
+  lines.push(`${name.toUpperCase()}_STATUS:${status}`);
+  lines.push(`${name.toUpperCase()}_READBACK:${readback}`);
+  return { status, readback: parseReadback(readback) };
+}
+
+const insertA = runStep("insert_a", `(insert ${quote("A")})`, 0);
+const insertB = runStep("insert_b", `(insert ${quote("B")})`, 1);
+const undo1 = runStep("undo_1", "(undo-only 1)", 2);
+const undo2 = runStep("undo_2", "(undo-only 1)", 1);
 const fileText = context.Module.FS_readFile(path, { encoding: "utf8" });
-const insertParsed = parseReadback(insertReadback);
-const undoParsed = parseReadback(undoReadback);
 
 lines.push(`BOOT_EXIT:${boot}`);
-lines.push(`INSERT_EVAL_STATUS:${insertEval}`);
-lines.push(`INSERT_READBACK:${insertReadback}`);
-lines.push(`UNDO_EVAL_STATUS:${undoEval}`);
-lines.push(`UNDO_READBACK:${undoReadback}`);
 lines.push(`FILE_TEXT:${fileText}`);
-
 await writeFile(logPath, `${lines.join("\n")}\n`);
 
 if (boot !== 0) throw new Error(`expected boot exit 0, got ${boot}`);
-if (insertEval !== 0) throw new Error(`expected insert eval 0, got ${insertEval}`);
-if (insertParsed.text !== "U\n") throw new Error(`expected insert readback text U newline, got ${JSON.stringify(insertParsed)}`);
-if (undoEval !== 0) throw new Error(`expected undo eval 0, got ${undoEval}`);
-if (undoParsed.text !== "") throw new Error(`expected undo readback empty text, got ${JSON.stringify(undoParsed)}`);
-if (fileText !== "") throw new Error(`expected undo to save empty file, got ${JSON.stringify(fileText)}`);
+for (const [name, step] of Object.entries({ insertA, insertB, undo1, undo2 })) {
+  if (step.status !== 0) throw new Error(`expected ${name} status 0, got ${step.status}`);
+}
+if (insertA.readback.text !== "A\n") throw new Error(`expected A newline, got ${JSON.stringify(insertA.readback)}`);
+if (insertB.readback.text !== "AB\n") throw new Error(`expected AB newline, got ${JSON.stringify(insertB.readback)}`);
+if (undo1.readback.text !== "A\n") throw new Error(`expected first undo to leave A newline, got ${JSON.stringify(undo1.readback)}`);
+if (undo2.readback.text !== "") throw new Error(`expected second undo to leave empty text, got ${JSON.stringify(undo2.readback)}`);
+if (fileText !== "") throw new Error(`expected repeated undo to save empty file, got ${JSON.stringify(fileText)}`);
 
-console.log("browser worker real undo probe passed");
+console.log("browser worker repeated undo probe passed");

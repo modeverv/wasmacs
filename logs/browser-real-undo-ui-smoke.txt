@@ -1,0 +1,8 @@
+{
+  "bufferState": "synced from emacs",
+  "output": "\nUndo\nREAL_UNDO_UI_SMOKE:PASS\n",
+  "path": "/home/user/projects/real-undo-ui-1780353680853.txt",
+  "status": "emacs command completed",
+  "text": "",
+  "url": "http://127.0.0.1:5173/?real-undo-smoke=1&run=1780353657633"
+}

@@ -6,4 +6,6 @@ PASS relative path enter open /home/user/projects/enter-open.txt
 PASS textarea autosave before file switch /home/user/projects/autosave-a.txt
 PASS keyboard quit visibility /home/user/projects/undo-quit.txt
 PASS real Emacs undo via persistent worker /home/user/worker-real-undo.txt
+PASS real Emacs undo via browser UI /home/user/projects/real-undo-ui-1780353680853.txt
+PASS repeated real Emacs undo via browser UI /home/user/projects/repeated-undo-ui-1780354061526.txt
 PASS clipboard and kill-ring boundary visibility /home/user/projects/clipboard-boundary.txt

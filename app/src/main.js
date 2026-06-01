@@ -40,6 +40,9 @@ let commandQueue = [];
 let pointIndex = 0;
 let bufferPath = defaultBufferPath;
 let keyPrefix;
+let lastRealUndoSmoke;
+let lastRepeatedUndoSmoke;
+const idleWaiters = [];
 
 async function loadUserImage() {
   const saved = localStorage.getItem(storageKey);
@@ -161,6 +164,29 @@ function setStatus(text) {
   status.textContent = text;
 }
 
+function notifyIdleWaiters() {
+  if (commandInFlight || commandQueue.length > 0) return;
+  while (idleWaiters.length > 0) {
+    idleWaiters.shift()();
+  }
+}
+
+function waitForIdle(timeoutMs = 60_000) {
+  if (!commandInFlight && commandQueue.length === 0) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      const index = idleWaiters.indexOf(done);
+      if (index >= 0) idleWaiters.splice(index, 1);
+      reject(new Error("timed out waiting for wasmacs command queue to become idle"));
+    }, timeoutMs);
+    function done() {
+      clearTimeout(timeout);
+      resolve();
+    }
+    idleWaiters.push(done);
+  });
+}
+
 function renderTextGrid(message) {
   if (!validateTextGridDrawMessage(message)) {
     throw new Error("invalid text grid draw message");
@@ -261,6 +287,7 @@ function handleWorkerMessage(event) {
     runButton.disabled = commandQueue.length > 0;
     runNextBufferCommand();
     if (commandQueue.length === 0 && !commandInFlight) runButton.disabled = false;
+    notifyIdleWaiters();
   }
   if (message.type === "error") {
     const undoUnavailable = message.text.includes("undo requires persistent Emacs buffers");
@@ -273,6 +300,7 @@ function handleWorkerMessage(event) {
     commandInFlight = false;
     runButton.disabled = false;
     stopWorker();
+    notifyIdleWaiters();
   }
 }
 
@@ -282,6 +310,7 @@ function handleWorkerError(event) {
   commandInFlight = false;
   runButton.disabled = false;
   stopWorker();
+  notifyIdleWaiters();
 }
 
 runButton.addEventListener("click", () => enqueueBufferCommand());
@@ -343,6 +372,23 @@ window.addEventListener("message", (event) => {
 });
 
 window.__wasmacsSmoke = {
+  async resetFile(path, text = "") {
+    if (!userImage) userImage = await loadUserImage();
+    const normalizedPath = normalizeUserPath(path);
+    userImage.writeText(normalizedPath, text);
+    localStorage.setItem(storageKey, userImage.toBase64());
+    await loadBuffer(normalizedPath);
+    return this.state();
+  },
+  async open(path) {
+    persistEditorIfModified();
+    commandQueue = [];
+    await loadBuffer(path);
+    userImage.writeText(bufferPath, savedText);
+    localStorage.setItem(storageKey, userImage.toBase64());
+    renderUserFileList();
+    return this.state();
+  },
   keydown(event) {
     handleFrameKey({
       altKey: Boolean(event?.altKey),
@@ -352,6 +398,68 @@ window.__wasmacsSmoke = {
       metaKey: Boolean(event?.metaKey),
       preventDefault() {},
     });
+  },
+  async waitForIdle(timeoutMs) {
+    await waitForIdle(timeoutMs);
+    return this.state();
+  },
+  async realUndoSmoke() {
+    const path = `/home/user/projects/real-undo-ui-${Date.now()}.txt`;
+    await this.resetFile(path, "");
+    this.keydown({ key: "U" });
+    await this.waitForIdle();
+    const afterInsert = this.state();
+    this.keydown({ ctrlKey: true, key: "/" });
+    await this.waitForIdle();
+    const afterUndo = this.state();
+    lastRealUndoSmoke = {
+      afterInsert,
+      afterUndo,
+      passed: (afterInsert.text === "U" || afterInsert.text === "U\n") &&
+        afterInsert.status === "emacs command completed" &&
+        afterUndo.text === "" &&
+        afterUndo.status === "emacs command completed" &&
+        afterUndo.state === "synced from emacs",
+    };
+    appendLine(`REAL_UNDO_UI_SMOKE:${lastRealUndoSmoke.passed ? "PASS" : "FAIL"}`);
+    return lastRealUndoSmoke;
+  },
+  async repeatedUndoSmoke() {
+    const path = `/home/user/projects/repeated-undo-ui-${Date.now()}.txt`;
+    await this.resetFile(path, "");
+    this.keydown({ key: "A" });
+    await this.waitForIdle();
+    const afterInsertA = this.state();
+    this.keydown({ key: "B" });
+    await this.waitForIdle();
+    const afterInsertB = this.state();
+    this.keydown({ ctrlKey: true, key: "/" });
+    await this.waitForIdle();
+    const afterUndo1 = this.state();
+    this.keydown({ ctrlKey: true, key: "/" });
+    await this.waitForIdle();
+    const afterUndo2 = this.state();
+    lastRepeatedUndoSmoke = {
+      afterInsertA,
+      afterInsertB,
+      afterUndo1,
+      afterUndo2,
+      passed: (afterInsertA.text === "A" || afterInsertA.text === "A\n") &&
+        (afterInsertB.text === "AB" || afterInsertB.text === "AB\n") &&
+        (afterUndo1.text === "A" || afterUndo1.text === "A\n") &&
+        afterUndo1.status === "emacs command completed" &&
+        afterUndo2.text === "" &&
+        afterUndo2.status === "emacs command completed" &&
+        afterUndo2.state === "synced from emacs",
+    };
+    appendLine(`REPEATED_UNDO_UI_SMOKE:${lastRepeatedUndoSmoke.passed ? "PASS" : "FAIL"}`);
+    return lastRepeatedUndoSmoke;
+  },
+  lastRealUndoSmoke() {
+    return lastRealUndoSmoke;
+  },
+  lastRepeatedUndoSmoke() {
+    return lastRepeatedUndoSmoke;
   },
   state() {
     return {
@@ -366,3 +474,19 @@ window.__wasmacsSmoke = {
 
 await loadBuffer();
 enqueueBufferCommand();
+if (new URLSearchParams(window.location.search).has("real-undo-smoke")) {
+  waitForIdle()
+    .then(() => window.__wasmacsSmoke.realUndoSmoke())
+    .catch((error) => {
+      lastRealUndoSmoke = { passed: false, error: error && error.message ? error.message : String(error) };
+      appendLine(`REAL_UNDO_UI_SMOKE:FAIL ${lastRealUndoSmoke.error}`);
+    });
+}
+if (new URLSearchParams(window.location.search).has("repeated-undo-smoke")) {
+  waitForIdle()
+    .then(() => window.__wasmacsSmoke.repeatedUndoSmoke())
+    .catch((error) => {
+      lastRepeatedUndoSmoke = { passed: false, error: error && error.message ? error.message : String(error) };
+      appendLine(`REPEATED_UNDO_UI_SMOKE:FAIL ${lastRepeatedUndoSmoke.error}`);
+    });
+}

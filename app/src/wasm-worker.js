@@ -27,11 +27,13 @@ function ensureDirectory(module, path) {
   }
 }
 
-function materializeUserImage(module, entries) {
+function materializeUserImage(module, entries, options = {}) {
+  const skipFilePaths = new Set(options.skipFilePaths || []);
   for (const entry of entries.filter((candidate) => candidate.kind === "directory")) {
     ensureDirectory(module, entry.path);
   }
   for (const entry of entries.filter((candidate) => candidate.kind === "file")) {
+    if (skipFilePaths.has(entry.path)) continue;
     ensureDirectory(module, parentPath(entry.path));
     try {
       module.FS.unlink(entry.path);
@@ -46,10 +48,10 @@ function materializeUserImage(module, entries) {
   }
 }
 
-async function ensureEmacs(userEntries) {
+async function ensureEmacs(userEntries, options = {}) {
   if (emacsReady) {
     await emacsReady;
-    materializeUserImage(emacsModule, userEntries);
+    materializeUserImage(emacsModule, userEntries, options);
     return emacsModule;
   }
 
@@ -107,7 +109,7 @@ async function runEmacsCommand(userEntries, command) {
     if (command?.type === "find-file" || command?.type === "switch-buffer") {
       throw new Error("minibuffer requires persistent Emacs command loop, minibuffer window state, and completion UI");
     }
-    const module = await ensureEmacs(userEntries);
+    const module = await ensureEmacs(userEntries, { skipFilePaths: [command?.path].filter(Boolean) });
     const evalStatus = module.ccall(
       "wasmacs_eval_string",
       "number",
@@ -162,7 +164,7 @@ function buildCommandForm(command) {
     return `${pointForm} (save-buffer)`;
   }
   if (command?.type === "undo") {
-    return `${pointForm} (undo)`;
+    return `${pointForm} (undo-only 1)`;
   }
   return [
     "(goto-char (point-min))",

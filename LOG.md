@@ -631,3 +631,25 @@
   UI-level `undo unavailable` log as the active undo contract. The summary now
   keeps keyboard quit visibility separate and requires the real Emacs worker
   undo probe as the undo evidence.
+- Added a browser UI real-undo smoke path behind `?real-undo-smoke=1`. The
+  in-app browser run initially failed with `(error end-of-file Error reading
+  from stdin)` after the insert succeeded.
+- Root cause: every command rematerialized the browser user image into MEMFS,
+  including the active file-visiting path. That made Emacs see its visited file
+  as externally changed before the undo command's `save-buffer`, which tried to
+  ask for confirmation through stdin.
+- Fixed the worker ownership boundary: after the persistent Emacs runtime is
+  booted, `materializeUserImage` skips the active command path so the live
+  file-visiting buffer remains Emacs-owned between commands.
+- Mapped the current `C-/` bridge to real Emacs `undo-only 1`, avoiding
+  implicit redo/minibuffer questions until redo has an explicit browser command
+  design. The browser UI smoke now passes and is recorded in
+  `logs/browser-real-undo-ui-smoke.txt`.
+- Added `scripts/probe-browser-worker-repeated-undo.mjs` and wired it into
+  `npm test`. It proves a worker-shaped sequence of insert `A`, insert `B`,
+  `undo-only`, `undo-only` leaves the visited file empty through real Emacs
+  undo state.
+- Added a repeated undo browser UI smoke behind `?repeated-undo-smoke=1`.
+  The in-app browser PASS is recorded in
+  `logs/browser-repeated-undo-ui-smoke.txt` and is included in the editing
+  evidence summary.

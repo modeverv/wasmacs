@@ -1,0 +1,8 @@
+{
+  "bufferState": "synced from emacs",
+  "output": "Undo\nREPEATED_UNDO_UI_SMOKE:PASS\n",
+  "path": "/home/user/projects/repeated-undo-ui-1780354061526.txt",
+  "status": "emacs command completed",
+  "text": "",
+  "url": "http://127.0.0.1:5173/?repeated-undo-smoke=1&run=1780354038265"
+}

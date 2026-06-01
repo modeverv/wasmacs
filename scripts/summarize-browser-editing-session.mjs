@@ -23,6 +23,8 @@ const enterOpen = await readJson("browser-enter-open-smoke.txt");
 const autosave = await readJson("browser-textarea-autosave-smoke.txt");
 const undoQuit = await readJson("browser-undo-quit-smoke.txt");
 const realUndo = await readText("wasm-browser-worker-real-undo.txt");
+const realUndoUi = await readJson("browser-real-undo-ui-smoke.txt");
+const repeatedUndoUi = await readJson("browser-repeated-undo-ui-smoke.txt");
 const clipboard = await readJson("browser-clipboard-boundary-smoke.txt");
 
 const session = {
@@ -91,6 +93,24 @@ const session = {
       ok: realUndo.includes("INSERT_EVAL_STATUS:0") &&
         realUndo.includes("UNDO_EVAL_STATUS:0") &&
         /FILE_TEXT:\s*$/m.test(realUndo),
+    },
+    {
+      name: "real Emacs undo via browser UI",
+      path: realUndoUi.path,
+      ok: realUndoUi.path.startsWith("/home/user/projects/real-undo-ui-") &&
+        realUndoUi.status === "emacs command completed" &&
+        realUndoUi.bufferState === "synced from emacs" &&
+        realUndoUi.text === "" &&
+        realUndoUi.output.includes("REAL_UNDO_UI_SMOKE:PASS"),
+    },
+    {
+      name: "repeated real Emacs undo via browser UI",
+      path: repeatedUndoUi.path,
+      ok: repeatedUndoUi.path.startsWith("/home/user/projects/repeated-undo-ui-") &&
+        repeatedUndoUi.status === "emacs command completed" &&
+        repeatedUndoUi.bufferState === "synced from emacs" &&
+        repeatedUndoUi.text === "" &&
+        repeatedUndoUi.output.includes("REPEATED_UNDO_UI_SMOKE:PASS"),
     },
     {
       name: "clipboard and kill-ring boundary visibility",

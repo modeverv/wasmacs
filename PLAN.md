@@ -1233,9 +1233,16 @@ requirement: high-level `undo` fails with `No further undo information` when
 the synthetic setup lacks a post-edit `undo-boundary`, but passes for both
 file-visiting and named buffers when the edit is followed by that boundary.
 The browser worker now adds `undo-boundary` after edit commands and dispatches
-`C-/` to real Emacs `(undo)`. Continue by turning the real-undo deterministic
-probe into a reliable browser UI smoke and then by widening undo coverage to
-multiple edits/repeated undo/redo. Keep process and pty unavailable.
+`C-/` to real Emacs `undo-only`. The real-undo deterministic probe has now
+been promoted to a browser UI smoke in
+`logs/browser-real-undo-ui-smoke.txt`. The UI smoke exposed an important
+ownership rule: after a file is live in Emacs, the worker must not rematerialize
+that active path from the browser image before each command, or `save-buffer`
+sees an externally changed visited file and attempts to read confirmation from
+stdin. Multiple edits followed by repeated real Emacs `undo-only` now pass in
+both the worker-shaped probe and browser UI smoke. Continue by designing
+explicit redo behavior that does not depend on implicit minibuffer prompts.
+Keep process and pty unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior

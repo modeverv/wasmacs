@@ -361,11 +361,19 @@ commands still report explicit unavailable states rather than browser-side
 substitutes.
 
 Undo has now crossed the first real-fidelity threshold. The worker records
-`undo-boundary` after edit commands and maps `C-/` to Emacs `(undo)` in the
+`undo-boundary` after edit commands and maps `C-/` to Emacs `undo-only` in the
 same live file-visiting buffer. This is not a browser-side undo stack:
 `scripts/probe-browser-worker-real-undo.mjs` verifies the worker-shaped
-insert/undo/save sequence against the persistent wasm artifact. Clipboard /
-kill-ring and minibuffer commands remain explicit unavailable boundaries.
+insert/undo/save sequence against the persistent wasm artifact, and
+`logs/browser-real-undo-ui-smoke.txt` records the same flow through the browser
+UI. `scripts/probe-browser-worker-repeated-undo.mjs` and
+`logs/browser-repeated-undo-ui-smoke.txt` extend the proof to two edits
+followed by two real Emacs `undo-only` commands. The worker now treats the
+active file-visiting buffer as Emacs-owned after boot, skipping browser image
+rematerialization for that path before subsequent commands so `save-buffer`
+does not see its visited file as externally changed. Clipboard / kill-ring and
+minibuffer commands remain explicit unavailable boundaries; redo remains a
+later explicit command-loop/minibuffer design item.
 
 ## Validation
 
