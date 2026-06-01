@@ -1,0 +1,37 @@
+Browser Emacs mounted user image smoke via in-app Browser.
+
+URL:
+http://127.0.0.1:5179/
+
+Setup:
+The main browser app loaded `user-filesystem-empty.wasifs`, ensured
+`/home/user/notes.txt` existed in the BrowserUserImage, and sent the image
+entries to the Emacs worker.
+
+Worker behavior:
+`Module.preRun` materialized the user image entries into the Emscripten
+filesystem before Emacs `callMain`. Emacs then ran:
+
+(with-temp-buffer
+  (insert-file-contents "/home/user/notes.txt")
+  (princ (buffer-string)))
+
+Result:
+status = emacs core exited cleanly
+outputHasEditorText = true
+
+Output tail:
+Finding pointers to doc strings...
+Finding pointers to doc strings...done
+Making lexical-binding buffer-local while locally let-bound!
+Welcome to wasmacs.
+
+This is the first browser-hosted buffer adapter.
+It is backed by /home/user/notes.txt in the MVP host filesystem shim.
+
+Notes:
+This proves the browser `.wasifs` user image can be materialized into the
+browser-hosted Emacs Emscripten filesystem before startup, and Emacs file
+primitives can read that mounted `/home/user/notes.txt` content. The reverse
+sync from Emacs-written files back into the browser `.wasifs` image remains the
+next bridge step.

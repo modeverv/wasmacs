@@ -1,0 +1,36 @@
+2026-06-01 browser reverse-sync smoke
+
+Command:
+
+  PORT=5180 npm run dev
+
+URL:
+
+  http://127.0.0.1:5180/
+
+Browser state after worker exit:
+
+  status: emacs core exited cleanly
+  buffer-state: synced from emacs
+  textarea contains: Saved by Emacs core.
+
+Worker proof:
+
+  The app materialized BrowserUserImage entries into the Emscripten filesystem,
+  ran the real Emacs 30.2 wasm core in a browser worker, evaluated Elisp that
+  read /home/user/notes.txt with insert-file-contents, appended text, wrote it
+  back with write-region, and emitted a temporary stdout sync marker. The main
+  thread handled sync-file, updated BrowserUserImage, persisted it through the
+  user image storage path, and refreshed the visible buffer.
+
+Observed stdout tail:
+
+  WASMACS_SYNC_FILE:/home/user/notes.txt
+  WASMACS_SYNC_BEGIN
+  Welcome to wasmacs.
+
+  This is the first browser-hosted buffer adapter.
+  It is backed by /home/user/notes.txt in the MVP host filesystem shim.
+
+  Saved by Emacs core.
+  WASMACS_SYNC_END

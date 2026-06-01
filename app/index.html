@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>wasmacs</title>
+    <link rel="stylesheet" href="/app/src/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <h1>wasmacs</h1>
+          <p id="status" class="status">starting worker</p>
+        </div>
+        <div class="actions">
+          <button id="save" type="button">Save</button>
+          <button id="reload-buffer" type="button">Reload</button>
+          <button id="export-image" type="button">Export</button>
+          <label class="file-button" for="import-image">Import</label>
+          <input id="import-image" type="file" accept=".wasifs,application/octet-stream">
+          <button id="run" type="button">Run Core</button>
+        </div>
+      </header>
+
+      <section class="workspace" aria-label="wasmacs browser MVP">
+        <div class="editor-pane">
+          <div class="buffer-title">
+            <span>/home/user/notes.txt</span>
+            <span id="buffer-state">loaded</span>
+          </div>
+          <div id="frame-grid" class="frame-grid" role="textbox" aria-label="Emacs frame" tabindex="0"></div>
+          <textarea
+            id="editor"
+            spellcheck="false"
+            aria-label="Single buffer editor"
+          ></textarea>
+        </div>
+
+        <div class="core-pane">
+          <div class="buffer-title">*wasmacs-core*</div>
+          <pre id="output" class="output" aria-live="polite"></pre>
+        </div>
+      </section>
+    </main>
+
+    <script type="module" src="/app/src/main.js"></script>
+  </body>
+</html>

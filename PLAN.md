@@ -612,7 +612,7 @@ Validation notes:
 
 Goal: run the core in a browser worker with a minimal single-buffer UI.
 
-Status: [/] in progress
+Status: [x] complete
 
 Deliverables:
 
@@ -675,8 +675,239 @@ Validation notes:
 - 2026-06-01: because the browser profile relinks the shared copied build tree,
   re-run `scripts/build-emacs-core-spike.sh` when the Node/NODERAWFS profile is
   needed for Milestone 7 debug helpers.
+- 2026-06-01: added `app/` and `scripts/serve-app.mjs`. The app starts a
+  classic Web Worker, imports the non-`NODERAWFS` browser profile, and runs
+  `--batch --eval '(princ "hello browser-worker")'`.
+- 2026-06-01: in-app Browser smoke passed at `http://127.0.0.1:5174/`: status
+  reached `emacs core exited cleanly`, and the worker output contained
+  `hello browser-worker`. Evidence is in `logs/browser-worker-smoke.txt`.
+- 2026-06-01: added `scripts/validate-browser-worker-app.sh`; `npm test` now
+  includes static checks for the worker app wiring and dev server MIME handling.
+- 2026-06-01: added the first single-buffer host UI. It edits
+  `/home/user/notes.txt` through a temporary browser host filesystem adapter
+  backed by `localStorage`, tracks modified/saved state, and keeps the Emacs
+  wasm worker proof visible beside the buffer.
+- 2026-06-01: in-app Browser single-buffer smoke passed at
+  `http://127.0.0.1:5175/`: typed text into the buffer, clicked Save, reloaded,
+  confirmed the edited text persisted, and confirmed the worker output still
+  contained `hello browser-worker`. Evidence is in
+  `logs/browser-single-buffer-smoke.txt`.
 
-## Milestone 10: Emacs Fidelity Expansion
+## Milestone 10: Portable Browser User Filesystem
+
+Goal: replace the single-buffer `localStorage` shim with a browser-side
+portable `user-filesystem.wasifs` import/export path.
+
+Status: [x] complete
+
+Deliverables:
+
+```text
+app/src/browser-wasifs.js
+tests/runtime/browser-wasifs.test.js
+```
+
+Steps:
+
+1. Load `artifacts/user-filesystem-empty.wasifs` in the browser app.
+2. Parse the tar-compatible user image without Node-only `Buffer` APIs.
+3. Store edits as `/home/user/notes.txt` in the user image tree.
+4. Persist the exported user image in browser storage as a portable binary
+   payload, not as an ad hoc path/value object.
+5. Add import/export buttons or debug hooks for downloading and restoring a
+   `.wasifs` file.
+
+Validation:
+
+```sh
+npm test
+```
+
+Use the in-app Browser or Playwright to verify:
+
+- first load creates `/home/user/notes.txt`
+- save updates the exported image
+- page reload restores from the exported image
+- exported image can be parsed by the repo tar/wasifs tooling
+
+Exit criteria:
+
+- Browser persistence uses the same tar-compatible user image semantics as the
+  runtime host prototype.
+- The temporary key/value `localStorage` shim is gone or explicitly limited to
+  storing a serialized `.wasifs` payload.
+
+Validation notes:
+
+- 2026-06-01: added `app/src/browser-wasifs.js`, a browser-compatible
+  tar-compatible user image parser/writer that avoids Node-only `Buffer` APIs.
+- 2026-06-01: the browser single-buffer UI now loads
+  `artifacts/user-filesystem-empty.wasifs`, writes `/home/user/notes.txt` into
+  a `BrowserUserImage`, and stores a base64 serialized `.wasifs` payload in
+  `localStorage` under `wasmacs:user-filesystem.wasifs:v1`.
+- 2026-06-01: added Export and Import controls for `user-filesystem.wasifs`.
+- 2026-06-01: added `tests/runtime/browser-wasifs.test.js`; it verifies import
+  from the generated empty user image, tar-compatible export of
+  `/home/user/notes.txt`, and base64 storage roundtrip.
+- 2026-06-01: validation passed with `npm test`.
+
+## Milestone 11: Emacs-Owned File/Buffer Bridge
+
+Goal: move from a host-owned textarea buffer to file and buffer operations that
+round-trip through the Emacs wasm core.
+
+Status: [x] complete
+
+Steps:
+
+1. Start the browser core with a script that can read and write a known file.
+2. Confirm Emacs `fileio.c` paths see the browser-mounted `/home/user` image.
+3. Add a small command protocol for:
+   - open `/home/user/notes.txt`
+   - insert/replace text
+   - save buffer
+   - read buffer text for display
+4. Keep process and pty unavailable.
+
+Exit criteria:
+
+- The text shown in the single-buffer UI is obtained from Emacs or synchronized
+  through an explicit Emacs command bridge, not only a host-side textarea.
+- Saving calls into the same boundary that Emacs file primitives use.
+
+Validation notes:
+
+- 2026-06-01: Node smoke with `artifacts/emacs-browser-spike/temacs` confirmed
+  Emacs can create `/home/user/notes.txt` with `with-temp-file` and read it
+  back with `insert-file-contents`; evidence is in
+  `logs/emacs-file-bridge-node.txt`.
+- 2026-06-01: browser worker smoke confirmed the same Emacs file primitive
+  path in the browser-hosted wasm core; evidence is in
+  `logs/emacs-file-bridge-browser.txt`.
+- 2026-06-01: added `scripts/validate-emacs-file-bridge-spike.sh` and included
+  it in `npm test`.
+- 2026-06-01: current blocker for completing this milestone is synchronization:
+  the Emacs worker Emscripten filesystem and the browser `.wasifs` user image
+  are both present, but not yet the same mounted filesystem.
+- 2026-06-01: browser smoke materialized the browser `.wasifs` user image into
+  the Emacs worker Emscripten filesystem via `Module.preRun`, then Emacs read
+  `/home/user/notes.txt` with `insert-file-contents` and printed the same text
+  shown in the UI. Evidence is in `logs/emacs-mounted-user-image-browser.txt`.
+- 2026-06-01: remaining bridge work is reverse synchronization: exporting
+  Emacs-side changes under `/home/user` back into the browser `.wasifs` user
+  image after save/read operations.
+- 2026-06-01: browser reverse-sync smoke passed at `http://127.0.0.1:5180/`.
+  Emacs read `/home/user/notes.txt`, appended `Saved by Emacs core.`, wrote it
+  back with `write-region`, emitted a temporary `WASMACS_SYNC_*` marker, and
+  the main thread updated the `BrowserUserImage`, persisted the serialized
+  user image, and refreshed the visible textarea to `synced from emacs`.
+  Evidence is in `logs/emacs-reverse-sync-browser.txt`.
+- 2026-06-01: validation passed with `npm test`.
+
+## Milestone 12: Redisplay And Input MVP
+
+Goal: make the browser UI behave like a minimal Emacs frame rather than a
+generic textarea.
+
+Status: [/] in progress
+
+Steps:
+
+1. Define a first text-grid draw message from core/adapter to browser.
+2. Route keyboard input to Emacs command handling where possible.
+3. Render cursor, point, basic selection/mark state, and mode line.
+4. Add basic minibuffer/echo area plumbing.
+5. Keep IME composition visible in the design, even if full fidelity is later.
+
+Exit criteria:
+
+- Typing and simple commands update a rendered Emacs buffer view.
+- The browser is a GUI host; editor state remains in the Emacs side or an
+  explicit transition adapter.
+
+Validation notes:
+
+- 2026-06-01: added `app/src/redisplay-protocol.js` with a first
+  `text-grid-draw` v1 message and validator.
+- 2026-06-01: added `tests/runtime/redisplay-protocol.test.js`; it verifies
+  row wrapping, empty-line preservation, point location, and invalid column
+  rejection.
+- 2026-06-01: the browser app now renders Emacs-synchronized
+  `/home/user/notes.txt` into `#frame-grid` with a mode line and cursor while
+  keeping the textarea as a temporary input surface.
+- 2026-06-01: browser smoke at `http://127.0.0.1:5180/` confirmed
+  `emacs core exited cleanly`, `synced from emacs`, one `.frame-cursor`, and a
+  `/home/user/notes.txt` mode line. Evidence is in
+  `logs/browser-text-grid-smoke.txt`.
+- 2026-06-01: validation passed with `npm test`.
+- 2026-06-01: added `app/src/input-protocol.js` with the first explicit
+  key-to-command bridge for printable insert, Enter, and Backspace; modified
+  keys and IME composition are ignored for now.
+- 2026-06-01: added `tests/runtime/input-protocol.test.js`; it verifies
+  command conversion and `/home/user` scoping.
+- 2026-06-01: the browser app now routes `#frame-grid` keydown events through
+  `run-buffer-command`. Each command launches a one-shot Emacs worker, applies
+  `insert` or `delete-char -1` to `/home/user/notes.txt`, writes with
+  `write-region`, reverse-syncs the file, and refreshes `text-grid-draw`.
+- 2026-06-01: browser smoke at `http://127.0.0.1:5181/` confirmed pressing `Z`
+  inserts through the Emacs command bridge and Backspace removes it through the
+  same bridge. Evidence is in `logs/browser-input-command-smoke.txt` and
+  `logs/browser-input-command-smoke.png`.
+- 2026-06-01: validation passed with `npm test`.
+- 2026-06-01: added `app/src/command-queue.js` and
+  `tests/runtime/command-queue.test.js`; adjacent pending `insert-text`
+  commands for the same file are coalesced so fast printable input can be
+  applied by fewer Emacs worker runs.
+- 2026-06-01: `app/src/main.js` now has an explicit command queue with
+  `enqueueBufferCommand`, `runNextBufferCommand`, and one in-flight command at
+  a time. Backspace remains an ordering boundary.
+- 2026-06-01: browser smoke at `http://127.0.0.1:5182/` confirmed key presses
+  `a`, `b`, `c` round-trip through the command queue and Emacs bridge; the
+  final buffer ended with `abc`. Evidence is in
+  `logs/browser-command-queue-smoke.txt` and
+  `logs/browser-command-queue-smoke.png`.
+- 2026-06-01: validation passed with `npm test`.
+- 2026-06-01: added `docs/persistent-command-loop-feasibility.md`. The current
+  browser profile is `-sEXIT_RUNTIME=1` and `--batch` startup terminates via
+  Emacs `kill-emacs`, so the known-good bridge remains one-shot until a new
+  non-exiting host-command profile is spiked.
+- 2026-06-01: added point propagation through command, sync, and draw:
+  `text-grid-draw` now carries `point.index`, worker output includes
+  `WASMACS_POINT`, and main renders the cursor at the returned point.
+- 2026-06-01: added ArrowLeft/ArrowRight input commands. The worker applies
+  Emacs `backward-char 1` and `forward-char 1` before syncing the updated point.
+- 2026-06-01: browser smoke at `http://127.0.0.1:5183/` confirmed ArrowLeft
+  followed by `X` inserts before the final newline, proving point is no longer
+  forced to point-max. Evidence is in `logs/browser-cursor-command-smoke.txt`
+  and `logs/browser-cursor-command-smoke.png`.
+- 2026-06-01: validation passed with `npm test`.
+
+## Milestone 13: Ordinary Editing Baseline
+
+Goal: make wasmacs useful for a small real editing session.
+
+Status: [ ] not started
+
+Steps:
+
+1. Open, edit, save, reload one or more files under `/home/user/projects`.
+2. Add basic command dispatch for common keys:
+   - movement
+   - delete/backspace
+   - save
+   - find-file/open
+   - switch buffer
+3. Add import/export UX for the user image.
+4. Add visible error reporting when disabled process features are invoked.
+5. Add a repeatable browser smoke script for a 5-minute editing session.
+
+Exit criteria:
+
+- A user can do normal note/code editing in one browser tab and recover the
+  same user image after reload.
+- Known missing native Emacs features are explicit, not surprising failures.
+
+## Milestone 14: Emacs Fidelity Expansion
 
 Goal: move from proof-of-life to recognizable Emacs behavior.
 
@@ -701,23 +932,27 @@ Each feature must have:
 
 ## Current Next Step
 
-Start Milestone 9: Browser Single-Buffer MVP. Milestone 7 now has a usable
-Node wasm batch proof: the default spike build profile produces
-`artifacts/emacs-core-spike.wasm`, and `temacs --batch --eval` prints both
-`hello wasmacs` and `6` after standard `loadup.el`.
-
-Start from the existing runtime host prototype and these evidence files:
+Start Milestone 12: Redisplay And Input MVP. The browser app now stores a
+serialized `.wasifs` payload, forward-mounts `/home/user` into the
+browser-hosted Emacs core, and reverse-syncs Emacs-written `/home/user` content
+back into the browser user image. Start from these evidence files:
 
 ```sh
 logs/wasm-batch-eval.txt
 logs/wasm-browser-profile-batch.txt
+logs/browser-worker-smoke.txt
+logs/browser-single-buffer-smoke.txt
+logs/emacs-file-bridge-node.txt
+logs/emacs-file-bridge-browser.txt
+logs/emacs-mounted-user-image-browser.txt
+logs/emacs-reverse-sync-browser.txt
 logs/runtime-host.txt
 docs/host-abi.md
+docs/browser-mvp-plan.md
 ```
 
-Do not treat the browser MVP as a new Emacs-like editor. Keep the UI as a host
-surface around the real Emacs wasm artifact and the existing runtime host
-boundary. The next step is direct worker loading of
-`artifacts/emacs-browser-spike/temacs` with `temacs.wasm` and `temacs.data`
-served from `app/`, then wiring the smallest single-buffer host UI only after
-that worker proof is alive.
+Next, spike a separate non-exiting browser profile or host-command entrypoint
+for a persistent core-side command loop. Keep the known-good one-shot batch
+bridge as the baseline until the persistent profile can run open, insert,
+backspace, move-left, move-right, save, and redraw. Keep process and pty
+unavailable.

@@ -231,3 +231,128 @@
 - Current caveat: the browser profile still uses Emscripten preload data rather
   than `system-lisp.wasifs`, so it is a packaging proof, not the final
   filesystem architecture.
+- Added `app/` and `scripts/serve-app.mjs` for direct browser worker loading.
+  The app creates a classic worker, sets Emscripten `Module.arguments`,
+  `Module.locateFile`, stdout/stderr hooks, and imports
+  `/artifacts/emacs-browser-spike/temacs`.
+- First in-app Browser run found a real browser packaging bug:
+  extensionless `temacs` was served as `application/octet-stream`, so
+  `importScripts` rejected it. `scripts/serve-app.mjs` now serves basename
+  `temacs` as JavaScript.
+- In-app Browser smoke then passed at `http://127.0.0.1:5174/`: the page status
+  reached `emacs core exited cleanly` and the output tail contained
+  `hello browser-worker`. Evidence is in `logs/browser-worker-smoke.txt`.
+- Added `scripts/validate-browser-worker-app.sh` and included it in `npm test`
+  for repeatable static validation of the worker app wiring.
+- Added the first single-buffer browser host UI. The left pane edits
+  `/home/user/notes.txt` through a temporary `localStorage`-backed host
+  filesystem adapter, with explicit Save/Reload controls and modified/saved
+  state. The right pane keeps the real Emacs wasm worker proof visible.
+- In-app Browser single-buffer smoke passed at `http://127.0.0.1:5175/`:
+  text entered into the buffer persisted after Save and page reload, and the
+  Emacs wasm worker proof still printed `hello browser-worker`. Evidence is in
+  `logs/browser-single-buffer-smoke.txt`.
+- Added Milestones 10-14 to describe the path from proof to ordinary use:
+  portable browser user filesystem, Emacs-owned file/buffer bridge, redisplay
+  and input MVP, ordinary editing baseline, and fidelity expansion.
+- Started Milestone 10. Added `app/src/browser-wasifs.js`, which parses and
+  writes the tar-compatible user image format in the browser without Node
+  `Buffer` APIs.
+- The browser buffer now loads `artifacts/user-filesystem-empty.wasifs`, writes
+  `/home/user/notes.txt` into a `BrowserUserImage`, and stores a base64
+  serialized `.wasifs` payload in `localStorage`.
+- Added Export and Import controls for `user-filesystem.wasifs`.
+- Added `tests/runtime/browser-wasifs.test.js`; validation passed with
+  `npm test`.
+- Started Milestone 11. Node smoke with `artifacts/emacs-browser-spike/temacs`
+  confirmed Emacs can create `/home/user/notes.txt` with `with-temp-file` and
+  read it back with `insert-file-contents`; evidence is in
+  `logs/emacs-file-bridge-node.txt`.
+- Updated the browser worker proof to run the same Emacs file primitive path.
+  In-app Browser smoke passed at `http://127.0.0.1:5177/` with
+  `hello emacs file bridge`; evidence is in
+  `logs/emacs-file-bridge-browser.txt`.
+- Added `scripts/validate-emacs-file-bridge-spike.sh` and included it in
+  `npm test`.
+- Current Milestone 11 boundary: the Emacs worker Emscripten filesystem and the
+  browser `.wasifs` user image are both present, but not yet synchronized into
+  one mounted filesystem.
+- Added forward synchronization for the bridge: the main app sends
+  `BrowserUserImage.entries()` to the worker, `Module.preRun` materializes those
+  entries into Emscripten FS, and Emacs reads `/home/user/notes.txt` with
+  `insert-file-contents`.
+- In-app Browser smoke at `http://127.0.0.1:5179/` confirmed Emacs printed the
+  same `/home/user/notes.txt` content shown in the UI. Evidence is in
+  `logs/emacs-mounted-user-image-browser.txt`.
+- Added reverse synchronization for the bridge: Emacs now reads
+  `/home/user/notes.txt`, appends text, writes it back with `write-region`, and
+  emits a temporary `WASMACS_SYNC_*` stdout marker. The main app handles
+  `sync-file`, updates `BrowserUserImage`, persists the serialized image, and
+  refreshes the visible buffer.
+- In-app Browser smoke at `http://127.0.0.1:5180/` confirmed the status
+  `emacs core exited cleanly`, buffer state `synced from emacs`, and textarea
+  content containing `Saved by Emacs core.` Evidence is in
+  `logs/emacs-reverse-sync-browser.txt`.
+- Milestone 11 is complete. The remaining caveat is that the reverse bridge is
+  a deliberately temporary stdout marker protocol; Milestone 12 should replace
+  it with an explicit redisplay/input adapter.
+- Started Milestone 12. Added `app/src/redisplay-protocol.js` with a
+  `text-grid-draw` v1 message, point metadata, mode line text, and validation.
+- Added `tests/runtime/redisplay-protocol.test.js` for row wrapping,
+  empty-line preservation, point placement, and invalid column rejection.
+- The browser app now renders the Emacs-synchronized `/home/user/notes.txt`
+  content into `#frame-grid` with a mode line and cursor. The textarea remains
+  as a temporary input surface until keyboard/input commands are routed through
+  the Emacs-side bridge.
+- In-app Browser smoke at `http://127.0.0.1:5180/` confirmed
+  `emacs core exited cleanly`, `synced from emacs`, one `.frame-cursor`, and a
+  `/home/user/notes.txt` mode line. Evidence is in
+  `logs/browser-text-grid-smoke.txt`.
+- The Emacs proof command is now idempotent: it only inserts
+  `Saved by Emacs core.` if that marker is not already present.
+- Added `app/src/input-protocol.js` for the first explicit input bridge:
+  printable keys and Enter become `insert-text`, Backspace becomes
+  `backspace`, and modified/composing keys are left out of this narrow MVP
+  path.
+- Added `tests/runtime/input-protocol.test.js`; `npm test` now runs 14 runtime
+  tests before the build/profile/app validations.
+- The browser app now routes keydown on `#frame-grid` through
+  `run-buffer-command`. Each command starts a one-shot worker, materializes the
+  current user image, applies Emacs `insert` or `delete-char -1`, writes the
+  file with `write-region`, reverse-syncs `/home/user/notes.txt`, and redraws
+  the text grid.
+- In-app Browser smoke at `http://127.0.0.1:5181/` confirmed pressing `Z`
+  inserts through the Emacs command bridge and Backspace removes it through the
+  same bridge. Evidence is in `logs/browser-input-command-smoke.txt` and
+  `logs/browser-input-command-smoke.png`.
+- Current caveat: this is intentionally one-command-per-worker and therefore
+  slow. The next meaningful improvement is a persistent worker command queue or
+  another explicit loop that keeps the Emacs side alive across commands.
+- Added `app/src/command-queue.js` and
+  `tests/runtime/command-queue.test.js`. Adjacent pending `insert-text`
+  commands for the same file are coalesced, while Backspace remains an ordering
+  boundary.
+- `app/src/main.js` now has an explicit command queue:
+  `enqueueBufferCommand`, `runNextBufferCommand`, and one in-flight command at
+  a time. This does not make the core persistent yet, but it prevents accepted
+  input from racing worker startup and lets fast printable input batch into
+  fewer Emacs worker runs.
+- In-app Browser smoke at `http://127.0.0.1:5182/` confirmed pressing `a`,
+  `b`, `c` through `#frame-grid` round-trips through the command queue and
+  Emacs bridge; the final buffer ends with `abc`. Evidence is in
+  `logs/browser-command-queue-smoke.txt` and
+  `logs/browser-command-queue-smoke.png`.
+- Added `docs/persistent-command-loop-feasibility.md`. The current browser
+  artifact is built with `-sEXIT_RUNTIME=1`, and the current command path uses
+  Emacs `--batch`, where `startup.el` exits via `kill-emacs`. Therefore the
+  current bridge should remain the known-good one-shot baseline while a
+  separate non-exiting host-command profile is spiked.
+- Added point propagation through the input/sync/draw path. Commands now carry
+  `pointIndex`, the worker emits `WASMACS_POINT`, and `text-grid-draw` carries
+  `point.index`, `point.row`, and `point.column`.
+- Added ArrowLeft/ArrowRight input commands. They run Emacs
+  `backward-char 1` / `forward-char 1` through the same worker bridge.
+- In-app Browser smoke at `http://127.0.0.1:5183/` confirmed ArrowLeft followed
+  by `X` inserts before the final newline, so point is no longer forced to
+  point-max. Evidence is in `logs/browser-cursor-command-smoke.txt` and
+  `logs/browser-cursor-command-smoke.png`.

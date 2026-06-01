@@ -1,0 +1,29 @@
+Browser Emacs file bridge smoke via in-app Browser.
+
+URL:
+http://127.0.0.1:5177/
+
+Worker eval:
+(progn
+  (make-directory "/home/user" t)
+  (with-temp-file "/home/user/notes.txt"
+    (insert "hello emacs file bridge"))
+  (with-temp-buffer
+    (insert-file-contents "/home/user/notes.txt")
+    (princ (buffer-string))))
+
+Result:
+status = emacs core exited cleanly
+hasBridge = true
+
+Output tail:
+Finding pointers to doc strings...
+Finding pointers to doc strings...done
+Making lexical-binding buffer-local while locally let-bound!
+hello emacs file bridge
+
+Notes:
+This proves the browser-hosted Emacs wasm core can exercise Emacs file
+primitives for `/home/user/notes.txt` inside its Emscripten filesystem. It does
+not yet synchronize that filesystem with the browser `.wasifs` user image used
+by the temporary single-buffer UI.

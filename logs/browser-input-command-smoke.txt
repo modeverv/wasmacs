@@ -1,0 +1,49 @@
+2026-06-01 browser input command smoke
+
+Command:
+
+  PORT=5181 npm run dev
+
+URL:
+
+  http://127.0.0.1:5181/
+
+Initial browser state after worker exit:
+
+  status: emacs core exited cleanly
+  buffer-state: synced from emacs
+  frame cursor count: 1
+  textarea contains: Saved by Emacs core.
+
+Input command smoke:
+
+  1. Focused #frame-grid.
+  2. Pressed Z.
+  3. The browser converted the keydown into:
+
+       { type: "insert-text", path: "/home/user/notes.txt", text: "Z" }
+
+  4. The app launched a one-shot Emacs worker command, materialized the current
+     BrowserUserImage, ran Emacs `insert` at point-max, wrote
+     /home/user/notes.txt with `write-region`, reverse-synced the file, and
+     refreshed `text-grid-draw`.
+  5. The visible textarea ended with Z.
+  6. Pressed Backspace.
+  7. The browser converted the keydown into:
+
+       { type: "backspace", path: "/home/user/notes.txt" }
+
+  8. Emacs ran `delete-char -1`, wrote the file, reverse-synced it, and
+     refreshed the grid.
+
+Final browser state:
+
+  status: emacs core exited cleanly
+  buffer-state: synced from emacs
+  frame cursor count: 1
+  editor endsWithZ: false
+  frame-grid mode line: /home/user/notes.txt  (7 rows)
+
+Evidence screenshot:
+
+  logs/browser-input-command-smoke.png

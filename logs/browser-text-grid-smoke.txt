@@ -1,0 +1,25 @@
+2026-06-01 browser text-grid smoke
+
+Command:
+
+  PORT=5180 npm run dev
+
+URL:
+
+  http://127.0.0.1:5180/
+
+Browser state after worker exit:
+
+  status: emacs core exited cleanly
+  buffer-state: synced from emacs
+  frame-grid mode line: /home/user/notes.txt  (9 rows)
+  frame cursor count: 1
+  textarea contains: Saved by Emacs core.
+
+Milestone 12 proof:
+
+  The app now converts Emacs-synchronized buffer text into a `text-grid-draw`
+  message through `app/src/redisplay-protocol.js` and renders it in
+  `#frame-grid` with a mode line and cursor. This is a first explicit
+  redisplay adapter. The temporary textarea remains as the host-side input
+  surface until keyboard events are routed into Emacs-side buffer mutation.

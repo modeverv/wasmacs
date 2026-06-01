@@ -1,0 +1,45 @@
+2026-06-01 browser command queue smoke
+
+Command:
+
+  PORT=5182 npm run dev
+
+URL:
+
+  http://127.0.0.1:5182/
+
+Initial browser state after worker exit:
+
+  status: emacs core exited cleanly
+  buffer-state: synced from emacs
+  frame cursor count: 1
+  textarea contains: Saved by Emacs core.
+
+Input queue smoke:
+
+  1. Focused #frame-grid.
+  2. Pressed a, b, c.
+  3. The browser accepted keydown events as explicit buffer commands.
+  4. Adjacent pending insert-text commands are coalesced by
+     app/src/command-queue.js.
+  5. The commands ran through the Emacs file/buffer bridge and refreshed the
+     text-grid draw surface.
+
+Final browser state:
+
+  status: emacs core exited cleanly
+  buffer-state: synced from emacs
+  editor tail: "d by Emacs core.\nabc"
+  editor endsWithAbc: true
+  frame cursor count: 1
+
+Evidence screenshot:
+
+  logs/browser-command-queue-smoke.png
+
+Notes:
+
+  The Browser automation `type` helper was unavailable because the virtual
+  clipboard is not installed, so this smoke used key presses. The first
+  persistent-latency improvement is command coalescing; the next step remains a
+  core-side persistent command loop.

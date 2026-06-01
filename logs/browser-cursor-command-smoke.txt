@@ -1,0 +1,47 @@
+2026-06-01 browser cursor command smoke
+
+Command:
+
+  PORT=5183 npm run dev
+
+URL:
+
+  http://127.0.0.1:5183/
+
+Initial browser state after worker exit:
+
+  status: emacs core exited cleanly
+  buffer-state: synced from emacs
+  frame cursor count: 1
+
+Cursor command smoke:
+
+  1. Focused #frame-grid.
+  2. Pressed ArrowLeft.
+  3. The browser converted the keydown into:
+
+       { type: "move-point", direction: "left", path: "/home/user/notes.txt" }
+
+  4. The worker ran Emacs `backward-char 1` at the current point and emitted
+     `WASMACS_POINT`.
+  5. Pressed X.
+  6. The worker ran Emacs `insert` at that point, wrote
+     /home/user/notes.txt with `write-region`, emitted `WASMACS_POINT`, and
+     refreshed `text-grid-draw`.
+
+Final browser state:
+
+  status: emacs core exited cleanly
+  buffer-state: synced from emacs
+  tail: "filesystem shim.\n\nSaved by Emacs core.X\n"
+  insertedBeforeFinalNewline: true
+  frame cursor count: 1
+
+Evidence screenshot:
+
+  logs/browser-cursor-command-smoke.png
+
+Notes:
+
+  This is still a one-shot worker command bridge, but point is now part of the
+  command and draw protocol rather than always being forced to point-max.

@@ -1,0 +1,28 @@
+Browser single-buffer smoke via in-app Browser.
+
+URL:
+http://127.0.0.1:5175/
+
+Actions:
+1. Opened the browser MVP app.
+2. Filled the single buffer textarea with:
+   first browser buffer edit
+   line two
+3. Clicked Save.
+4. Reloaded the page.
+
+Result:
+status = emacs core exited cleanly
+bufferState = loaded
+editorValue = first browser buffer edit\nline two
+hasHello = true
+
+Output tail:
+Finding pointers to doc strings...
+Finding pointers to doc strings...done
+Making lexical-binding buffer-local while locally let-bound!
+hello browser-worker
+
+Notes:
+This verifies the temporary host adapter path for `/home/user/notes.txt` using
+browser localStorage. It does not yet mean Emacs redisplay owns the buffer.

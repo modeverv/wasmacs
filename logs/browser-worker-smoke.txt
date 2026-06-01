@@ -1,0 +1,19 @@
+Browser worker smoke via in-app Browser.
+
+URL:
+http://127.0.0.1:5174/
+
+Result:
+status = emacs core exited cleanly
+hasHello = true
+
+Tail:
+Finding pointers to doc strings...
+Finding pointers to doc strings...done
+Making lexical-binding buffer-local while locally let-bound!
+hello browser-worker
+
+Notes:
+The first attempt failed because the extensionless Emscripten glue file
+`artifacts/emacs-browser-spike/temacs` was served as application/octet-stream.
+`scripts/serve-app.mjs` now serves basename `temacs` as JavaScript.

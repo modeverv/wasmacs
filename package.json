@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/runtime/*.test.js && scripts/validate-browser-mvp-readiness.sh && scripts/validate-browser-profile-spike.sh"
+    "dev": "node scripts/serve-app.mjs",
+    "test": "node --test tests/runtime/*.test.js && scripts/validate-browser-mvp-readiness.sh && scripts/validate-browser-profile-spike.sh && scripts/validate-browser-worker-app.sh && scripts/validate-emacs-file-bridge-spike.sh"
   },
   "engines": {
     "node": ">=24"
