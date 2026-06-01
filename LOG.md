@@ -663,3 +663,7 @@
   `npm test` as a known blocker. Single-edit insert/undo/redo passes, but
   multi-edit `A`, `B`, `undo-only`, `undo-redo` currently returns safe
   `EVAL_STATUS:1` with `(error user-error No undone changes to redo)`.
+- A direct state inspection after the multi-edit undo shows
+  `pending-undo-list` is still a cons, but the current `buffer-undo-list` head
+  has no `undo-equiv-table` mapping. The next redo pass should focus on how
+  the synthetic command boundary records redo equivalence after `undo-only`.
