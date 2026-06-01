@@ -360,6 +360,13 @@ in older non-live proof probes. Undo, kill-ring/clipboard, and minibuffer
 commands still report explicit unavailable states rather than browser-side
 substitutes.
 
+Undo has now crossed the first real-fidelity threshold. The worker records
+`undo-boundary` after edit commands and maps `C-/` to Emacs `(undo)` in the
+same live file-visiting buffer. This is not a browser-side undo stack:
+`scripts/probe-browser-worker-real-undo.mjs` verifies the worker-shaped
+insert/undo/save sequence against the persistent wasm artifact. Clipboard /
+kill-ring and minibuffer commands remain explicit unavailable boundaries.
+
 ## Validation
 
 ```sh

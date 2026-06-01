@@ -97,9 +97,6 @@ async function runEmacsCommand(userEntries, command) {
     if (command?.type === "process-probe") {
       throw new Error("host.process is unavailable in the browser MVP");
     }
-    if (command?.type === "undo") {
-      throw new Error("undo requires persistent Emacs buffers; the current MVP reconstructs a temp buffer for each command");
-    }
     if (
       command?.type === "clipboard-copy" ||
       command?.type === "clipboard-cut" ||
@@ -117,7 +114,10 @@ async function runEmacsCommand(userEntries, command) {
       ["string"],
       [buildEval(command)],
     );
-    if (evalStatus !== 0) throw new Error(`wasmacs_eval_string returned ${evalStatus}`);
+    if (evalStatus !== 0) {
+      const lastResult = module.ccall("wasmacs_last_result", "string", [], []);
+      throw new Error(`wasmacs_eval_string returned ${evalStatus}: ${lastResult}`);
+    }
     post("sync-file", parseReadback(module.ccall("wasmacs_last_result", "string", [], [])));
     post("exit", { code: 0 });
   } catch (error) {
@@ -128,11 +128,13 @@ async function runEmacsCommand(userEntries, command) {
 function buildEval(command = { type: "ensure-marker", path: "/home/user/notes.txt" }) {
   const path = command?.path ?? "/home/user/notes.txt";
   const commandForm = buildCommandForm(command);
+  const boundaryForm = needsUndoBoundary(command) ? "    (undo-boundary)" : "";
   const saveForm = command?.type === "move-point" ? "" : "    (when (buffer-modified-p) (save-buffer))";
   return [
     `(let ((path ${quoteElispString(path)}))`,
     "  (find-file path)",
     commandForm,
+    boundaryForm,
     saveForm,
     "    (concat path",
     `            ${quoteElispString("\n")}`,
@@ -159,12 +161,24 @@ function buildCommandForm(command) {
   if (command?.type === "save-buffer") {
     return `${pointForm} (save-buffer)`;
   }
+  if (command?.type === "undo") {
+    return `${pointForm} (undo)`;
+  }
   return [
     "(goto-char (point-min))",
     `(unless (search-forward ${quoteElispString("Saved by Emacs core.")} nil t)`,
     "  (goto-char (point-max))",
     `  (insert ${quoteElispString("\nSaved by Emacs core.\n")}))`,
   ].join(" ");
+}
+
+function needsUndoBoundary(command) {
+  return (
+    command?.type === "insert-text" ||
+    command?.type === "backspace" ||
+    command?.type === "undo" ||
+    command?.type === "ensure-marker"
+  );
 }
 
 function quoteElispString(value) {

@@ -1203,16 +1203,17 @@ key sequences that the current in-app browser safety layer blocks such as
 `C-x`. When the browser automation dependency is made repo-local, turn the
 in-app browser smoke flow itself into a fully repeatable runner. Project file
 open/edit/save/reload, file switching, direct-textarea autosave, `Ctrl+S`,
-`C-g`, explicit undo-unavailable reporting, explicit clipboard-unavailable
-reporting, explicit minibuffer-unavailable reporting, movement/backspace
-regression, recovery after worker recreation, and visible disabled process
-errors now work through the persistent Emacs worker or browser user-image state
-as appropriate. The worker's ordinary editing bridge now opens the active user
-file through real Emacs `find-file` and saves modified file-visiting buffers
-through real `save-buffer`; it no longer uses direct `write-region` on the live
-file-buffer path. Real undo/kill-ring/minibuffer fidelity is now explicitly
-blocked on stable Emacs undo/window/region/minibuffer state and GC-safe host
-entrypoint usage.
+`C-g`, deterministic real Emacs undo through the persistent worker, explicit
+clipboard-unavailable reporting, explicit minibuffer-unavailable reporting,
+movement/backspace regression, recovery after worker recreation, and visible
+disabled process errors now work through the persistent Emacs worker or browser
+user-image state as appropriate. The worker's ordinary editing bridge now
+opens the active user file through real Emacs `find-file`, saves modified
+file-visiting buffers through real `save-buffer`, and dispatches `C-/` to real
+Emacs `(undo)` after command-loop-shaped `undo-boundary` insertion; it no
+longer uses direct `write-region` on the live file-buffer path. Kill-ring and
+minibuffer fidelity remain explicitly blocked on stable Emacs window/region/
+minibuffer state and GC-safe host entrypoint usage.
 The latest cross-eval probe proves a named Emacs buffer can survive across
 separate host calls and write `alpha beta`, but `find-file` file-visiting
 buffers and undo-list state still crash during GC marking when carried across
@@ -1225,14 +1226,16 @@ can cross host eval calls if merely opened, switched to, or edited in memory.
 The remaining crash is narrower: direct `write-region` against a live
 file-visiting buffer poisons the next host eval, while `save-buffer` passes.
 The new browser worker live `find-file`/`save-buffer` path passed the full
-browser probe suite. The undo tail probe narrows the next blocker further:
-`undo-start` plus one `undo-more` passes without direct `write-region`, but the
-second `undo-more`, later high-level `undo` tail phases, and high-level `undo`
-itself remain wasm blockers. Named buffers show the same one-pass/two-pass
-split, so this is not limited to live file-visiting state. Continue by
-isolating why repeated `primitive-undo` through `undo-more` corrupts or exposes
-invalid persistent Emacs state across the wasm host eval boundary. Keep process
-and pty unavailable.
+browser probe suite. The host eval entrypoint now catches Lisp signals and
+returns safe `EVAL_STATUS:1` readbacks instead of wasm traps for uncaught
+`user-error` paths. The undo tail probe now shows the key command-loop
+requirement: high-level `undo` fails with `No further undo information` when
+the synthetic setup lacks a post-edit `undo-boundary`, but passes for both
+file-visiting and named buffers when the edit is followed by that boundary.
+The browser worker now adds `undo-boundary` after edit commands and dispatches
+`C-/` to real Emacs `(undo)`. Continue by turning the real-undo deterministic
+probe into a reliable browser UI smoke and then by widening undo coverage to
+multiple edits/repeated undo/redo. Keep process and pty unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior

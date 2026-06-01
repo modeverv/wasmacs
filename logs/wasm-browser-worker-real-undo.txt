@@ -1,5 +1,3 @@
-EXIT_STATUS:1
-KNOWN_BLOCKER:persistent buffer undo now returns a safe Lisp user-error without a command boundary
 READY
 ERR:warning: unsupported syscall: __syscall_prlimit64
 ERR:Warning: arch-dependent data dir '/usr/local/libexec/emacs/30.2/wasm32-unknown-linux-gnu/': No such file or directory
@@ -123,15 +121,16 @@ ERR:Finding pointers to doc strings...done
 ERR:Making lexical-binding buffer-local while locally let-bound!
 OUT:boot
 ERR:program exited (with status: 0), but keepRuntimeAlive() is set (counter=0) due to an async operation, so halting execution but not exiting the runtime or preventing further async execution (you can use emscripten_force_exit, if you want to force a true shutdown)
+ERR:
+ERR:Undo
 BOOT_EXIT:0
-EVAL_STATUS:1
-READBACK:(error user-error No further undo information)
+INSERT_EVAL_STATUS:0
+INSERT_READBACK:/home/user/worker-real-undo.txt
+1
+U
+
+UNDO_EVAL_STATUS:0
+UNDO_READBACK:/home/user/worker-real-undo.txt
+0
+
 FILE_TEXT:
-file:///Users/seijiro/Sync/sync_work/by-llms/wasmacs/scripts/probe-browser-persistent-buffer-undo.mjs:142
-  throw new Error(`expected wasmacs_eval_string to return 0, got ${evalStatus}`);
-        ^
-
-Error: expected wasmacs_eval_string to return 0, got 1
-    at file:///Users/seijiro/Sync/sync_work/by-llms/wasmacs/scripts/probe-browser-persistent-buffer-undo.mjs:142:9
-
-Node.js v24.15.0

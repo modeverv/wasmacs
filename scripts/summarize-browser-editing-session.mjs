@@ -7,6 +7,10 @@ async function readJson(name) {
   return JSON.parse(await readFile(`${logsDir}/${name}`, "utf8"));
 }
 
+async function readText(name) {
+  return readFile(`${logsDir}/${name}`, "utf8");
+}
+
 function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
@@ -18,6 +22,7 @@ const recovery = await readJson("browser-worker-recovery-smoke.txt");
 const enterOpen = await readJson("browser-enter-open-smoke.txt");
 const autosave = await readJson("browser-textarea-autosave-smoke.txt");
 const undoQuit = await readJson("browser-undo-quit-smoke.txt");
+const realUndo = await readText("wasm-browser-worker-real-undo.txt");
 const clipboard = await readJson("browser-clipboard-boundary-smoke.txt");
 
 const session = {
@@ -72,16 +77,20 @@ const session = {
         autosave.afterReturn.files.some((entry) => entry.text === "~/projects/autosave-a.txt" && entry.current),
     },
     {
-      name: "undo boundary and keyboard quit visibility",
+      name: "keyboard quit visibility",
       path: undoQuit.afterKeyboardQuit.path,
       ok: undoQuit.afterInsert.path === "/home/user/projects/undo-quit.txt" &&
         undoQuit.afterInsert.editor === "U" &&
-        undoQuit.afterUndoUnavailable.status === "undo unavailable" &&
-        undoQuit.afterUndoUnavailable.state === "undo unavailable" &&
-        undoQuit.afterUndoUnavailable.output.includes("undo requires persistent Emacs buffers") &&
         undoQuit.afterKeyboardQuit.status === "keyboard quit" &&
         undoQuit.afterKeyboardQuit.state === "keyboard quit" &&
         undoQuit.afterKeyboardQuit.editor === "U",
+    },
+    {
+      name: "real Emacs undo via persistent worker",
+      path: "/home/user/worker-real-undo.txt",
+      ok: realUndo.includes("INSERT_EVAL_STATUS:0") &&
+        realUndo.includes("UNDO_EVAL_STATUS:0") &&
+        /FILE_TEXT:\s*$/m.test(realUndo),
     },
     {
       name: "clipboard and kill-ring boundary visibility",

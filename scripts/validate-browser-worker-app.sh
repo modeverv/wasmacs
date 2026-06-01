@@ -84,11 +84,12 @@ rg 'wasmacs_last_result' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'buildCommandForm' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'find-file path' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'save-buffer' "${repo_root}/app/src/wasm-worker.js" >/dev/null
+rg 'undo-boundary' "${repo_root}/app/src/wasm-worker.js" >/dev/null
+rg '\(undo\)' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'delete-char -1' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'backward-char 1' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'forward-char 1' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'host\.process is unavailable' "${repo_root}/app/src/wasm-worker.js" >/dev/null
-rg 'undo requires persistent Emacs buffers' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'clipboard/kill-ring requires GUI clipboard protocol' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'minibuffer requires persistent Emacs command loop' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'parseReadback' "${repo_root}/app/src/wasm-worker.js" >/dev/null

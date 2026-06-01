@@ -87,7 +87,10 @@ if (!process.argv.includes("--child")) {
       name === "cross-eval-primitive-undo"
     ) &&
       result.status !== 0 &&
-      combined.includes("memory access out of bounds");
+      (
+        combined.includes("memory access out of bounds") ||
+        combined.includes("_STATUS:1")
+      );
     const status = result.status === 0 ? "PASS" : knownBlocked ? "KNOWN_BLOCKER" : "FAIL";
     summaries.push([
       `CASE:${name}`,
@@ -172,7 +175,10 @@ for (const [index, form] of forms.entries()) {
   const readback = context.Module.ccall("wasmacs_last_result", "string", [], []);
   lines.push(`${label}_STATUS:${status}`);
   lines.push(`${label}_READBACK:${readback}`);
-  if (status !== 0) throw new Error(`${label} eval failed with ${status}`);
+  if (status !== 0) {
+    console.log(lines.join("\n"));
+    throw new Error(`${label} eval failed with ${status}`);
+  }
 }
 
 console.log(lines.join("\n"));

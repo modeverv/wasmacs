@@ -213,3 +213,9 @@ known wasm blockers. Named buffers show the same one-pass/two-pass split, so
 the next entrypoint investigation should start at repeated `primitive-undo` /
 `undo-more` persistent state rather than browser save behavior or
 file-visiting state alone.
+
+The host eval entrypoint now wraps read/eval in `internal_condition_case_1`.
+Uncaught Lisp signals are stored in `wasmacs_last_result` and returned as
+status 1 instead of becoming wasm traps. With that boundary, the no-more-undo
+cases are safe Lisp errors, and high-level `undo` passes when the buffer has a
+normal command-loop-shaped post-edit `undo-boundary`.

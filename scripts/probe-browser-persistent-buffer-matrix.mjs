@@ -142,6 +142,8 @@ if (!process.argv.includes("--child")) {
   for (const name of Object.keys(cases)) {
     const result = spawnSync(process.execPath, [fileURLToPath(import.meta.url), "--child", name], {
       encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: 120_000,
     });
     const combined = `${result.stdout || ""}${result.stderr || ""}`.trimEnd();
     const highLevelUndoCase = (
@@ -153,12 +155,17 @@ if (!process.argv.includes("--child")) {
     );
     const knownBlocked = highLevelUndoCase &&
       result.status !== 0 &&
-      (combined.includes("memory access out of bounds") || combined.includes("RuntimeError: unreachable"));
+      (
+        combined.includes("memory access out of bounds") ||
+        combined.includes("RuntimeError: unreachable") ||
+        combined.includes("EVAL_STATUS:1")
+      );
     const status = result.status === 0 ? "PASS" : knownBlocked ? "KNOWN_BLOCKER" : "FAIL";
     summaries.push([
       `CASE:${name}`,
       `STATUS:${status}`,
       `EXIT_STATUS:${result.status}`,
+      result.error ? `SPAWN_ERROR:${result.error.message}` : "SPAWN_ERROR:absent",
       combined,
       "",
     ].join("\n"));

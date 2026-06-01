@@ -10,6 +10,7 @@ recovery_log="${repo_root}/logs/browser-worker-recovery-smoke.txt"
 enter_open_log="${repo_root}/logs/browser-enter-open-smoke.txt"
 autosave_log="${repo_root}/logs/browser-textarea-autosave-smoke.txt"
 undo_quit_log="${repo_root}/logs/browser-undo-quit-smoke.txt"
+real_undo_log="${repo_root}/logs/wasm-browser-worker-real-undo.txt"
 clipboard_log="${repo_root}/logs/browser-clipboard-boundary-smoke.txt"
 session_log="${repo_root}/logs/browser-editing-session-smoke.txt"
 
@@ -20,6 +21,7 @@ test -f "${recovery_log}"
 test -f "${enter_open_log}"
 test -f "${autosave_log}"
 test -f "${undo_quit_log}"
+test -f "${real_undo_log}"
 test -f "${clipboard_log}"
 test -f "${session_log}"
 
@@ -58,11 +60,11 @@ rg '~/projects/autosave-a\.txt' "${autosave_log}" >/dev/null
 
 rg '"/home/user/projects/undo-quit\.txt"' "${undo_quit_log}" >/dev/null
 rg '"editor": "U"' "${undo_quit_log}" >/dev/null
-rg '"status": "undo unavailable"' "${undo_quit_log}" >/dev/null
-rg '"state": "undo unavailable"' "${undo_quit_log}" >/dev/null
-rg 'undo requires persistent Emacs buffers' "${undo_quit_log}" >/dev/null
 rg '"status": "keyboard quit"' "${undo_quit_log}" >/dev/null
 rg '"state": "keyboard quit"' "${undo_quit_log}" >/dev/null
+rg 'INSERT_EVAL_STATUS:0' "${real_undo_log}" >/dev/null
+rg 'UNDO_EVAL_STATUS:0' "${real_undo_log}" >/dev/null
+rg 'FILE_TEXT:$' "${real_undo_log}" >/dev/null
 
 rg '"/home/user/projects/clipboard-boundary\.txt"' "${clipboard_log}" >/dev/null
 rg '"editor": "CLIP"' "${clipboard_log}" >/dev/null
@@ -76,7 +78,8 @@ rg 'PASS file switching /home/user/projects/switch-a\.txt' "${session_log}" >/de
 rg 'PASS worker recovery after unavailable process /home/user/projects/recovery-order\.txt' "${session_log}" >/dev/null
 rg 'PASS relative path enter open /home/user/projects/enter-open\.txt' "${session_log}" >/dev/null
 rg 'PASS textarea autosave before file switch /home/user/projects/autosave-a\.txt' "${session_log}" >/dev/null
-rg 'PASS undo boundary and keyboard quit visibility /home/user/projects/undo-quit\.txt' "${session_log}" >/dev/null
+rg 'PASS keyboard quit visibility /home/user/projects/undo-quit\.txt' "${session_log}" >/dev/null
+rg 'PASS real Emacs undo via persistent worker /home/user/worker-real-undo\.txt' "${session_log}" >/dev/null
 rg 'PASS clipboard and kill-ring boundary visibility /home/user/projects/clipboard-boundary\.txt' "${session_log}" >/dev/null
 
 echo "browser editing smoke evidence validation passed"

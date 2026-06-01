@@ -199,7 +199,11 @@ if (!process.argv.includes("--child")) {
     });
     const combined = `${result.stdout || ""}${result.stderr || ""}`.trimEnd();
     const knownBlocked = result.status !== 0 &&
-      (combined.includes("memory access out of bounds") || combined.includes("RuntimeError: unreachable"));
+      (
+        combined.includes("memory access out of bounds") ||
+        combined.includes("RuntimeError: unreachable") ||
+        combined.includes("_STATUS:1")
+      );
     const timedOut = result.error?.code === "ETIMEDOUT";
     const status = result.status === 0 ? "PASS" : knownBlocked || timedOut ? "KNOWN_BLOCKER" : "FAIL";
     statuses.set(name, status);
@@ -289,7 +293,10 @@ for (const [index, form] of forms.entries()) {
   const readback = context.Module.ccall("wasmacs_last_result", "string", [], []);
   lines.push(`${label}_STATUS:${status}`);
   lines.push(`${label}_READBACK:${readback}`);
-  if (status !== 0) throw new Error(`${label} eval failed with ${status}`);
+  if (status !== 0) {
+    console.log(lines.join("\n"));
+    throw new Error(`${label} eval failed with ${status}`);
+  }
 }
 
 console.log(lines.join("\n"));

@@ -14,13 +14,18 @@ if (!process.argv.includes("--child")) {
     encoding: "utf8",
   });
   const combined = `${result.stdout || ""}${result.stderr || ""}`;
-  const knownBlocked = result.status !== 0 && combined.includes("memory access out of bounds");
+  const safeLispError = combined.includes("EVAL_STATUS:1") &&
+    combined.includes("(error user-error No further undo information)");
+  const knownBlocked = result.status !== 0 &&
+    (combined.includes("memory access out of bounds") || safeLispError);
 
   await writeFile(
     logPath,
     [
       `EXIT_STATUS:${result.status}`,
-      knownBlocked
+      safeLispError
+        ? "KNOWN_BLOCKER:persistent buffer undo now returns a safe Lisp user-error without a command boundary"
+        : knownBlocked
         ? "KNOWN_BLOCKER:persistent buffer undo currently crashes wasm during GC/undo traversal"
         : "KNOWN_BLOCKER:absent",
       combined.trimEnd(),
@@ -34,7 +39,7 @@ if (!process.argv.includes("--child")) {
 
   console.log(
     knownBlocked
-      ? "browser persistent buffer undo probe recorded known wasm undo blocker"
+      ? "browser persistent buffer undo probe recorded known undo blocker"
       : "browser persistent buffer undo probe passed",
   );
   process.exit(0);

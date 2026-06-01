@@ -30,6 +30,24 @@ wasmacs_store_result (Lisp_Object value)
   wasmacs_last_eval_result = copy;
 }
 
+static int wasmacs_eval_had_error;
+
+static Lisp_Object
+wasmacs_eval_body (Lisp_Object source)
+{
+  Lisp_Object read_result = call3 (intern_c_string ("read-from-string"),
+                                  source, Qnil, Qnil);
+  Lisp_Object form = Fcar (read_result);
+  return Feval (form, Qt);
+}
+
+static Lisp_Object
+wasmacs_eval_error_handler (Lisp_Object error)
+{
+  wasmacs_eval_had_error = 1;
+  return Fcons (intern_c_string ("error"), error);
+}
+
 __attribute__ ((used, visibility ("default")))
 int
 wasmacs_eval_string (const char *utf8)
@@ -48,13 +66,14 @@ wasmacs_eval_string (const char *utf8)
 
   specpdl_ref gc_count = inhibit_garbage_collection ();
   Lisp_Object source = build_string (utf8);
-  Lisp_Object read_result = call3 (intern_c_string ("read-from-string"),
-                                  source, Qnil, Qnil);
-  Lisp_Object form = Fcar (read_result);
-  wasmacs_store_result (Feval (form, Qt));
+  wasmacs_eval_had_error = 0;
+  Lisp_Object result = internal_condition_case_1 (wasmacs_eval_body, source,
+                                                 Qt,
+                                                 wasmacs_eval_error_handler);
+  wasmacs_store_result (result);
   unbind_to (gc_count, Qnil);
   stack_bottom = saved_stack_bottom;
-  return 0;
+  return wasmacs_eval_had_error ? 1 : 0;
 }
 
 EOF

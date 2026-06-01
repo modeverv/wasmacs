@@ -51,6 +51,35 @@ const namedReadback = [
 
 const withNamedSetup = (body) => [namedSetup, body, namedReadback].join(" ");
 
+const commandBoundarySetup = [
+  `(let ((path ${JSON.stringify(path)}))`,
+  "  (find-file path)",
+  "  (let ((buffer-undo-list t))",
+  "    (erase-buffer)",
+  "    (insert \"alpha\"))",
+  "  (setq buffer-undo-list nil)",
+  "  (insert \" beta\")",
+  "  (undo-boundary)",
+].join(" ");
+
+const withCommandBoundarySetup = (body) => [commandBoundarySetup, body, readback].join(" ");
+
+const namedCommandBoundarySetup = [
+  '(with-current-buffer (get-buffer-create "undo-tail-named")',
+  "  (let ((buffer-undo-list t))",
+  "    (erase-buffer)",
+  "    (insert \"alpha\"))",
+  "  (setq buffer-undo-list nil)",
+  "  (insert \" beta\")",
+  "  (undo-boundary)",
+].join(" ");
+
+const withNamedCommandBoundarySetup = (body) => [
+  namedCommandBoundarySetup,
+  body,
+  namedReadback,
+].join(" ");
+
 const pointRecordPrune = [
   "  (let ((tail buffer-undo-list)",
   "        (prev nil))",
@@ -82,6 +111,21 @@ const cases = {
     "  (undo-more 1)",
     "  (undo-more 1)",
   ].join(" ")),
+  "undo-start-more-twice-caught": withSetup([
+    "  (condition-case err",
+    "      (progn",
+    "        (undo-start)",
+    "        (undo-more 1)",
+    "        (undo-more 1)",
+    "        'no-error)",
+    "    (error (format \"CAUGHT:%S\" err)))",
+  ].join(" ")),
+  "user-error-caught": withSetup([
+    "  (condition-case err",
+    "      (user-error \"synthetic undo boundary\")",
+    "    (error (format \"CAUGHT:%S\" err)))",
+  ].join(" ")),
+  "user-error-uncaught": withSetup("  (user-error \"synthetic undo boundary\")"),
   "named-buffer-undo-start-more-once": withNamedSetup([
     "  (undo-start)",
     "  (undo-more 1)",
@@ -91,7 +135,22 @@ const cases = {
     "  (undo-more 1)",
     "  (undo-more 1)",
   ].join(" ")),
+  "named-buffer-undo-start-more-twice-caught": withNamedSetup([
+    "  (condition-case err",
+    "      (progn",
+    "        (undo-start)",
+    "        (undo-more 1)",
+    "        (undo-more 1)",
+    "        'no-error)",
+    "    (error (format \"CAUGHT:%S\" err)))",
+  ].join(" ")),
   "named-buffer-high-level-undo": withNamedSetup("  (undo)"),
+  "command-boundary-high-level-undo": withCommandBoundarySetup("  (undo)"),
+  "command-boundary-high-level-undo-save-buffer": withCommandBoundarySetup([
+    "  (undo)",
+    "  (save-buffer)",
+  ].join(" ")),
+  "named-command-boundary-high-level-undo": withNamedCommandBoundarySetup("  (undo)"),
   "undo-tail-puthash": withSetup([
     "  (undo-start)",
     "  (undo-more 1)",
@@ -166,7 +225,8 @@ if (!process.argv.includes("--child")) {
         combined.includes("memory access out of bounds") ||
         combined.includes("RuntimeError: unreachable") ||
         combined.includes("null function or function signature mismatch") ||
-        combined.includes("Aborted(native code called abort())")
+        combined.includes("Aborted(native code called abort())") ||
+        combined.includes("EVAL_STATUS:1")
       );
     const status = result.status === 0 ? "PASS" : knownBlocked ? "KNOWN_BLOCKER" : "FAIL";
     statuses.set(name, status);

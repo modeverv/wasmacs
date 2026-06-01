@@ -203,3 +203,13 @@ the later `undo-equiv-table` / message / autosave tail; repeated undo
 application through `undo-more` is now the first failing phase to isolate.
 Named-buffer cases show the same split, so the blocker is broader than
 file-visiting buffer state.
+
+The next pass changed that interpretation. Once `wasmacs_eval_string` catches
+Lisp signals at the host boundary, the second `undo-more` / high-level `undo`
+cases no longer crash wasm; they return safe `EVAL_STATUS:1` readbacks with
+`(error user-error No further undo information)`. Adding the command-loop-shaped
+post-edit `(undo-boundary)` makes high-level `undo` pass for both file-visiting
+and named buffers. The browser worker therefore now records an Emacs
+`undo-boundary` after edit commands and routes `C-/` to real Emacs `(undo)`.
+`scripts/probe-browser-worker-real-undo.mjs` verifies the worker-shaped
+insert/undo/save sequence.

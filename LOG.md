@@ -608,3 +608,26 @@
   passes one `undo-more` and fails on the second/high-level undo path, so the
   next blocker is repeated undo application in persistent Emacs state rather
   than live file-visiting state alone.
+- Updated the host eval entrypoint patch to catch Lisp signals with
+  `internal_condition_case_1`, store the error in `wasmacs_last_result`, and
+  return status 1 instead of letting uncaught `user-error` paths become wasm
+  traps. Rebuilt `artifacts/emacs-browser-persistent-spike/`.
+- Extended `scripts/probe-browser-undo-tail-phases.mjs`: uncaught
+  `user-error` and no-more-undo cases now return safe `EVAL_STATUS:1`
+  readbacks, while command-loop-shaped cases with a post-edit `undo-boundary`
+  make high-level `undo` pass for both file-visiting and named buffers.
+- Enabled real Emacs undo in the browser worker command bridge. Edit commands
+  now add `undo-boundary`, and `C-/` dispatches to real `(undo)` instead of the
+  previous unavailable placeholder. Added
+  `scripts/probe-browser-worker-real-undo.mjs` to prove worker-shaped
+  insert/undo/save behavior against the browser persistent wasm artifact.
+- Hardened `scripts/probe-browser-persistent-buffer-matrix.mjs` with an
+  explicit child-process timeout and larger output buffer so the long
+  multi-case matrix fails with evidence instead of silently waiting.
+- Revalidated the full suite with `npm test`. The deterministic worker-shaped
+  real undo probe passes: insert `U`, add an Emacs undo boundary, save, run
+  real `(undo)`, save again, and read back an empty file.
+- Updated the browser editing evidence summary so it no longer treats the old
+  UI-level `undo unavailable` log as the active undo contract. The summary now
+  keeps keyboard quit visibility separate and requires the real Emacs worker
+  undo probe as the undo evidence.
