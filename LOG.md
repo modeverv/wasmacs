@@ -583,3 +583,28 @@
   when the renamed buffer is addressed by the filename-derived buffer name.
   This narrows the next blocker to live `find-file-noselect-1` /
   `after-find-file` state rather than `set-visited-file-name` itself.
+- Added `scripts/probe-browser-find-file-phases.mjs` and wired it into
+  `npm test`. The probe shows `find-file-noselect`, `switch-to-buffer`,
+  `pop-to-buffer-same-window`, live `find-file`, and in-memory edits survive
+  host eval boundaries.
+- The same probe shows direct `write-region` against a live file-visiting
+  buffer remains a known blocker, while `save-buffer` passes. This points the
+  next browser-worker persistent file-buffer save path toward real
+  `save-buffer` rather than direct `write-region`.
+- Updated the browser worker command bridge to open the active user file with
+  real Emacs `find-file`, apply insert/backspace/movement in that live
+  file-visiting buffer, and save modified buffers through `save-buffer`
+  instead of direct `write-region`. `undo`, kill-ring/clipboard, and
+  minibuffer commands remain explicit unavailable boundaries.
+- Revalidated the worker update with `scripts/validate-browser-worker-app.sh`,
+  `node --test tests/runtime/*.test.js`, and
+  `node scripts/summarize-browser-editing-session.mjs`.
+- Added `scripts/probe-browser-undo-tail-phases.mjs` and wired it into
+  `npm test`. It confirms `undo-start` plus one `undo-more` still passes
+  without direct `write-region`, while the second `undo-more`, the later
+  high-level `undo` tail phases, and high-level `undo` itself remain known
+  wasm blockers. Evidence is in `logs/wasm-browser-undo-tail-phases.txt`.
+- Expanded the undo tail probe with named-buffer cases. A named buffer also
+  passes one `undo-more` and fails on the second/high-level undo path, so the
+  next blocker is repeated undo application in persistent Emacs state rather
+  than live file-visiting state alone.

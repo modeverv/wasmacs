@@ -192,9 +192,24 @@ find-file-live-buffer-gc
 Evidence is in `logs/wasm-browser-file-buffer-gc-roots.txt`.
 
 This keeps the browser-side policy unchanged: do not fake undo, kill-ring, or
-minibuffer behavior. The next C/Elisp boundary to isolate is live `find-file`
-state after `find-file-noselect-1` and `after-find-file`, not
-`set-visited-file-name` by itself. `scripts/probe-browser-visited-file-state.mjs`
-shows the individual `set-visited-file-name` phase completes, and
-`scripts/probe-browser-visited-file-cross-eval.mjs` shows it can survive a
-second host eval when the renamed buffer is addressed correctly.
+minibuffer behavior. The next C/Elisp boundary narrowed again:
+`scripts/probe-browser-find-file-phases.mjs` shows `find-file-noselect`,
+`switch-to-buffer`, `pop-to-buffer-same-window`, live `find-file`, and in-memory
+edits survive a second host eval. Direct `write-region` against a live
+file-visiting buffer still crashes the next host eval, while `save-buffer`
+passes. The browser worker should therefore use the real Emacs `save-buffer`
+path for live file buffers, and keep direct `write-region` confined to
+temp-buffer or non-live bridge proofs.
+
+The browser worker has been updated accordingly: ordinary edit commands now use
+`find-file` plus `save-buffer` on the live user file buffer. Direct
+`write-region` remains useful evidence for temp-buffer/non-live probes but is
+not the live file-buffer save path.
+
+`scripts/probe-browser-undo-tail-phases.mjs` adds the next undo boundary:
+without any direct live-buffer `write-region`, `undo-start` plus one
+`undo-more` passes, while a second `undo-more` and high-level `undo` remain
+known wasm blockers. Named buffers show the same one-pass/two-pass split, so
+the next entrypoint investigation should start at repeated `primitive-undo` /
+`undo-more` persistent state rather than browser save behavior or
+file-visiting state alone.

@@ -158,3 +158,48 @@ variable state, or buffer bookkeeping they leave for GC to mark.
 `scripts/probe-browser-visited-file-cross-eval.mjs` confirms
 `set-visited-file-name` can survive a second host eval when the renamed buffer
 is addressed by its new filename-derived buffer name.
+
+`scripts/probe-browser-find-file-phases.mjs` narrows the live `find-file`
+blocker further. These survive across host eval calls:
+
+```text
+find-file-noselect-live
+find-file-noselect-set-buffer-live
+find-file-noselect-switch-to-buffer-live
+find-file-noselect-pop-same-window-live
+find-file-command-live
+find-file-live-insert-no-write
+find-file-live-erase-insert-no-write
+find-file-live-insert-save-buffer
+```
+
+These remain known blockers:
+
+```text
+insert-file-contents with VISIT=t when manually staged
+direct write-region against a live file-visiting buffer
+```
+
+Evidence is in `logs/wasm-browser-find-file-phases.txt`.
+
+The practical consequence is important: real file-visiting buffers are viable,
+but saving them through direct `write-region` is not. The next implementation
+step was to move live file-buffer persistence toward Emacs' real
+`save-buffer` path and leave `write-region` for temp-buffer/non-live bridge
+proofs only.
+
+The browser worker now follows that rule for ordinary editing commands: it
+opens the active user file with `find-file`, mutates the live file-visiting
+buffer, and saves modified buffers with `save-buffer`. This does not make
+high-level `undo`, kill-ring/region, or minibuffer fidelity available yet;
+those remain explicit unavailable boundaries until their Emacs-owned state is
+safe across host eval calls.
+
+`scripts/probe-browser-undo-tail-phases.mjs` removes direct `write-region`
+from the undo isolation path. It confirms `undo-start` plus one `undo-more`
+passes, but a second `undo-more` is already a known wasm blocker. That means
+the high-level `undo` failure is not caused by browser-side saving, nor only by
+the later `undo-equiv-table` / message / autosave tail; repeated undo
+application through `undo-more` is now the first failing phase to isolate.
+Named-buffer cases show the same split, so the blocker is broader than
+file-visiting buffer state.

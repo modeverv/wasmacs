@@ -206,8 +206,9 @@ Backspace     -> { type: "backspace", path }
 non-user paths. `app/src/main.js` listens on `#frame-grid`, prevents the
 browser from owning accepted editing keys, and sends `run-buffer-command` to a
 persistent worker. The worker converts that command into Emacs Lisp, opens the
-active `/home/user/...` file, applies `insert`, `delete-char -1`, or movement,
-writes the file with `write-region`, and returns path/point/text through
+active `/home/user/...` file with real Emacs `find-file`, applies `insert`,
+`delete-char -1`, or movement in the live file-visiting buffer, saves modified
+buffers with `save-buffer`, and returns path/point/text through
 `wasmacs_last_result` so the app can refresh the `text-grid-draw` frame.
 
 The first latency mitigation is a browser-side command queue. It keeps one
@@ -343,6 +344,21 @@ across host eval calls. Evidence is in
 `logs/wasm-browser-visited-file-cross-eval.txt`. Browser
 undo/kill-ring/minibuffer behavior remains explicitly unavailable rather than
 faked.
+
+`logs/wasm-browser-find-file-phases.txt` narrows the live file-buffer blocker
+again: `find-file-noselect`, `switch-to-buffer`, `pop-to-buffer-same-window`,
+live `find-file`, and in-memory edits survive host eval boundaries. Direct
+`write-region` against a live file-visiting buffer remains a known blocker,
+while `save-buffer` passes. The browser worker should therefore migrate live
+file-buffer saves toward the real Emacs `save-buffer` path instead of using
+direct `write-region` once persistent file buffers are enabled.
+
+The browser worker now uses that path for ordinary editing commands: it opens
+the active `/home/user/...` file with `find-file`, applies the command, and
+saves modified buffers with `save-buffer`. Direct `write-region` is kept only
+in older non-live proof probes. Undo, kill-ring/clipboard, and minibuffer
+commands still report explicit unavailable states rather than browser-side
+substitutes.
 
 ## Validation
 

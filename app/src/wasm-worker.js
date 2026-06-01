@@ -128,18 +128,18 @@ async function runEmacsCommand(userEntries, command) {
 function buildEval(command = { type: "ensure-marker", path: "/home/user/notes.txt" }) {
   const path = command?.path ?? "/home/user/notes.txt";
   const commandForm = buildCommandForm(command);
+  const saveForm = command?.type === "move-point" ? "" : "    (when (buffer-modified-p) (save-buffer))";
   return [
     `(let ((path ${quoteElispString(path)}))`,
-    "  (with-temp-buffer",
-    "    (insert-file-contents path)",
+    "  (find-file path)",
     commandForm,
-    "    (write-region (point-min) (point-max) path nil 'silent)",
+    saveForm,
     "    (concat path",
     `            ${quoteElispString("\n")}`,
     "            (number-to-string (1- (point)))",
     `            ${quoteElispString("\n")}`,
     "            (buffer-string))))",
-  ].join(" ");
+  ].filter(Boolean).join(" ");
 }
 
 function buildCommandForm(command) {
@@ -157,7 +157,7 @@ function buildCommandForm(command) {
     return `${pointForm} (unless (eobp) (forward-char 1))`;
   }
   if (command?.type === "save-buffer") {
-    return pointForm;
+    return `${pointForm} (save-buffer)`;
   }
   return [
     "(goto-char (point-min))",

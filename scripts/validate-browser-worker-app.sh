@@ -82,6 +82,8 @@ rg 'FS_createDataFile' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'wasmacs_eval_string' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'wasmacs_last_result' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'buildCommandForm' "${repo_root}/app/src/wasm-worker.js" >/dev/null
+rg 'find-file path' "${repo_root}/app/src/wasm-worker.js" >/dev/null
+rg 'save-buffer' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'delete-char -1' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'backward-char 1' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'forward-char 1' "${repo_root}/app/src/wasm-worker.js" >/dev/null
@@ -91,7 +93,6 @@ rg 'clipboard/kill-ring requires GUI clipboard protocol' "${repo_root}/app/src/w
 rg 'minibuffer requires persistent Emacs command loop' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'parseReadback' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'command\?\.path' "${repo_root}/app/src/wasm-worker.js" >/dev/null
-rg 'insert-file-contents path' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg '/artifacts/emacs-browser-persistent-spike/' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'importScripts\("/artifacts/emacs-browser-persistent-spike/temacs"\)' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'basename\(filePath\) === "temacs"' "${repo_root}/scripts/serve-app.mjs" >/dev/null
