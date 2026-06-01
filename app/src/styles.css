@@ -16,16 +16,21 @@ body {
 }
 
 button,
-.file-button {
+.file-button,
+.path-input {
   appearance: none;
   border: 1px solid #1f2937;
   border-radius: 6px;
-  background: #111827;
-  color: #ffffff;
   cursor: pointer;
   font: inherit;
   font-weight: 650;
   min-height: 38px;
+}
+
+button,
+.file-button {
+  background: #111827;
+  color: #ffffff;
   padding: 0 18px;
 }
 
@@ -51,6 +56,17 @@ button:disabled {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.path-input {
+  background: #ffffff;
+  color: #111827;
+  cursor: text;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  inline-size: min(42vw, 360px);
+  min-inline-size: 220px;
+  padding: 0 12px;
 }
 
 .shell {
@@ -106,7 +122,7 @@ h1 {
 }
 
 .editor-pane {
-  grid-template-rows: auto minmax(220px, 1fr) minmax(160px, 0.75fr);
+  grid-template-rows: auto auto minmax(220px, 1fr) minmax(160px, 0.75fr);
   min-height: 520px;
 }
 
@@ -129,6 +145,34 @@ h1 {
 
 .buffer-title span:last-child {
   color: #93c5fd;
+}
+
+.file-list {
+  align-items: center;
+  background: #172033;
+  border-bottom: 1px solid #334155;
+  display: flex;
+  gap: 6px;
+  min-height: 40px;
+  overflow-x: auto;
+  padding: 7px 10px;
+}
+
+.file-list button {
+  background: transparent;
+  border-color: #475569;
+  color: #cbd5e1;
+  flex: 0 0 auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  min-height: 28px;
+  padding: 0 10px;
+}
+
+.file-list button[aria-current="true"] {
+  background: #bfdbfe;
+  border-color: #bfdbfe;
+  color: #08111f;
 }
 
 #editor {

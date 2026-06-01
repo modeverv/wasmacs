@@ -1,0 +1,27 @@
+{
+  "url": "http://127.0.0.1:5173/",
+  "afterInsert": {
+    "editor": "U",
+    "output": "",
+    "path": "/home/user/projects/undo-quit.txt",
+    "state": "synced from emacs",
+    "status": "emacs command completed",
+    "url": "http://127.0.0.1:5173/"
+  },
+  "afterUndoUnavailable": {
+    "editor": "U",
+    "output": "Error: undo requires persistent Emacs buffers; the current MVP reconstructs a temp buffer for each command\n    at runEmacsCommand (http://127.0.0.1:5173/app/src/wasm-worker.js:101:13)\n    at self.onmessage (http://127.0.0.1:5173/app/src/wasm-worker.js:10:11)\n",
+    "path": "/home/user/projects/undo-quit.txt",
+    "state": "undo unavailable",
+    "status": "undo unavailable",
+    "url": "http://127.0.0.1:5173/"
+  },
+  "afterKeyboardQuit": {
+    "editor": "U",
+    "output": "Error: undo requires persistent Emacs buffers; the current MVP reconstructs a temp buffer for each command\n    at runEmacsCommand (http://127.0.0.1:5173/app/src/wasm-worker.js:101:13)\n    at self.onmessage (http://127.0.0.1:5173/app/src/wasm-worker.js:10:11)\n",
+    "path": "/home/user/projects/undo-quit.txt",
+    "state": "keyboard quit",
+    "status": "keyboard quit",
+    "url": "http://127.0.0.1:5173/"
+  }
+}

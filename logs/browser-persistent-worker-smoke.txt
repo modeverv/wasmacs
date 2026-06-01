@@ -1,0 +1,8 @@
+{
+  "editor": "Welcome to wasmacs.\n\nThis is the first browser-hosted buffer adapter.\nIt is backed by /home/user/notes.txt in the MVP host filesystem shim.\n\nSaved by Emacs core.P\n",
+  "frameText": "Welcome to wasmacs.\n \nThis is the first browser-hosted buffer adapter.\nIt is backed by /home/user/notes.txt in the MVP host filesystem shim.\n \nSaved by Emacs core.P \n ",
+  "outputTail": "",
+  "state": "synced from emacs",
+  "status": "emacs command completed",
+  "url": "http://127.0.0.1:5173/"
+}

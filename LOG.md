@@ -356,3 +356,230 @@
   by `X` inserts before the final newline, so point is no longer forced to
   point-max. Evidence is in `logs/browser-cursor-command-smoke.txt` and
   `logs/browser-cursor-command-smoke.png`.
+- Committed the browser Emacs bridge MVP as
+  `64e0a79 Add browser Emacs bridge MVP`.
+- Added `scripts/build-emacs-browser-persistent-spike.sh`. It creates
+  `artifacts/emacs-browser-persistent-spike/` with `-sEXIT_RUNTIME=0` and
+  exported runtime methods `callMain`, `FS`, `FS_createPath`,
+  `FS_createDataFile`, and `FS_readFile`.
+- Added `scripts/validate-browser-persistent-spike.sh` and included it in
+  `npm test`. It checks that the profile is non-`NODERAWFS`, exposes
+  `callMain` and `FS_readFile`, has `noExitRuntime = true`, and still runs
+  batch eval.
+- Persistent profile validation passed; evidence is in
+  `logs/wasm-browser-persistent-batch.txt`.
+- Added `scripts/probe-browser-persistent-callmain.mjs`. It loads the
+  persistent profile with `Module.noInitialRun = true` and calls
+  `Module.callMain` twice in one runtime.
+- The probe showed `FIRST_EXIT:0` and `SECOND_EXIT:1`; the second call reports
+  `Back to top level`. So repeated command-line batch `callMain` is not a
+  reusable command loop. Evidence is in
+  `logs/wasm-browser-persistent-callmain.txt`.
+- Added `docs/host-command-entrypoint-plan.md`. The next persistent-loop work
+  is a copied-source patch experiment for an explicit host command entrypoint,
+  not repeated command-line `callMain`.
+- Added `scripts/patch-emacs-host-entrypoint-spike.sh`. It patches only the
+  copied build source at `build/emacs-core-spike/src/src/emacs.c`, adding
+  `wasmacs_eval_string`.
+- Updated the persistent profile to export `_wasmacs_eval_string` and
+  Emscripten `ccall`.
+- Added `scripts/probe-browser-host-entrypoint.mjs`. It boots Emacs once with
+  `Module.callMain`, then calls `Module.ccall("wasmacs_eval_string", ...)`.
+  The probe printed `entrypoint` and returned `EVAL_STATUS:0`, proving
+  host-initiated eval can run after initial boot without repeated command-line
+  startup. Evidence is in `logs/wasm-browser-host-entrypoint.txt`.
+- Added `scripts/probe-browser-host-file-command.mjs`. It creates
+  `/home/user/notes.txt` inside the persistent Emscripten filesystem, boots
+  Emacs once, then uses `wasmacs_eval_string` to run an Emacs form with
+  `insert-file-contents` and `write-region`. `Module.FS_readFile` returned
+  `alpha beta`, proving file mutation works through the host entrypoint.
+  Evidence is in `logs/wasm-browser-host-file-command.txt`.
+- Extended `scripts/patch-emacs-host-entrypoint-spike.sh` so the copied-source
+  patch also exports `wasmacs_last_result`. The evaluated Lisp result is copied
+  into host-owned memory and exposed to JavaScript via Emscripten `ccall`.
+- Updated `scripts/build-emacs-browser-persistent-spike.sh` and
+  `scripts/validate-browser-persistent-spike.sh` to include
+  `_wasmacs_last_result`.
+- Added `scripts/probe-browser-host-readback.mjs`. It boots Emacs once, calls
+  `wasmacs_eval_string`, then reads
+  `{"path":"/home/user/readback.txt","text":"readback text","point":14}` via
+  `wasmacs_last_result`. Evidence is in
+  `logs/wasm-browser-host-readback.txt`.
+- Validation passed with `npm test`.
+- Switched `app/src/wasm-worker.js` to the persistent browser profile. It now
+  imports `/artifacts/emacs-browser-persistent-spike/temacs`, boots Emacs once
+  with `Module.callMain`, runs buffer commands with `wasmacs_eval_string`, and
+  parses path/point/text from `wasmacs_last_result`.
+- Updated `app/src/main.js` to keep one worker alive across queued commands
+  instead of terminating the worker for every key command.
+- Updated `scripts/validate-browser-worker-app.sh` so the static browser app
+  validation expects the persistent entrypoint/readback route rather than the
+  old stdout marker route.
+- Browser smoke at `http://127.0.0.1:5173/` confirmed the persistent worker:
+  initial sync reached `synced from emacs`, then ArrowLeft and `P` updated the
+  buffer to `Saved by Emacs core.P`. Evidence is in
+  `logs/browser-persistent-worker-smoke.txt`.
+- Validation passed with `npm test`.
+- Started Milestone 13 ordinary editing work. Added `#file-path` and
+  `#open-file` to the browser UI, plus active buffer path state in
+  `app/src/main.js`.
+- `app/src/main.js` now normalizes relative paths into
+  `/home/user/projects/...`, rejects paths outside `/home/user`, and can open
+  or create files from the browser user image.
+- `app/src/wasm-worker.js` now builds the Emacs command form from
+  `command.path`, so the persistent worker applies `insert-file-contents` and
+  `write-region` to the active file rather than only `/home/user/notes.txt`.
+- Browser smoke at `http://127.0.0.1:5173/` opened
+  `/home/user/projects/demo.txt`, inserted `DEMO` through the persistent Emacs
+  worker, saved, reloaded, and confirmed `Saved by Emacs core.DEMO` remained
+  visible. Evidence is in `logs/browser-project-file-smoke.txt`.
+- Validation passed with `npm test`.
+- Added `Ctrl+S` handling in `app/src/input-protocol.js` as an explicit
+  `save-buffer` command. The worker treats it as a real Emacs command path and
+  still writes the active file via `write-region`.
+- Added a `Process` probe button in the browser UI. It sends
+  `process-probe`, and `app/src/wasm-worker.js` returns a visible
+  `host.process is unavailable in the browser MVP` error instead of pretending
+  subprocesses exist.
+- Browser smoke at `http://127.0.0.1:5173/` opened
+  `/home/user/projects/commands.txt`, exercised ArrowLeft, printable input,
+  Backspace, `Ctrl+S`, and the disabled process probe. Evidence is in
+  `logs/browser-command-dispatch-smoke.txt`.
+- Added `scripts/validate-browser-editing-smoke-evidence.sh` and wired it into
+  `npm test` so the project-file and command-dispatch browser evidence is
+  checked.
+- Validation passed with `npm test`.
+- Added a file switcher in the editor pane. It is populated from browser
+  `user-filesystem.wasifs` file entries, hides tar metadata and internal
+  `.local` state, and marks the active file with `aria-current`.
+- Opening or switching a file now loads from the browser user image without
+  sending an unnecessary `ensure-marker` command into the persistent Emacs
+  worker. This avoids extra host-entrypoint churn; edits still go through Emacs
+  when key commands arrive.
+- Browser smoke at `http://127.0.0.1:5173/` created/edited
+  `/home/user/projects/switch-a.txt` and
+  `/home/user/projects/switch-b.txt`, then switched back to `switch-a.txt`
+  from the file list. Evidence is in `logs/browser-file-switch-smoke.txt`.
+- Added Milestone 15: High-Performance Renderer to `PLAN.md`, covering
+  Canvas/WebGL text rendering, dirty invalidation, glyph atlases, renderer
+  parity tests, and large-buffer performance smoke.
+- Updated `ARCHITECTURE.md` to make DOM the MVP/accessibility baseline and
+  Canvas/WebGL the measured high-performance renderer phase.
+- Added optimistic point advancement for queued editing commands. Fast
+  printable input can now advance point before Emacs sync returns, avoiding
+  stale-point reversed insertion during in-flight commands.
+- Browser recovery smoke at `http://127.0.0.1:5173/` triggered the disabled
+  process path, confirmed `process unavailable`, then typed `REC` into
+  `/home/user/projects/recovery-order.txt` after worker recreation. Evidence
+  is in `logs/browser-worker-recovery-smoke.txt`.
+- Added `scripts/summarize-browser-editing-session.mjs`. It reads the browser
+  smoke JSON logs and writes `logs/browser-editing-session-smoke.txt` with PASS
+  lines for project-file edit/save/reload, command dispatch plus process
+  boundary, file switching, and worker recovery.
+- Wired the editing session summary into `npm test` before the smoke evidence
+  validator.
+- Extracted file-list filtering into `app/src/user-file-list.js` and added
+  `tests/runtime/user-file-list.test.js`. The switcher now has unit coverage
+  for hiding tar metadata, AppleDouble entries, internal `.local` runtime
+  state, and non-user paths.
+- Added a multi-file export/import assertion to
+  `tests/runtime/browser-wasifs.test.js`.
+- Extracted user path normalization into `app/src/user-path.js` and added
+  `tests/runtime/user-path.test.js` for relative project paths, absolute user
+  paths, and rejection outside `/home/user`.
+- Added Enter-to-open handling for the file path input.
+- Browser smoke at `http://127.0.0.1:5173/` confirmed entering
+  `enter-open.txt` opens `/home/user/projects/enter-open.txt`. Evidence is in
+  `logs/browser-enter-open-smoke.txt`.
+- Added `app/src/buffer-dirty.js` and a narrow guard in `app/src/main.js` that
+  persists modified textarea contents into the browser user image before Open
+  or file-list switching loads another file.
+- Browser smoke at `http://127.0.0.1:5173/` typed `TEXTAREA-DRAFT` directly
+  into `/home/user/projects/autosave-a.txt`, switched away to
+  `/home/user/projects/autosave-b.txt`, then reopened `autosave-a.txt` and
+  confirmed the draft was preserved. Evidence is in
+  `logs/browser-textarea-autosave-smoke.txt`.
+- Added `tests/runtime/buffer-dirty.test.js`, extended the editing session
+  summary and smoke evidence validator for the textarea autosave case, and
+  updated static browser app validation for the new dirty guard module.
+- Validation passed with `npm test`.
+- Added explicit `C-g` and `C-/` command boundaries to
+  `app/src/input-protocol.js`. `C-g` is handled locally in `app/src/main.js`
+  by clearing pending commands and reporting `keyboard quit`.
+- `C-/` now reports `undo unavailable` through the persistent worker with the
+  blocker text `undo requires persistent Emacs buffers`, avoiding a fake
+  browser-side undo while the MVP still reconstructs temp buffers per command.
+- Browser smoke at `http://127.0.0.1:5173/` opened
+  `/home/user/projects/undo-quit.txt`, inserted `U`, verified the explicit
+  undo blocker, then verified `C-g` sets status/state to `keyboard quit`
+  without losing the buffer text. Evidence is in
+  `logs/browser-undo-quit-smoke.txt`.
+- Added `docs/clipboard-kill-ring-boundary.md`, grounding the MVP clipboard
+  decision in `vendor/emacs/lisp/simple.el` kill-ring/interprogram functions
+  and `vendor/emacs/lisp/select.el` GUI selection functions.
+- Added `C-y`, `C-w`, and `M-w` command boundaries. The worker now reports
+  `clipboard/kill-ring requires GUI clipboard protocol plus persistent region
+  and kill-ring state`, and the UI shows `clipboard unavailable`.
+- Browser smoke at `http://127.0.0.1:5173/` opened
+  `/home/user/projects/clipboard-boundary.txt`, inserted `CLIP`, pressed
+  `C-y`, and verified the explicit clipboard blocker without losing buffer
+  text. Evidence is in `logs/browser-clipboard-boundary-smoke.txt`.
+- Added `docs/minibuffer-command-boundary.md`, grounding `find-file` /
+  `switch-buffer` in Emacs minibuffer surfaces from `files.el`, `simple.el`,
+  and `minibuf.c`.
+- Added `C-x` prefix recognition plus `C-x C-f` -> `find-file` and `C-x b` ->
+  `switch-buffer` command boundaries. The worker reports
+  `minibuffer requires persistent Emacs command loop, minibuffer window state,
+  and completion UI` instead of faking minibuffer behavior in the browser.
+- Added `scripts/probe-minibuffer-command-boundary.mjs`; it writes
+  `logs/minibuffer-command-boundary.txt` and is wired into `npm test`.
+- Added `docs/persistent-emacs-buffer-requirement.md`, documenting why real
+  undo, kill-ring/region, and minibuffer behavior need stable Emacs buffer and
+  selected-window state rather than per-command temp buffers.
+- Added `scripts/probe-browser-persistent-buffer-undo.mjs`. The probe runs the
+  smallest persistent-buffer undo experiment in the persistent wasm runtime and
+  records the current blocker as
+  `KNOWN_BLOCKER:persistent buffer undo currently crashes wasm during GC/undo traversal`.
+  Evidence is in `logs/wasm-browser-persistent-buffer-undo.txt`.
+- Wired the persistent-buffer undo probe into `npm test` so the blocker remains
+  visible and cannot be replaced by a browser-side fake.
+- Added `scripts/probe-browser-persistent-buffer-matrix.mjs`, also wired into
+  `npm test`. The matrix proves `find-file` plus persistent writes work, and
+  undo records can be created without crashing if `undo` is not invoked.
+- The matrix also proves the crash remains when `gc-cons-threshold` is raised
+  to `most-positive-fixnum`, narrowing the blocker to undo execution /
+  interval marking / host-entrypoint GC safety rather than simple GC timing.
+  Evidence is in `logs/wasm-browser-persistent-buffer-matrix.txt`.
+- Expanded the persistent-buffer matrix. Direct `primitive-undo` passes, and
+  `(undo-start)` plus `(undo-more 1)` passes. High-level `undo` still crashes,
+  including with `inhibit-message`, which narrows the next investigation to the
+  latter half of `simple.el`'s `undo`: redo bookkeeping, `undo-equiv-table`,
+  `pending-undo-list`, point-record cleanup, modified-state/autosave handling,
+  and host-entrypoint GC safety after those structures are updated.
+- Added `scripts/probe-browser-persistent-buffer-cross-eval.mjs`, wired into
+  `npm test`. A plain named Emacs buffer survives across separate
+  `wasmacs_eval_string` calls and writes `alpha beta` to
+  `/home/user/cross-eval-named-buffer.txt`.
+- The same cross-eval probe records `find-file` file-visiting buffers and
+  undo-list state as known blockers when carried across host eval calls:
+  both crash with `memory access out of bounds` during GC marking. Evidence is
+  in `logs/wasm-browser-persistent-buffer-cross-eval.txt`.
+- Added `scripts/probe-browser-file-buffer-gc-roots.mjs` and wired it into
+  `npm test`. The first run showed that explicit `(garbage-collect)` from the
+  host eval entrypoint crashed even for boot-only and named-buffer cases.
+- Updated `scripts/patch-emacs-host-entrypoint-spike.sh` so the copied
+  `emacs.c` entrypoint refreshes the C stack-scan bottom and inhibits GC
+  during each host eval. This is a temporary wasm spike boundary, not the
+  final GC design.
+- After that change, the GC roots probe passes boot-only GC forms, temp
+  buffers, named buffers, manual `buffer-file-name`,
+  `set-visited-file-name`, `insert-file-contents`, and `find-file` buffers
+  killed before returning. It still records live `find-file` buffers as known
+  blockers. Evidence is in `logs/wasm-browser-file-buffer-gc-roots.txt`.
+- Added `scripts/probe-browser-visited-file-state.mjs`. It confirms the
+  individual `set-visited-file-name` phases complete inside one host eval.
+- Added `scripts/probe-browser-visited-file-cross-eval.mjs` and wired it into
+  `npm test`. It confirms `set-visited-file-name` survives a second host eval
+  when the renamed buffer is addressed by the filename-derived buffer name.
+  This narrows the next blocker to live `find-file-noselect-1` /
+  `after-find-file` state rather than `set-visited-file-name` itself.

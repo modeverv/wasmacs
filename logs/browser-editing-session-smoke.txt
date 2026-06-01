@@ -1,0 +1,8 @@
+PASS project file open/edit/save/reload /home/user/projects/demo.txt
+PASS command dispatch and process boundary /home/user/projects/commands.txt
+PASS file switching /home/user/projects/switch-a.txt
+PASS worker recovery after unavailable process /home/user/projects/recovery-order.txt
+PASS relative path enter open /home/user/projects/enter-open.txt
+PASS textarea autosave before file switch /home/user/projects/autosave-a.txt
+PASS undo boundary and keyboard quit visibility /home/user/projects/undo-quit.txt
+PASS clipboard and kill-ring boundary visibility /home/user/projects/clipboard-boundary.txt

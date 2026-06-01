@@ -1,0 +1,19 @@
+{
+  "url": "http://127.0.0.1:5173/",
+  "afterInsert": {
+    "editor": "CLIP",
+    "output": "",
+    "path": "/home/user/projects/clipboard-boundary.txt",
+    "state": "synced from emacs",
+    "status": "emacs command completed",
+    "url": "http://127.0.0.1:5173/"
+  },
+  "afterYankUnavailable": {
+    "editor": "CLIP",
+    "output": "Error: clipboard/kill-ring requires GUI clipboard protocol plus persistent region and kill-ring state\n    at runEmacsCommand (http://127.0.0.1:5173/app/src/wasm-worker.js:108:13)\n    at self.onmessage (http://127.0.0.1:5173/app/src/wasm-worker.js:10:11)\n",
+    "path": "/home/user/projects/clipboard-boundary.txt",
+    "state": "clipboard unavailable",
+    "status": "clipboard unavailable",
+    "url": "http://127.0.0.1:5173/"
+  }
+}

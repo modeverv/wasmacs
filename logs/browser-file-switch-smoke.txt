@@ -1,0 +1,39 @@
+{
+  "editor": "\nSaved by Emacs core.\nA1A1",
+  "files": [
+    {
+      "current": false,
+      "text": "~/.local/share/wasmacs/journal.jsonl"
+    },
+    {
+      "current": false,
+      "text": "~/init.el"
+    },
+    {
+      "current": false,
+      "text": "~/notes.txt"
+    },
+    {
+      "current": false,
+      "text": "~/projects/commands.txt"
+    },
+    {
+      "current": false,
+      "text": "~/projects/demo.txt"
+    },
+    {
+      "current": true,
+      "text": "~/projects/switch-a.txt"
+    },
+    {
+      "current": false,
+      "text": "~/projects/switch-b.txt"
+    }
+  ],
+  "frameText": " \nSaved by Emacs core.\nA1A1 ",
+  "outputTail": "",
+  "path": "/home/user/projects/switch-a.txt",
+  "state": "loaded",
+  "status": "emacs command completed",
+  "url": "http://127.0.0.1:5173/"
+}

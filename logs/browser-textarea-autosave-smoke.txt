@@ -1,0 +1,149 @@
+{
+  "url": "http://127.0.0.1:5173/",
+  "afterDraft": {
+    "editor": "TEXTAREA-DRAFT",
+    "files": [
+      {
+        "current": false,
+        "text": "~/init.el"
+      },
+      {
+        "current": false,
+        "text": "~/notes.txt"
+      },
+      {
+        "current": true,
+        "text": "~/projects/autosave-a.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/commands.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/demo.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/recovery-order.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/recovery.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/switch-a.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/switch-b.txt"
+      }
+    ],
+    "input": "/home/user/projects/autosave-a.txt",
+    "path": "/home/user/projects/autosave-a.txt",
+    "state": "modified",
+    "status": "emacs command completed",
+    "url": "http://127.0.0.1:5173/"
+  },
+  "afterSwitchAway": {
+    "editor": "",
+    "files": [
+      {
+        "current": false,
+        "text": "~/init.el"
+      },
+      {
+        "current": false,
+        "text": "~/notes.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/autosave-a.txt"
+      },
+      {
+        "current": true,
+        "text": "~/projects/autosave-b.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/commands.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/demo.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/recovery-order.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/recovery.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/switch-a.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/switch-b.txt"
+      }
+    ],
+    "input": "/home/user/projects/autosave-b.txt",
+    "path": "/home/user/projects/autosave-b.txt",
+    "state": "loaded",
+    "status": "emacs command completed",
+    "url": "http://127.0.0.1:5173/"
+  },
+  "afterReturn": {
+    "editor": "TEXTAREA-DRAFT",
+    "files": [
+      {
+        "current": false,
+        "text": "~/init.el"
+      },
+      {
+        "current": false,
+        "text": "~/notes.txt"
+      },
+      {
+        "current": true,
+        "text": "~/projects/autosave-a.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/autosave-b.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/commands.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/demo.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/recovery-order.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/recovery.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/switch-a.txt"
+      },
+      {
+        "current": false,
+        "text": "~/projects/switch-b.txt"
+      }
+    ],
+    "input": "/home/user/projects/autosave-a.txt",
+    "path": "/home/user/projects/autosave-a.txt",
+    "state": "loaded",
+    "status": "emacs command completed",
+    "url": "http://127.0.0.1:5173/"
+  }
+}

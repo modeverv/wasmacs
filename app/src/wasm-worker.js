@@ -2,16 +2,12 @@ function post(type, payload = {}) {
   self.postMessage({ type, ...payload });
 }
 
-const syncPath = "/home/user/notes.txt";
-const syncBegin = "WASMACS_SYNC_BEGIN";
-const syncEnd = "WASMACS_SYNC_END";
-const pointMarker = "WASMACS_POINT:";
+let emacsModule;
+let emacsReady;
 
-let stdoutText = "";
-
-self.onmessage = (event) => {
+self.onmessage = async (event) => {
   if (event.data?.type === "run-buffer-command") {
-    startEmacs(event.data.entries, event.data.command);
+    await runEmacsCommand(event.data.entries, event.data.command);
   }
 };
 
@@ -38,75 +34,111 @@ function materializeUserImage(module, entries) {
   for (const entry of entries.filter((candidate) => candidate.kind === "file")) {
     ensureDirectory(module, parentPath(entry.path));
     try {
+      module.FS.unlink(entry.path);
+    } catch {
+      // Missing files are expected on the first materialization pass.
+    }
+    try {
       module.FS_createDataFile(parentPath(entry.path), entry.path.slice(entry.path.lastIndexOf("/") + 1), entry.bytes, true, true, true);
     } catch {
-      // The current proof starts once per worker, so collisions should only
-      // happen after retries inside the same worker.
+      module.FS.writeFile(entry.path, entry.bytes);
     }
   }
 }
 
-function startEmacs(userEntries, command) {
-  post("status", { text: "loading emacs package" });
-  stdoutText = "";
+async function ensureEmacs(userEntries) {
+  if (emacsReady) {
+    await emacsReady;
+    materializeUserImage(emacsModule, userEntries);
+    return emacsModule;
+  }
 
-  var Module = {
-    arguments: [
-      "--batch",
-      "--eval",
-      buildEval(command),
-    ],
-    thisProgram: "temacs",
-    locateFile(path) {
-      return `/artifacts/emacs-browser-spike/${path}`;
-    },
-    preRun: [
-      () => {
-        post("status", { text: "mounting user image" });
-        materializeUserImage(Module, userEntries);
+  post("status", { text: "loading persistent emacs package" });
+  emacsReady = new Promise((resolve, reject) => {
+    var Module = {
+      noInitialRun: true,
+      thisProgram: "temacs",
+      locateFile(path) {
+        return `/artifacts/emacs-browser-persistent-spike/${path}`;
       },
-    ],
-    print(text) {
-      stdoutText += `${text}\n`;
-      post("stdout", { text });
-    },
-    printErr(text) {
-      post("stderr", { text });
-    },
-    onRuntimeInitialized() {
-      post("status", { text: "emacs runtime initialized" });
-    },
-    onExit(code) {
-      const synced = parseSyncedFile(stdoutText);
-      if (synced) post("sync-file", synced);
-      post("exit", { code });
-    },
-  };
+      print(text) {
+        post("stdout", { text });
+      },
+      printErr(text) {
+        post("stderr", { text });
+      },
+      onRuntimeInitialized() {
+        emacsModule = Module;
+        post("status", { text: "persistent emacs runtime initialized" });
+        resolve(Module);
+      },
+    };
 
-  self.Module = Module;
+    self.Module = Module;
 
+    try {
+      importScripts("/artifacts/emacs-browser-persistent-spike/temacs");
+    } catch (error) {
+      reject(error);
+    }
+  });
+
+  const module = await emacsReady;
+  post("status", { text: "mounting user image" });
+  materializeUserImage(module, userEntries);
+  const bootCode = module.callMain(["--batch", "--eval", '(princ "boot\\n")']);
+  if (bootCode !== 0) throw new Error(`persistent emacs boot exited ${bootCode}`);
+  post("status", { text: "persistent emacs booted" });
+  return module;
+}
+
+async function runEmacsCommand(userEntries, command) {
   try {
-    importScripts("/artifacts/emacs-browser-spike/temacs");
+    if (command?.type === "process-probe") {
+      throw new Error("host.process is unavailable in the browser MVP");
+    }
+    if (command?.type === "undo") {
+      throw new Error("undo requires persistent Emacs buffers; the current MVP reconstructs a temp buffer for each command");
+    }
+    if (
+      command?.type === "clipboard-copy" ||
+      command?.type === "clipboard-cut" ||
+      command?.type === "clipboard-yank"
+    ) {
+      throw new Error("clipboard/kill-ring requires GUI clipboard protocol plus persistent region and kill-ring state");
+    }
+    if (command?.type === "find-file" || command?.type === "switch-buffer") {
+      throw new Error("minibuffer requires persistent Emacs command loop, minibuffer window state, and completion UI");
+    }
+    const module = await ensureEmacs(userEntries);
+    const evalStatus = module.ccall(
+      "wasmacs_eval_string",
+      "number",
+      ["string"],
+      [buildEval(command)],
+    );
+    if (evalStatus !== 0) throw new Error(`wasmacs_eval_string returned ${evalStatus}`);
+    post("sync-file", parseReadback(module.ccall("wasmacs_last_result", "string", [], [])));
+    post("exit", { code: 0 });
   } catch (error) {
     post("error", { text: error && error.stack ? error.stack : String(error) });
   }
 }
 
-function buildEval(command = { type: "ensure-marker", path: syncPath }) {
+function buildEval(command = { type: "ensure-marker", path: "/home/user/notes.txt" }) {
+  const path = command?.path ?? "/home/user/notes.txt";
   const commandForm = buildCommandForm(command);
   return [
-    `(let ((path ${quoteElispString(syncPath)}))`,
+    `(let ((path ${quoteElispString(path)}))`,
     "  (with-temp-buffer",
     "    (insert-file-contents path)",
     commandForm,
     "    (write-region (point-min) (point-max) path nil 'silent)",
-    `    (princ ${quoteElispString(`WASMACS_SYNC_FILE:${syncPath}\n`)})`,
-    `    (princ ${quoteElispString(pointMarker)})`,
-    "    (princ (number-to-string (1- (point))))",
-    `    (princ ${quoteElispString("\n")})`,
-    `    (princ ${quoteElispString(`${syncBegin}\n`)})`,
-    "    (princ (buffer-string))",
-    `    (princ ${quoteElispString(`${syncEnd}\n`)})))`,
+    "    (concat path",
+    `            ${quoteElispString("\n")}`,
+    "            (number-to-string (1- (point)))",
+    `            ${quoteElispString("\n")}`,
+    "            (buffer-string))))",
   ].join(" ");
 }
 
@@ -124,6 +156,9 @@ function buildCommandForm(command) {
   if (command?.type === "move-point" && command.direction === "right") {
     return `${pointForm} (unless (eobp) (forward-char 1))`;
   }
+  if (command?.type === "save-buffer") {
+    return pointForm;
+  }
   return [
     "(goto-char (point-min))",
     `(unless (search-forward ${quoteElispString("Saved by Emacs core.")} nil t)`,
@@ -139,26 +174,16 @@ function quoteElispString(value) {
     .replace(/\n/g, "\\n")}"`;
 }
 
-function parseSyncedFile(text) {
-  const fileMarker = `WASMACS_SYNC_FILE:${syncPath}`;
-  const fileIndex = text.indexOf(fileMarker);
-  const beginIndex = text.indexOf(`${syncBegin}\n`, fileIndex);
-  const endIndex = text.indexOf(syncEnd, beginIndex);
-  const pointIndex = parsePointIndex(text, fileIndex);
-  if (fileIndex < 0 || beginIndex < 0 || endIndex < 0) return undefined;
+function parseReadback(text) {
+  const firstNewline = text.indexOf("\n");
+  const secondNewline = text.indexOf("\n", firstNewline + 1);
+  if (firstNewline < 0 || secondNewline < 0) {
+    throw new Error("invalid persistent emacs readback");
+  }
 
   return {
-    path: syncPath,
-    pointIndex,
-    text: text.slice(beginIndex + syncBegin.length + 1, endIndex),
+    path: text.slice(0, firstNewline),
+    pointIndex: Number.parseInt(text.slice(firstNewline + 1, secondNewline), 10),
+    text: text.slice(secondNewline + 1),
   };
-}
-
-function parsePointIndex(text, fileIndex) {
-  const markerIndex = text.indexOf(pointMarker, fileIndex);
-  if (markerIndex < 0) return undefined;
-  const lineEnd = text.indexOf("\n", markerIndex);
-  const raw = text.slice(markerIndex + pointMarker.length, lineEnd < 0 ? undefined : lineEnd);
-  const parsed = Number.parseInt(raw, 10);
-  return Number.isFinite(parsed) ? parsed : undefined;
 }

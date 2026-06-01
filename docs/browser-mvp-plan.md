@@ -79,7 +79,7 @@ The validation runs the packaged artifact and checks that
 The first browser screen should stay small:
 
 - one frame
-- one buffer backed by `/home/user/notes.txt`
+- one active buffer backed by a `/home/user/...` file
 - basic text input
 - explicit save through the runtime host filesystem
 - reload persistence by exporting/importing the user image
@@ -94,13 +94,14 @@ Current implementation:
   format in the browser.
 - `app/src/main.js` keeps a serialized `.wasifs` payload in `localStorage`
   under `wasmacs:user-filesystem.wasifs:v1`.
-- `/home/user/notes.txt` is the single writable file exposed by the first UI.
+- `/home/user/notes.txt` is the initial file. The UI also has a path field and
+  Open button for user files such as `/home/user/projects/demo.txt`.
 - The editor marks the buffer `modified` on input and `saved` after explicit
   save.
 - Reload persistence is currently browser `localStorage`, but the stored value
   is now the base64 form of a tar-compatible `user-filesystem.wasifs` payload.
 - Export downloads `user-filesystem.wasifs`; Import accepts a `.wasifs` file
-  and reloads `/home/user/notes.txt` from it.
+  and reloads the active buffer path from it.
 
 ## Worker Proof
 
@@ -204,15 +205,10 @@ Backspace     -> { type: "backspace", path }
 `app/src/input-protocol.js` rejects modified keys, composition events, and
 non-user paths. `app/src/main.js` listens on `#frame-grid`, prevents the
 browser from owning accepted editing keys, and sends `run-buffer-command` to a
-one-shot worker. The worker converts that command into Emacs batch Elisp,
-opens `/home/user/notes.txt`, applies `insert` or `delete-char -1`, writes the
-file with `write-region`, emits the current temporary sync marker, and the app
-refreshes the `text-grid-draw` frame.
-
-This proves the input path crosses the Emacs bridge, but it is still slow
-because each accepted key starts a fresh worker. The next architecture step is
-a persistent command loop or queue that keeps the core-side command owner alive
-between inputs.
+persistent worker. The worker converts that command into Emacs Lisp, opens the
+active `/home/user/...` file, applies `insert`, `delete-char -1`, or movement,
+writes the file with `write-region`, and returns path/point/text through
+`wasmacs_last_result` so the app can refresh the `text-grid-draw` frame.
 
 The first latency mitigation is a browser-side command queue. It keeps one
 command in flight at a time and coalesces adjacent pending `insert-text`
@@ -222,15 +218,12 @@ commands for the same file:
 insert "a" + insert "b" -> insert "ab"
 ```
 
-Backspace and later movement commands stay as ordering boundaries. This does
-not make Emacs itself persistent yet, but it avoids racing worker startup and
-lets fast printable input use fewer one-shot Emacs runs. The next step is to
-investigate a core-side persistent command loop or a new browser build profile
-that can keep the Emacs command owner alive between host messages.
+Backspace and later movement commands stay as ordering boundaries. The queue
+still prevents command pileups, even though the Emacs worker is now persistent.
 
-Point is now part of the bridge. Accepted key commands carry `pointIndex`,
-the worker emits `WASMACS_POINT`, and `text-grid-draw` renders the cursor from
-the returned point. ArrowLeft and ArrowRight are routed as `move-point`
+Point is now part of the bridge. Accepted key commands carry `pointIndex`, and
+`text-grid-draw` renders the cursor from the point returned by
+`wasmacs_last_result`. ArrowLeft and ArrowRight are routed as `move-point`
 commands and run Emacs `backward-char 1` / `forward-char 1`.
 
 See `docs/persistent-command-loop-feasibility.md` for the current persistent
@@ -238,11 +231,125 @@ loop boundary: the known-good profile is `-sEXIT_RUNTIME=1` and uses Emacs
 `--batch`, so a real persistent command owner should be a separate build or
 host-entrypoint spike rather than a mutation of the working batch proof.
 
+The first separate profile exists as
+`artifacts/emacs-browser-persistent-spike/`, built by
+`scripts/build-emacs-browser-persistent-spike.sh`. It uses
+`-sEXIT_RUNTIME=0`, exports `callMain`, `wasmacs_eval_string`,
+`wasmacs_last_result`, and Emscripten FS helpers including `FS_readFile`.
+Validation is in `scripts/validate-browser-persistent-spike.sh` and
+`logs/wasm-browser-persistent-batch.txt`.
+
+The persistent profile can now boot once, run host-initiated Elisp commands,
+mutate files through Emacs file primitives, and return a path/text/point
+payload through `wasmacs_last_result`. The browser worker now uses this path
+for buffer commands and stays alive across queued key commands. The current
+smoke evidence is in `logs/browser-persistent-worker-smoke.txt`.
+
+Milestone 13 has started with project-file editing. The UI can open
+`/home/user/projects/demo.txt`, create it in the user image if needed, edit it
+through the persistent Emacs worker, save, and reload it. Evidence is in
+`logs/browser-project-file-smoke.txt`.
+
+Command dispatch now includes `Ctrl+S` as an explicit `save-buffer` command.
+The visible `Process` probe documents the MVP process boundary by showing
+`host.process is unavailable in the browser MVP` instead of silently failing or
+pretending subprocesses are available. Evidence is in
+`logs/browser-command-dispatch-smoke.txt`.
+
+The editor pane now includes a file switcher backed by the browser
+`user-filesystem.wasifs` entries. It hides tar metadata and internal runtime
+state, marks the active file, and switches buffers from browser user-image
+state without launching Emacs until an edit command arrives. Evidence is in
+`logs/browser-file-switch-smoke.txt`.
+
+Queued editing commands now advance point optimistically on the browser side.
+That keeps fast printable input in order while a persistent Emacs command is
+still in flight. Recovery after the disabled process path is covered by
+`logs/browser-worker-recovery-smoke.txt`.
+
+`scripts/summarize-browser-editing-session.mjs` rolls the individual browser
+smoke logs into `logs/browser-editing-session-smoke.txt`, so `npm test` has one
+session-level check for project-file editing, command dispatch, file switching,
+and worker recovery.
+
+Find/open semantics now have a tested path normalizer. Relative names open
+under `/home/user/projects`, absolute `/home/user/...` paths are normalized,
+and paths outside `/home/user` are rejected. The file path input also opens on
+Enter; evidence is in `logs/browser-enter-open-smoke.txt`.
+
+The textarea remains a temporary compatibility/input surface while the
+frame-grid path becomes the primary Emacs-owned UI. To avoid dropping ordinary
+browser edits during this transition, `app/src/main.js` persists modified
+textarea contents into the browser user image before Open or file-list
+switching loads another file. Evidence is in
+`logs/browser-textarea-autosave-smoke.txt`, and the session summary now checks
+that autosaved text survives switching away and back.
+
+`C-g` and `C-/` are now explicit command boundaries. `C-g` clears pending
+browser-side commands and reports `keyboard quit`. `C-/` is deliberately not
+faked yet: the current command bridge reconstructs a temporary Emacs buffer for
+each command, so real Emacs undo history cannot survive. The worker reports
+`undo requires persistent Emacs buffers` until the browser path owns persistent
+Emacs buffers. Evidence is in `logs/browser-undo-quit-smoke.txt`.
+
+Clipboard commands are also explicit boundaries. `C-y`, `C-w`, and `M-w` are
+accepted by `app/src/input-protocol.js`, but the worker reports
+`clipboard unavailable` until persistent region/kill-ring state and the GUI
+clipboard protocol are connected. The design note is
+`docs/clipboard-kill-ring-boundary.md`; browser evidence is in
+`logs/browser-clipboard-boundary-smoke.txt`.
+
+Minibuffer-oriented command sequences are now recognized without being faked.
+`C-x C-f` maps to `find-file` and `C-x b` maps to `switch-buffer`, but both
+report `minibuffer unavailable` until the browser host has a persistent Emacs
+command loop, minibuffer window state, and completion UI. The design note is
+`docs/minibuffer-command-boundary.md`; deterministic probe evidence is in
+`logs/minibuffer-command-boundary.txt`.
+
+The next shared dependency for undo, kill-ring, and minibuffer fidelity is a
+stable persistent Emacs buffer path.
+`docs/persistent-emacs-buffer-requirement.md` records why the current
+per-command temp-buffer bridge is insufficient.
+`scripts/probe-browser-persistent-buffer-undo.mjs` attempts the smallest
+`find-file` plus undo path and records the current wasm blocker in
+`logs/wasm-browser-persistent-buffer-undo.txt`: persistent-buffer undo crashes
+during GC/undo traversal with `memory access out of bounds`.
+`scripts/probe-browser-persistent-buffer-matrix.mjs` narrows this further:
+`find-file` and persistent writes pass, undo recording without calling `undo`
+passes, direct `primitive-undo` passes, and `undo-start` plus `undo-more` also
+passes. Both normal high-level `undo` and high-level `undo` with a very high
+`gc-cons-threshold` remain known blockers, so the issue is now narrowed to the
+latter half of the Lisp `undo` command rather than basic persistent buffer
+mutation.
+
+The cross-eval persistent-buffer probe adds one more boundary. A plain named
+Emacs buffer survives across separate `wasmacs_eval_string` calls and can be
+written back as `alpha beta`, so persistent buffer identity is viable in the
+browser-hosted wasm runtime. However, carrying a file-visiting buffer created
+by `find-file` across host eval calls still crashes during GC marking, and
+carrying undo-list state across host eval calls also crashes. Evidence is in
+`logs/wasm-browser-persistent-buffer-cross-eval.txt`. The next worker change
+should therefore introduce a dedicated persistent command mode only after the
+host entrypoint is made stack/GC-safe for file-visiting buffers.
+
+The file-buffer GC roots probe narrows this further. Host eval now refreshes
+the C stack-scan bottom and inhibits GC during the eval call. With that
+temporary boundary, boot-only GC forms, temp buffers, named buffers, manual
+`buffer-file-name`, `set-visited-file-name`, `insert-file-contents`, and
+`find-file` buffers killed before returning all pass. Live `find-file` buffers
+still crash after `find-file-noselect-1` / `after-find-file` state is kept
+across host eval calls. Evidence is in
+`logs/wasm-browser-file-buffer-gc-roots.txt` and
+`logs/wasm-browser-visited-file-cross-eval.txt`. Browser
+undo/kill-ring/minibuffer behavior remains explicitly unavailable rather than
+faked.
+
 ## Validation
 
 ```sh
 scripts/validate-browser-mvp-readiness.sh
 scripts/validate-browser-profile-spike.sh
+scripts/validate-browser-persistent-spike.sh
 scripts/validate-browser-worker-app.sh
 npm test
 ```

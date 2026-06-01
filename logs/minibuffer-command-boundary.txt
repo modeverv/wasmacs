@@ -1,0 +1,4 @@
+PASS C-x prefix is recognized
+PASS C-x C-f maps to find-file
+PASS C-x b maps to switch-buffer
+PASS worker reports minibuffer unavailable until persistent command loop exists

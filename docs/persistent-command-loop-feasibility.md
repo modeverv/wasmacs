@@ -58,6 +58,87 @@ yet an interactive Emacs command loop.
    explicit host command entrypoint, instead of pretending the existing batch
    artifact is persistent.
 
+## Persistent Profile Spike
+
+`scripts/build-emacs-browser-persistent-spike.sh` creates a separate artifact:
+
+```text
+artifacts/emacs-browser-persistent-spike/
+  temacs
+  temacs.wasm
+  temacs.data
+```
+
+It keeps the known-good preload packaging but changes the runtime shape:
+
+```text
+-sEXIT_RUNTIME=0
+-sEXPORTED_RUNTIME_METHODS=callMain,FS,FS_createPath,FS_createDataFile,FS_readFile
+```
+
+`scripts/validate-browser-persistent-spike.sh` verifies:
+
+- the artifact is not `NODERAWFS`
+- generated glue has `var noExitRuntime = true`
+- `Module['callMain'] = callMain`
+- `Module['FS_readFile'] = FS_readFile`
+- batch eval can still print `hello persistent-profile`
+
+This proves the next profile can expose reusable runtime hooks. It does not
+yet prove that Emacs editor state survives host commands, because `--batch`
+still exits through Emacs startup. The next spike needs either a host command
+entrypoint or an Emacs invocation that enters a browser-owned command loop
+instead of `--batch` termination.
+
+`scripts/probe-browser-persistent-callmain.mjs` confirms that repeated
+command-line `callMain` is not the command loop:
+
+```text
+FIRST_EXIT:0
+SECOND_EXIT:1
+Back to top level
+```
+
+The first `callMain(["--batch", ...])` succeeds. The second enters Emacs
+top-level recovery and exits with status 1. This is useful evidence: the
+persistent profile is a necessary runtime shape, but repeated batch main calls
+are not sufficient. The next implementation path should expose a host command
+entrypoint inside the initialized runtime or enter a browser-owned Emacs
+command loop, rather than repeatedly invoking command-line startup.
+
+The first host entrypoint spike now exists. See
+`docs/host-command-entrypoint-plan.md` and
+`scripts/probe-browser-host-entrypoint.mjs`. The proof sequence is:
+
+```text
+callMain(["--batch", "--eval", ...]) -> BOOT_EXIT:0
+ccall("wasmacs_eval_string", ...)    -> EVAL_STATUS:0
+```
+
+This proves host-initiated eval can run after the initial boot without
+repeating command-line startup.
+
+`scripts/probe-browser-host-file-command.mjs` extends that proof to Emacs file
+primitives:
+
+```text
+FILE_TEXT:alpha beta
+```
+
+That command runs through `wasmacs_eval_string`, uses Emacs
+`insert-file-contents` and `write-region`, and is read back through
+`Module.FS_readFile`.
+
+`scripts/probe-browser-host-readback.mjs` adds the first host-readable result
+channel. The persistent profile now exports `_wasmacs_last_result`; after
+`wasmacs_eval_string` evaluates a form, JavaScript can call
+`ccall("wasmacs_last_result", "string", [], [])` and receive a structured
+payload:
+
+```text
+READBACK:{"path":"/home/user/readback.txt","text":"readback text","point":14}
+```
+
 ## Validation Evidence
 
 Current proof files:
@@ -66,8 +147,19 @@ Current proof files:
 logs/browser-input-command-smoke.txt
 logs/browser-command-queue-smoke.txt
 logs/browser-cursor-command-smoke.txt
+logs/wasm-browser-persistent-batch.txt
+logs/wasm-browser-persistent-callmain.txt
+logs/wasm-browser-host-entrypoint.txt
+logs/wasm-browser-host-file-command.txt
+logs/wasm-browser-host-readback.txt
 ```
 
-The next persistent-loop spike should have its own artifact directory and must
-not replace the known-good batch bridge until it can run at least open, insert,
-backspace, move-left, move-right, save, and redraw.
+The browser worker now uses this persistent entrypoint and readback channel.
+It imports `artifacts/emacs-browser-persistent-spike/temacs`, boots once with
+`Module.callMain`, then handles queued browser commands through
+`wasmacs_eval_string`. Browser smoke evidence is in
+`logs/browser-persistent-worker-smoke.txt`.
+
+The remaining persistent-loop work is broader editing coverage: open/reload
+more files, explicit save behavior, backspace/movement regression smoke, and
+clear errors for unavailable process/pty surfaces.

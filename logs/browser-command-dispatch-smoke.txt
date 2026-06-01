@@ -1,0 +1,23 @@
+{
+  "beforeProcess": {
+    "editor": "\nSaved by Emacs core.A\n",
+    "frameText": " \nSaved by Emacs core.A \n ",
+    "path": "/home/user/projects/commands.txt",
+    "state": "synced from emacs",
+    "status": "emacs command completed"
+  },
+  "afterProcess": {
+    "editor": "\nSaved by Emacs core.A\n",
+    "outputTail": "Error: host.process is unavailable in the browser MVP\n    at runEmacsCommand (http://127.0.0.1:5173/app/src/wasm-worker.js:98:13)\n    at self.onmessage (http://127.0.0.1:5173/app/src/wasm-worker.js:10:11)\n",
+    "state": "running command",
+    "status": "process unavailable"
+  },
+  "url": "http://127.0.0.1:5173/",
+  "afterProcessFixed": {
+    "editor": "Welcome to wasmacs.\n\nThis is the first browser-hosted buffer adapter.\nIt is backed by /home/user/notes.txt in the MVP host filesystem shim.\n\nSaved by Emacs core.P\n",
+    "outputTail": "Error: host.process is unavailable in the browser MVP\n    at runEmacsCommand (http://127.0.0.1:5173/app/src/wasm-worker.js:98:13)\n    at self.onmessage (http://127.0.0.1:5173/app/src/wasm-worker.js:10:11)\n",
+    "path": "/home/user/notes.txt",
+    "state": "process unavailable",
+    "status": "process unavailable"
+  }
+}

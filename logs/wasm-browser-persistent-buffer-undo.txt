@@ -1,0 +1,18 @@
+EXIT_STATUS:1
+KNOWN_BLOCKER:persistent buffer undo currently crashes wasm during GC/undo traversal
+wasm://wasm/temacs.wasm-03887cf2:1
+
+
+RuntimeError: memory access out of bounds
+    at temacs.wasm.interval_marked_p (wasm://wasm/temacs.wasm-03887cf2:wasm-function[5028]:0x1f95b9)
+    at temacs.wasm.mark_interval_tree (wasm://wasm/temacs.wasm-03887cf2:wasm-function[4961]:0x1f6f07)
+    at temacs.wasm.process_mark_stack (wasm://wasm/temacs.wasm-03887cf2:wasm-function[4941]:0x1f5276)
+    at temacs.wasm.mark_objects (wasm://wasm/temacs.wasm-03887cf2:wasm-function[4982]:0x1f7a52)
+    at temacs.wasm.mark_specpdl (wasm://wasm/temacs.wasm-03887cf2:wasm-function[5976]:0x238611)
+    at temacs.wasm.mark_one_thread (wasm://wasm/temacs.wasm-03887cf2:wasm-function[8159]:0x2fd6cd)
+    at temacs.wasm.mark_threads_callback (wasm://wasm/temacs.wasm-03887cf2:wasm-function[8158]:0x2fd64e)
+    at temacs.wasm.flush_stack_call_func1 (wasm://wasm/temacs.wasm-03887cf2:wasm-function[4880]:0x1f21dd)
+    at temacs.wasm.flush_stack_call_func (wasm://wasm/temacs.wasm-03887cf2:wasm-function[8150]:0x2fd2d4)
+    at temacs.wasm.mark_threads (wasm://wasm/temacs.wasm-03887cf2:wasm-function[8157]:0x2fd5df)
+
+Node.js v24.15.0

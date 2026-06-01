@@ -1,0 +1,16 @@
+{
+  "url": "http://127.0.0.1:5173/",
+  "afterError": {
+    "outputTail": "Error: host.process is unavailable in the browser MVP\n    at runEmacsCommand (http://127.0.0.1:5173/app/src/wasm-worker.js:98:13)\n    at self.onmessage (http://127.0.0.1:5173/app/src/wasm-worker.js:10:11)\n",
+    "state": "process unavailable",
+    "status": "process unavailable"
+  },
+  "afterRecovery": {
+    "editor": "REC",
+    "frameText": "REC ",
+    "outputTail": "",
+    "path": "/home/user/projects/recovery-order.txt",
+    "state": "synced from emacs",
+    "status": "emacs command completed"
+  }
+}

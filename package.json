@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/serve-app.mjs",
-    "test": "node --test tests/runtime/*.test.js && scripts/validate-browser-mvp-readiness.sh && scripts/validate-browser-profile-spike.sh && scripts/validate-browser-worker-app.sh && scripts/validate-emacs-file-bridge-spike.sh"
+    "test": "node --test tests/runtime/*.test.js && scripts/validate-browser-mvp-readiness.sh && scripts/validate-browser-profile-spike.sh && scripts/validate-browser-worker-app.sh && node scripts/probe-minibuffer-command-boundary.mjs && node scripts/summarize-browser-editing-session.mjs && scripts/validate-browser-editing-smoke-evidence.sh && scripts/validate-emacs-file-bridge-spike.sh && scripts/validate-browser-persistent-spike.sh && node scripts/probe-browser-persistent-callmain.mjs && node scripts/probe-browser-host-entrypoint.mjs && node scripts/probe-browser-host-file-command.mjs && node scripts/probe-browser-host-readback.mjs && node scripts/probe-browser-persistent-buffer-undo.mjs && node scripts/probe-browser-persistent-buffer-matrix.mjs && node scripts/probe-browser-persistent-buffer-cross-eval.mjs && node scripts/probe-browser-file-buffer-gc-roots.mjs && node scripts/probe-browser-visited-file-cross-eval.mjs"
   },
   "engines": {
     "node": ">=24"

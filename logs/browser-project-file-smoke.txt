@@ -1,0 +1,9 @@
+{
+  "editor": "\nSaved by Emacs core.DEMO\n",
+  "filePathInput": "/home/user/projects/demo.txt",
+  "frameText": " \nSaved by Emacs core.DEMO\n ",
+  "path": "/home/user/projects/demo.txt",
+  "state": "loaded",
+  "status": "emacs command completed",
+  "url": "http://127.0.0.1:5173/"
+}

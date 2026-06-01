@@ -1,0 +1,18 @@
+{
+  "files": [
+    "~/init.el",
+    "~/notes.txt",
+    "~/projects/commands.txt",
+    "~/projects/demo.txt",
+    "~/projects/enter-open.txt",
+    "~/projects/recovery-order.txt",
+    "~/projects/recovery.txt",
+    "~/projects/switch-a.txt",
+    "~/projects/switch-b.txt"
+  ],
+  "input": "/home/user/projects/enter-open.txt",
+  "path": "/home/user/projects/enter-open.txt",
+  "state": "loaded",
+  "status": "emacs command completed",
+  "url": "http://127.0.0.1:5173/"
+}

@@ -31,6 +31,18 @@ test("browser user image roundtrips through base64 storage payload", async () =>
   assert.equal(restored.readText("/home/user/projects/demo.txt"), "roundtrip");
 });
 
+test("browser user image export preserves multiple project files", async () => {
+  const imageBytes = new Uint8Array(await readFile(join(repoRoot, "artifacts/user-filesystem-empty.wasifs")));
+  const image = BrowserUserImage.fromBytes(imageBytes);
+  image.writeText("/home/user/projects/a.txt", "alpha");
+  image.writeText("/home/user/projects/b.txt", "beta");
+
+  const restored = BrowserUserImage.fromBytes(image.toBytes());
+
+  assert.equal(restored.readText("/home/user/projects/a.txt"), "alpha");
+  assert.equal(restored.readText("/home/user/projects/b.txt"), "beta");
+});
+
 test("browser user image exposes entries for worker filesystem materialization", async () => {
   const imageBytes = new Uint8Array(await readFile(join(repoRoot, "artifacts/user-filesystem-empty.wasifs")));
   const image = BrowserUserImage.fromBytes(imageBytes);
