@@ -1,0 +1,8 @@
+{
+  "bufferState": "synced from emacs",
+  "output": "Redo\nREDO_UI_SMOKE:PASS\n",
+  "path": "/home/user/projects/redo-ui-1780354466973.txt",
+  "status": "emacs command completed",
+  "text": "A\n",
+  "url": "http://127.0.0.1:5173/?redo-smoke=1&run=1780354443795"
+}

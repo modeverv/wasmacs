@@ -8,4 +8,5 @@ PASS keyboard quit visibility /home/user/projects/undo-quit.txt
 PASS real Emacs undo via persistent worker /home/user/worker-real-undo.txt
 PASS real Emacs undo via browser UI /home/user/projects/real-undo-ui-1780353680853.txt
 PASS repeated real Emacs undo via browser UI /home/user/projects/repeated-undo-ui-1780354061526.txt
+PASS real Emacs redo via browser UI /home/user/projects/redo-ui-1780354466973.txt
 PASS clipboard and kill-ring boundary visibility /home/user/projects/clipboard-boundary.txt

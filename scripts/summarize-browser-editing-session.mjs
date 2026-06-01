@@ -25,6 +25,7 @@ const undoQuit = await readJson("browser-undo-quit-smoke.txt");
 const realUndo = await readText("wasm-browser-worker-real-undo.txt");
 const realUndoUi = await readJson("browser-real-undo-ui-smoke.txt");
 const repeatedUndoUi = await readJson("browser-repeated-undo-ui-smoke.txt");
+const redoUi = await readJson("browser-redo-ui-smoke.txt");
 const clipboard = await readJson("browser-clipboard-boundary-smoke.txt");
 
 const session = {
@@ -111,6 +112,15 @@ const session = {
         repeatedUndoUi.bufferState === "synced from emacs" &&
         repeatedUndoUi.text === "" &&
         repeatedUndoUi.output.includes("REPEATED_UNDO_UI_SMOKE:PASS"),
+    },
+    {
+      name: "real Emacs redo via browser UI",
+      path: redoUi.path,
+      ok: redoUi.path.startsWith("/home/user/projects/redo-ui-") &&
+        redoUi.status === "emacs command completed" &&
+        redoUi.bufferState === "synced from emacs" &&
+        redoUi.text === "A\n" &&
+        redoUi.output.includes("REDO_UI_SMOKE:PASS"),
     },
     {
       name: "clipboard and kill-ring boundary visibility",

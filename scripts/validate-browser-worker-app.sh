@@ -86,6 +86,7 @@ rg 'find-file path' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'save-buffer' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'undo-boundary' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg '\(undo-only 1\)' "${repo_root}/app/src/wasm-worker.js" >/dev/null
+rg '\(undo-redo 1\)' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'delete-char -1' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'backward-char 1' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'forward-char 1' "${repo_root}/app/src/wasm-worker.js" >/dev/null

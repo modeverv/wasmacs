@@ -166,6 +166,9 @@ function buildCommandForm(command) {
   if (command?.type === "undo") {
     return `${pointForm} (undo-only 1)`;
   }
+  if (command?.type === "redo") {
+    return `${pointForm} (undo-redo 1)`;
+  }
   return [
     "(goto-char (point-min))",
     `(unless (search-forward ${quoteElispString("Saved by Emacs core.")} nil t)`,
@@ -179,6 +182,7 @@ function needsUndoBoundary(command) {
     command?.type === "insert-text" ||
     command?.type === "backspace" ||
     command?.type === "undo" ||
+    command?.type === "redo" ||
     command?.type === "ensure-marker"
   );
 }

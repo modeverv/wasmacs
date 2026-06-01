@@ -39,6 +39,9 @@ export function keyEventToBufferCommand(event) {
     if (event.key === "/" || event.key === "_") {
       return { type: "undo", path: event.path, pointIndex: event.pointIndex };
     }
+    if (event.key === "?" || event.key === "+") {
+      return { type: "redo", path: event.path, pointIndex: event.pointIndex };
+    }
     return undefined;
   }
 
@@ -73,6 +76,7 @@ export function validateBufferCommand(command) {
     command?.type !== "save-buffer" &&
     command?.type !== "keyboard-quit" &&
     command?.type !== "undo" &&
+    command?.type !== "redo" &&
     command?.type !== "clipboard-copy" &&
     command?.type !== "clipboard-cut" &&
     command?.type !== "clipboard-yank" &&

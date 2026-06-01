@@ -42,6 +42,7 @@ let bufferPath = defaultBufferPath;
 let keyPrefix;
 let lastRealUndoSmoke;
 let lastRepeatedUndoSmoke;
+let lastRedoSmoke;
 const idleWaiters = [];
 
 async function loadUserImage() {
@@ -455,11 +456,40 @@ window.__wasmacsSmoke = {
     appendLine(`REPEATED_UNDO_UI_SMOKE:${lastRepeatedUndoSmoke.passed ? "PASS" : "FAIL"}`);
     return lastRepeatedUndoSmoke;
   },
+  async redoSmoke() {
+    const path = `/home/user/projects/redo-ui-${Date.now()}.txt`;
+    await this.resetFile(path, "");
+    this.keydown({ key: "A" });
+    await this.waitForIdle();
+    const afterInsert = this.state();
+    this.keydown({ ctrlKey: true, key: "/" });
+    await this.waitForIdle();
+    const afterUndo = this.state();
+    this.keydown({ ctrlKey: true, key: "?" });
+    await this.waitForIdle();
+    const afterRedo = this.state();
+    lastRedoSmoke = {
+      afterInsert,
+      afterUndo,
+      afterRedo,
+      passed: (afterInsert.text === "A" || afterInsert.text === "A\n") &&
+        afterUndo.text === "" &&
+        afterUndo.status === "emacs command completed" &&
+        (afterRedo.text === "A" || afterRedo.text === "A\n") &&
+        afterRedo.status === "emacs command completed" &&
+        afterRedo.state === "synced from emacs",
+    };
+    appendLine(`REDO_UI_SMOKE:${lastRedoSmoke.passed ? "PASS" : "FAIL"}`);
+    return lastRedoSmoke;
+  },
   lastRealUndoSmoke() {
     return lastRealUndoSmoke;
   },
   lastRepeatedUndoSmoke() {
     return lastRepeatedUndoSmoke;
+  },
+  lastRedoSmoke() {
+    return lastRedoSmoke;
   },
   state() {
     return {
@@ -488,5 +518,13 @@ if (new URLSearchParams(window.location.search).has("repeated-undo-smoke")) {
     .catch((error) => {
       lastRepeatedUndoSmoke = { passed: false, error: error && error.message ? error.message : String(error) };
       appendLine(`REPEATED_UNDO_UI_SMOKE:FAIL ${lastRepeatedUndoSmoke.error}`);
+    });
+}
+if (new URLSearchParams(window.location.search).has("redo-smoke")) {
+  waitForIdle()
+    .then(() => window.__wasmacsSmoke.redoSmoke())
+    .catch((error) => {
+      lastRedoSmoke = { passed: false, error: error && error.message ? error.message : String(error) };
+      appendLine(`REDO_UI_SMOKE:FAIL ${lastRedoSmoke.error}`);
     });
 }

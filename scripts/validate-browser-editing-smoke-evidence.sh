@@ -13,6 +13,7 @@ undo_quit_log="${repo_root}/logs/browser-undo-quit-smoke.txt"
 real_undo_log="${repo_root}/logs/wasm-browser-worker-real-undo.txt"
 real_undo_ui_log="${repo_root}/logs/browser-real-undo-ui-smoke.txt"
 repeated_undo_ui_log="${repo_root}/logs/browser-repeated-undo-ui-smoke.txt"
+redo_ui_log="${repo_root}/logs/browser-redo-ui-smoke.txt"
 clipboard_log="${repo_root}/logs/browser-clipboard-boundary-smoke.txt"
 session_log="${repo_root}/logs/browser-editing-session-smoke.txt"
 
@@ -26,6 +27,7 @@ test -f "${undo_quit_log}"
 test -f "${real_undo_log}"
 test -f "${real_undo_ui_log}"
 test -f "${repeated_undo_ui_log}"
+test -f "${redo_ui_log}"
 test -f "${clipboard_log}"
 test -f "${session_log}"
 
@@ -77,6 +79,10 @@ rg '"/home/user/projects/repeated-undo-ui-[0-9]+\.txt"' "${repeated_undo_ui_log}
 rg '"status": "emacs command completed"' "${repeated_undo_ui_log}" >/dev/null
 rg '"bufferState": "synced from emacs"' "${repeated_undo_ui_log}" >/dev/null
 rg 'REPEATED_UNDO_UI_SMOKE:PASS' "${repeated_undo_ui_log}" >/dev/null
+rg '"/home/user/projects/redo-ui-[0-9]+\.txt"' "${redo_ui_log}" >/dev/null
+rg '"status": "emacs command completed"' "${redo_ui_log}" >/dev/null
+rg '"bufferState": "synced from emacs"' "${redo_ui_log}" >/dev/null
+rg 'REDO_UI_SMOKE:PASS' "${redo_ui_log}" >/dev/null
 
 rg '"/home/user/projects/clipboard-boundary\.txt"' "${clipboard_log}" >/dev/null
 rg '"editor": "CLIP"' "${clipboard_log}" >/dev/null
@@ -94,6 +100,7 @@ rg 'PASS keyboard quit visibility /home/user/projects/undo-quit\.txt' "${session
 rg 'PASS real Emacs undo via persistent worker /home/user/worker-real-undo\.txt' "${session_log}" >/dev/null
 rg 'PASS real Emacs undo via browser UI /home/user/projects/real-undo-ui-[0-9]+\.txt' "${session_log}" >/dev/null
 rg 'PASS repeated real Emacs undo via browser UI /home/user/projects/repeated-undo-ui-[0-9]+\.txt' "${session_log}" >/dev/null
+rg 'PASS real Emacs redo via browser UI /home/user/projects/redo-ui-[0-9]+\.txt' "${session_log}" >/dev/null
 rg 'PASS clipboard and kill-ring boundary visibility /home/user/projects/clipboard-boundary\.txt' "${session_log}" >/dev/null
 
 echo "browser editing smoke evidence validation passed"

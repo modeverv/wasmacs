@@ -1240,9 +1240,11 @@ ownership rule: after a file is live in Emacs, the worker must not rematerialize
 that active path from the browser image before each command, or `save-buffer`
 sees an externally changed visited file and attempts to read confirmation from
 stdin. Multiple edits followed by repeated real Emacs `undo-only` now pass in
-both the worker-shaped probe and browser UI smoke. Continue by designing
-explicit redo behavior that does not depend on implicit minibuffer prompts.
-Keep process and pty unavailable.
+both the worker-shaped probe and browser UI smoke. Explicit redo now has the
+same shape: `C-?` maps to real Emacs `undo-redo 1`, with worker-shaped and
+browser UI evidence. Continue by expanding editing coverage around redo/undo
+interleavings, point movement, and file switching while preserving the
+Emacs-owned active file buffer boundary. Keep process and pty unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior

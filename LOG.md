@@ -653,3 +653,9 @@
   The in-app browser PASS is recorded in
   `logs/browser-repeated-undo-ui-smoke.txt` and is included in the editing
   evidence summary.
+- Added explicit redo support. `C-?` maps to the browser command `redo`, the
+  worker dispatches it to real Emacs `(undo-redo 1)`, and
+  `scripts/probe-browser-worker-redo.mjs` is wired into `npm test`.
+- Added `?redo-smoke=1` browser UI evidence. The in-app browser PASS is
+  recorded in `logs/browser-redo-ui-smoke.txt` and included in the editing
+  evidence summary.

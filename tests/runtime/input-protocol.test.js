@@ -90,8 +90,22 @@ test("emacs-ish control keys become explicit command boundaries", () => {
       pointIndex: 7,
     },
   );
+  assert.deepEqual(
+    keyEventToBufferCommand({
+      ctrlKey: true,
+      key: "?",
+      path: "/home/user/projects/demo.txt",
+      pointIndex: 7,
+    }),
+    {
+      type: "redo",
+      path: "/home/user/projects/demo.txt",
+      pointIndex: 7,
+    },
+  );
   assert.equal(validateBufferCommand({ type: "keyboard-quit", path: "/home/user/projects/demo.txt" }), true);
   assert.equal(validateBufferCommand({ type: "undo", path: "/home/user/projects/demo.txt" }), true);
+  assert.equal(validateBufferCommand({ type: "redo", path: "/home/user/projects/demo.txt" }), true);
 });
 
 test("clipboard and kill-ring keys become explicit command boundaries", () => {
