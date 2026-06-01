@@ -660,10 +660,10 @@
   recorded in `logs/browser-redo-ui-smoke.txt` and included in the editing
   evidence summary.
 - Added `scripts/probe-browser-worker-redo-interleaving.mjs` and wired it into
-  `npm test` as a known blocker. Single-edit insert/undo/redo passes, but
-  multi-edit `A`, `B`, `undo-only`, `undo-redo` currently returns safe
-  `EVAL_STATUS:1` with `(error user-error No undone changes to redo)`.
-- A direct state inspection after the multi-edit undo shows
-  `pending-undo-list` is still a cons, but the current `buffer-undo-list` head
-  has no `undo-equiv-table` mapping. The next redo pass should focus on how
-  the synthetic command boundary records redo equivalence after `undo-only`.
+  `npm test`. It now passes for multi-edit `A`, `B`, `undo-only`,
+  `undo-redo`.
+- The blocker was the host sync boundary, not missing browser redo state.
+  Calling `save-buffer` immediately after undo/redo shifted the
+  `buffer-undo-list` head away from the `undo-equiv-table` mapping. The worker
+  now skips `save-buffer` for undo/redo and persists the browser user image
+  from the Emacs readback instead.

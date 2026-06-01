@@ -137,8 +137,11 @@ UNDO_B_STATUS:0
 UNDO_B_READBACK:/home/user/worker-redo-interleaving.txt
 1
 A
+ERR:Redo
+REDO_B_STATUS:0
+REDO_B_READBACK:/home/user/worker-redo-interleaving.txt
+1
+AB
 
-REDO_B_STATUS:1
-REDO_B_READBACK:(error user-error No undone changes to redo)
 BOOT_EXIT:0
-KNOWN_BLOCKER:multi-edit redo currently loses undone-change state
+KNOWN_BLOCKER:absent

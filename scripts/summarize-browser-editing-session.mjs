@@ -93,7 +93,8 @@ const session = {
       path: "/home/user/worker-real-undo.txt",
       ok: realUndo.includes("INSERT_EVAL_STATUS:0") &&
         realUndo.includes("UNDO_EVAL_STATUS:0") &&
-        /FILE_TEXT:\s*$/m.test(realUndo),
+        realUndo.includes("UNDO_READBACK:/home/user/worker-real-undo.txt") &&
+        realUndo.includes("FILE_TEXT:U\n"),
     },
     {
       name: "real Emacs undo via browser UI",
@@ -119,7 +120,7 @@ const session = {
       ok: redoUi.path.startsWith("/home/user/projects/redo-ui-") &&
         redoUi.status === "emacs command completed" &&
         redoUi.bufferState === "synced from emacs" &&
-        redoUi.text === "A\n" &&
+        (redoUi.text === "A" || redoUi.text === "A\n") &&
         redoUi.output.includes("REDO_UI_SMOKE:PASS"),
     },
     {

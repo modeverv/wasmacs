@@ -23,7 +23,7 @@ function parseReadback(text) {
   };
 }
 
-function workerLikeEval(commandForm, pointIndex = 0) {
+function workerLikeEval(commandForm, pointIndex = 0, options = {}) {
   const pointForm = `(goto-char (min (point-max) (+ (point-min) ${pointIndex})))`;
   return [
     `(let ((path ${quote(path)}))`,
@@ -31,7 +31,7 @@ function workerLikeEval(commandForm, pointIndex = 0) {
     pointForm,
     commandForm,
     "  (undo-boundary)",
-    "  (when (buffer-modified-p) (save-buffer))",
+    options.save === false ? "" : "  (when (buffer-modified-p) (save-buffer))",
     "  (concat path",
     '          "\\n"',
     "          (number-to-string (1- (point)))",
@@ -92,12 +92,12 @@ context.Module.FS_createDataFile("/home/user", "worker-repeated-undo.txt", new T
 
 const boot = context.Module.callMain(["--batch", "--eval", '(princ "boot\\n")']);
 
-function runStep(name, commandForm, pointIndex) {
+function runStep(name, commandForm, pointIndex, options = {}) {
   const status = context.Module.ccall(
     "wasmacs_eval_string",
     "number",
     ["string"],
-    [workerLikeEval(commandForm, pointIndex)],
+    [workerLikeEval(commandForm, pointIndex, options)],
   );
   const readback = context.Module.ccall("wasmacs_last_result", "string", [], []);
   lines.push(`${name.toUpperCase()}_STATUS:${status}`);
@@ -107,8 +107,8 @@ function runStep(name, commandForm, pointIndex) {
 
 const insertA = runStep("insert_a", `(insert ${quote("A")})`, 0);
 const insertB = runStep("insert_b", `(insert ${quote("B")})`, 1);
-const undo1 = runStep("undo_1", "(undo-only 1)", 2);
-const undo2 = runStep("undo_2", "(undo-only 1)", 1);
+const undo1 = runStep("undo_1", "(undo-only 1)", 2, { save: false });
+const undo2 = runStep("undo_2", "(undo-only 1)", 1, { save: false });
 const fileText = context.Module.FS_readFile(path, { encoding: "utf8" });
 
 lines.push(`BOOT_EXIT:${boot}`);
@@ -121,8 +121,8 @@ for (const [name, step] of Object.entries({ insertA, insertB, undo1, undo2 })) {
 }
 if (insertA.readback.text !== "A\n") throw new Error(`expected A newline, got ${JSON.stringify(insertA.readback)}`);
 if (insertB.readback.text !== "AB\n") throw new Error(`expected AB newline, got ${JSON.stringify(insertB.readback)}`);
-if (undo1.readback.text !== "A\n") throw new Error(`expected first undo to leave A newline, got ${JSON.stringify(undo1.readback)}`);
+if (undo1.readback.text !== "A") throw new Error(`expected first undo to leave A, got ${JSON.stringify(undo1.readback)}`);
 if (undo2.readback.text !== "") throw new Error(`expected second undo to leave empty text, got ${JSON.stringify(undo2.readback)}`);
-if (fileText !== "") throw new Error(`expected repeated undo to save empty file, got ${JSON.stringify(fileText)}`);
+if (fileText !== "AB\n") throw new Error(`expected backing file to retain last save, got ${JSON.stringify(fileText)}`);
 
 console.log("browser worker repeated undo probe passed");

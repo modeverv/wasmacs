@@ -70,7 +70,8 @@ rg '"status": "keyboard quit"' "${undo_quit_log}" >/dev/null
 rg '"state": "keyboard quit"' "${undo_quit_log}" >/dev/null
 rg 'INSERT_EVAL_STATUS:0' "${real_undo_log}" >/dev/null
 rg 'UNDO_EVAL_STATUS:0' "${real_undo_log}" >/dev/null
-rg 'FILE_TEXT:$' "${real_undo_log}" >/dev/null
+rg 'UNDO_READBACK:/home/user/worker-real-undo\.txt' "${real_undo_log}" >/dev/null
+rg 'FILE_TEXT:U' "${real_undo_log}" >/dev/null
 rg '"/home/user/projects/real-undo-ui-[0-9]+\.txt"' "${real_undo_ui_log}" >/dev/null
 rg '"status": "emacs command completed"' "${real_undo_ui_log}" >/dev/null
 rg '"bufferState": "synced from emacs"' "${real_undo_ui_log}" >/dev/null

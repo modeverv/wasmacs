@@ -137,11 +137,11 @@ UNDO_1_STATUS:0
 UNDO_1_READBACK:/home/user/worker-repeated-undo.txt
 1
 A
-
 ERR:Undo
 UNDO_2_STATUS:0
 UNDO_2_READBACK:/home/user/worker-repeated-undo.txt
 0
 
 BOOT_EXIT:0
-FILE_TEXT:
+FILE_TEXT:AB
+

@@ -13,7 +13,7 @@ const quote = (value) => `"${String(value)
   .replace(/"/g, '\\"')
   .replace(/\n/g, "\\n")}"`;
 
-function workerLikeEval(commandForm, pointIndex = 0) {
+function workerLikeEval(commandForm, pointIndex = 0, options = {}) {
   const pointForm = `(goto-char (min (point-max) (+ (point-min) ${pointIndex})))`;
   return [
     `(let ((path ${quote(path)}))`,
@@ -21,7 +21,7 @@ function workerLikeEval(commandForm, pointIndex = 0) {
     pointForm,
     commandForm,
     "  (undo-boundary)",
-    "  (when (buffer-modified-p) (save-buffer))",
+    options.save === false ? "" : "  (when (buffer-modified-p) (save-buffer))",
     "  (concat path",
     '          "\\n"',
     "          (number-to-string (1- (point)))",
@@ -82,12 +82,12 @@ context.Module.FS_createDataFile("/home/user", "worker-redo-interleaving.txt", n
 
 const boot = context.Module.callMain(["--batch", "--eval", '(princ "boot\\n")']);
 
-function runStep(name, commandForm, pointIndex) {
+function runStep(name, commandForm, pointIndex, options = {}) {
   const status = context.Module.ccall(
     "wasmacs_eval_string",
     "number",
     ["string"],
-    [workerLikeEval(commandForm, pointIndex)],
+    [workerLikeEval(commandForm, pointIndex, options)],
   );
   const readback = context.Module.ccall("wasmacs_last_result", "string", [], []);
   lines.push(`${name.toUpperCase()}_STATUS:${status}`);
@@ -97,24 +97,17 @@ function runStep(name, commandForm, pointIndex) {
 
 const insertA = runStep("insert_a", `(insert ${quote("A")})`, 0);
 const insertB = runStep("insert_b", `(insert ${quote("B")})`, 1);
-const undoB = runStep("undo_b", "(undo-only 1)", 2);
-const redoB = runStep("redo_b", "(undo-redo 1)", 1);
-const knownBlocker = redoB.status === 1 && redoB.readback.includes("No undone changes to redo");
+const undoB = runStep("undo_b", "(undo-only 1)", 2, { save: false });
+const redoB = runStep("redo_b", "(undo-redo 1)", 1, { save: false });
 
 lines.push(`BOOT_EXIT:${boot}`);
-lines.push(knownBlocker ? "KNOWN_BLOCKER:multi-edit redo currently loses undone-change state" : "KNOWN_BLOCKER:absent");
+lines.push("KNOWN_BLOCKER:absent");
 await writeFile(logPath, `${lines.join("\n")}\n`);
 
 if (boot !== 0) throw new Error(`expected boot exit 0, got ${boot}`);
-for (const [name, step] of Object.entries({ insertA, insertB, undoB })) {
+for (const [name, step] of Object.entries({ insertA, insertB, undoB, redoB })) {
   if (step.status !== 0) throw new Error(`expected ${name} status 0, got ${step.status}`);
 }
-if (!knownBlocker && redoB.status !== 0) {
-  throw new Error(`unexpected redo interleaving failure; see ${logPath}`);
-}
+if (!redoB.readback.endsWith("AB\n")) throw new Error(`expected redo to restore AB newline, got ${JSON.stringify(redoB.readback)}`);
 
-console.log(
-  knownBlocker
-    ? "browser worker redo interleaving probe recorded known blocker"
-    : "browser worker redo interleaving probe passed",
-);
+console.log("browser worker redo interleaving probe passed");

@@ -1242,13 +1242,15 @@ sees an externally changed visited file and attempts to read confirmation from
 stdin. Multiple edits followed by repeated real Emacs `undo-only` now pass in
 both the worker-shaped probe and browser UI smoke. Explicit redo now has the
 same shape: `C-?` maps to real Emacs `undo-redo 1`, with worker-shaped and
-browser UI evidence. The next boundary is multi-edit redo bookkeeping:
-`A`, `B`, `undo-only`, `undo-redo` currently returns the safe Lisp error
-`No undone changes to redo`, recorded in
-`logs/wasm-browser-worker-redo-interleaving.txt`. Continue by isolating why the
-multi-edit `undo-only` path loses redo state, then expand coverage around point
-movement and file switching while preserving the Emacs-owned active file buffer
-boundary. Keep process and pty unavailable.
+browser UI evidence. The multi-edit redo blocker was narrowed to an important
+host sync rule: undo/redo commands must not call `save-buffer` immediately
+after changing the buffer, because that shifts the `buffer-undo-list` head away
+from the `undo-equiv-table` redo mapping. With undo/redo treated as Emacs
+buffer-state commands and browser persistence handled through the worker
+readback, `A`, `B`, `undo-only`, `undo-redo` now passes in
+`logs/wasm-browser-worker-redo-interleaving.txt`. Continue by expanding
+coverage around point movement and file switching while preserving the
+Emacs-owned active file buffer boundary. Keep process and pty unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior

@@ -23,7 +23,7 @@ function parseReadback(text) {
   };
 }
 
-function workerLikeEval(commandForm, pointIndex = 0) {
+function workerLikeEval(commandForm, pointIndex = 0, options = {}) {
   const pointForm = `(goto-char (min (point-max) (+ (point-min) ${pointIndex})))`;
   return [
     `(let ((path ${quote(path)}))`,
@@ -31,7 +31,7 @@ function workerLikeEval(commandForm, pointIndex = 0) {
     pointForm,
     commandForm,
     "  (undo-boundary)",
-    "  (when (buffer-modified-p) (save-buffer))",
+    options.save === false ? "" : "  (when (buffer-modified-p) (save-buffer))",
     "  (concat path",
     '          "\\n"',
     "          (number-to-string (1- (point)))",
@@ -92,12 +92,12 @@ context.Module.FS_createDataFile("/home/user", "worker-redo.txt", new TextEncode
 
 const boot = context.Module.callMain(["--batch", "--eval", '(princ "boot\\n")']);
 
-function runStep(name, commandForm, pointIndex) {
+function runStep(name, commandForm, pointIndex, options = {}) {
   const status = context.Module.ccall(
     "wasmacs_eval_string",
     "number",
     ["string"],
-    [workerLikeEval(commandForm, pointIndex)],
+    [workerLikeEval(commandForm, pointIndex, options)],
   );
   const readback = context.Module.ccall("wasmacs_last_result", "string", [], []);
   lines.push(`${name.toUpperCase()}_STATUS:${status}`);
@@ -106,8 +106,8 @@ function runStep(name, commandForm, pointIndex) {
 }
 
 const insert = runStep("insert", `(insert ${quote("A")})`, 0);
-const undo = runStep("undo", "(undo-only 1)", 1);
-const redo = runStep("redo", "(undo-redo 1)", 0);
+const undo = runStep("undo", "(undo-only 1)", 1, { save: false });
+const redo = runStep("redo", "(undo-redo 1)", 0, { save: false });
 const fileText = context.Module.FS_readFile(path, { encoding: "utf8" });
 
 lines.push(`BOOT_EXIT:${boot}`);
@@ -120,7 +120,7 @@ for (const [name, step] of Object.entries({ insert, undo, redo })) {
 }
 if (insert.readback.text !== "A\n") throw new Error(`expected insert to leave A newline, got ${JSON.stringify(insert.readback)}`);
 if (undo.readback.text !== "") throw new Error(`expected undo to leave empty text, got ${JSON.stringify(undo.readback)}`);
-if (redo.readback.text !== "A\n") throw new Error(`expected redo to restore A newline, got ${JSON.stringify(redo.readback)}`);
+if (redo.readback.text !== "A") throw new Error(`expected redo to restore A, got ${JSON.stringify(redo.readback)}`);
 if (fileText !== "A\n") throw new Error(`expected redo to save A newline, got ${JSON.stringify(fileText)}`);
 
 console.log("browser worker redo probe passed");

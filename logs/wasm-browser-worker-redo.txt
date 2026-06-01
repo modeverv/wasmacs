@@ -137,7 +137,6 @@ REDO_STATUS:0
 REDO_READBACK:/home/user/worker-redo.txt
 1
 A
-
 BOOT_EXIT:0
 FILE_TEXT:A
 

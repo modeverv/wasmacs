@@ -133,4 +133,5 @@ UNDO_EVAL_STATUS:0
 UNDO_READBACK:/home/user/worker-real-undo.txt
 0
 
-FILE_TEXT:
+FILE_TEXT:U
+

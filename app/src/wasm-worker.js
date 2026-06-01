@@ -131,7 +131,7 @@ function buildEval(command = { type: "ensure-marker", path: "/home/user/notes.tx
   const path = command?.path ?? "/home/user/notes.txt";
   const commandForm = buildCommandForm(command);
   const boundaryForm = needsUndoBoundary(command) ? "    (undo-boundary)" : "";
-  const saveForm = command?.type === "move-point" ? "" : "    (when (buffer-modified-p) (save-buffer))";
+  const saveForm = shouldSaveBuffer(command) ? "    (when (buffer-modified-p) (save-buffer))" : "";
   return [
     `(let ((path ${quoteElispString(path)}))`,
     "  (find-file path)",
@@ -184,6 +184,14 @@ function needsUndoBoundary(command) {
     command?.type === "undo" ||
     command?.type === "redo" ||
     command?.type === "ensure-marker"
+  );
+}
+
+function shouldSaveBuffer(command) {
+  return (
+    command?.type !== "move-point" &&
+    command?.type !== "undo" &&
+    command?.type !== "redo"
   );
 }
 

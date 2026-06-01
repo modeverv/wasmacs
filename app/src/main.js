@@ -32,6 +32,11 @@ const defaultText = [
   "",
 ].join("\n");
 
+const searchParams = new URLSearchParams(window.location.search);
+if (searchParams.has("clear-storage")) {
+  localStorage.removeItem(storageKey);
+}
+
 let worker;
 let savedText = "";
 let userImage;
@@ -172,7 +177,7 @@ function notifyIdleWaiters() {
   }
 }
 
-function waitForIdle(timeoutMs = 60_000) {
+function waitForIdle(timeoutMs = 300_000) {
   if (!commandInFlight && commandQueue.length === 0) return Promise.resolve();
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -503,8 +508,14 @@ window.__wasmacsSmoke = {
 };
 
 await loadBuffer();
-enqueueBufferCommand();
-if (new URLSearchParams(window.location.search).has("real-undo-smoke")) {
+if (
+  !searchParams.has("real-undo-smoke") &&
+  !searchParams.has("repeated-undo-smoke") &&
+  !searchParams.has("redo-smoke")
+) {
+  enqueueBufferCommand();
+}
+if (searchParams.has("real-undo-smoke")) {
   waitForIdle()
     .then(() => window.__wasmacsSmoke.realUndoSmoke())
     .catch((error) => {
@@ -512,7 +523,7 @@ if (new URLSearchParams(window.location.search).has("real-undo-smoke")) {
       appendLine(`REAL_UNDO_UI_SMOKE:FAIL ${lastRealUndoSmoke.error}`);
     });
 }
-if (new URLSearchParams(window.location.search).has("repeated-undo-smoke")) {
+if (searchParams.has("repeated-undo-smoke")) {
   waitForIdle()
     .then(() => window.__wasmacsSmoke.repeatedUndoSmoke())
     .catch((error) => {
@@ -520,7 +531,7 @@ if (new URLSearchParams(window.location.search).has("repeated-undo-smoke")) {
       appendLine(`REPEATED_UNDO_UI_SMOKE:FAIL ${lastRepeatedUndoSmoke.error}`);
     });
 }
-if (new URLSearchParams(window.location.search).has("redo-smoke")) {
+if (searchParams.has("redo-smoke")) {
   waitForIdle()
     .then(() => window.__wasmacsSmoke.redoSmoke())
     .catch((error) => {

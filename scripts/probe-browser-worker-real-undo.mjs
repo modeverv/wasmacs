@@ -23,7 +23,7 @@ function parseReadback(text) {
   };
 }
 
-function workerLikeEval(commandForm, pointIndex = 0) {
+function workerLikeEval(commandForm, pointIndex = 0, options = {}) {
   const pointForm = `(goto-char (min (point-max) (+ (point-min) ${pointIndex})))`;
   return [
     `(let ((path ${quote(path)}))`,
@@ -31,7 +31,7 @@ function workerLikeEval(commandForm, pointIndex = 0) {
     pointForm,
     commandForm,
     "  (undo-boundary)",
-    "  (when (buffer-modified-p) (save-buffer))",
+    options.save === false ? "" : "  (when (buffer-modified-p) (save-buffer))",
     "  (concat path",
     '          "\\n"',
     "          (number-to-string (1- (point)))",
@@ -102,7 +102,7 @@ const undoEval = context.Module.ccall(
   "wasmacs_eval_string",
   "number",
   ["string"],
-  [workerLikeEval("(undo-only 1)", 1)],
+  [workerLikeEval("(undo-only 1)", 1, { save: false })],
 );
 const undoReadback = context.Module.ccall("wasmacs_last_result", "string", [], []);
 const fileText = context.Module.FS_readFile(path, { encoding: "utf8" });
@@ -123,6 +123,6 @@ if (insertEval !== 0) throw new Error(`expected insert eval 0, got ${insertEval}
 if (insertParsed.text !== "U\n") throw new Error(`expected insert readback text U newline, got ${JSON.stringify(insertParsed)}`);
 if (undoEval !== 0) throw new Error(`expected undo eval 0, got ${undoEval}`);
 if (undoParsed.text !== "") throw new Error(`expected undo readback empty text, got ${JSON.stringify(undoParsed)}`);
-if (fileText !== "") throw new Error(`expected undo to save empty file, got ${JSON.stringify(fileText)}`);
+if (fileText !== "U\n") throw new Error(`expected backing file to retain last save, got ${JSON.stringify(fileText)}`);
 
 console.log("browser worker real undo probe passed");
