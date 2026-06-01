@@ -1,0 +1,8 @@
+Warning: arch-dependent data dir '/usr/local/libexec/emacs/30.2/wasm32-unknown-linux-gnu/': No such file or directory
+Warning: arch-independent data dir '/usr/local/share/emacs/30.2/etc/': No such file or directory
+Warning: Lisp directory '/usr/local/share/emacs/30.2/lisp': No such file or directory
+Error: /usr/local/share/emacs/30.2/etc/charsets: No such file or directory
+Emacs will not function correctly without the character map files.
+Please check your installation!
+
+exit_code: 1

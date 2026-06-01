@@ -1,0 +1,4 @@
+[submodule "vendor/emacs"]
+	path = vendor/emacs
+	url = https://github.com/emacs-mirror/emacs.git
+	shallow = true

@@ -1,0 +1,11 @@
+{
+  "name": "wasmacs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/runtime/*.test.js && scripts/validate-browser-mvp-readiness.sh && scripts/validate-browser-profile-spike.sh"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

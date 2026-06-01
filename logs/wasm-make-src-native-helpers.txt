@@ -1,0 +1,353 @@
+emmake: "make -C src -j16 all" in "/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/build-gnu-host-internal-termcap"
+  GEN      globals.h
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/charsets all
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/unidata charscript.el
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/unidata emoji-zwj.el
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/charsets cp51932.el
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/charsets eucjp-ms.el
+make[1]: Nothing to be done for `eucjp-ms.el'.
+make[1]: Nothing to be done for `cp51932.el'.
+make[1]: Nothing to be done for `emoji-zwj.el'.
+make[1]: Nothing to be done for `charscript.el'.
+make[1]: Nothing to be done for `all'.
+  CC       dispnew.o
+  CC       frame.o
+  CC       scroll.o
+  CC       xdisp.o
+  CC       menu.o
+  CC       window.o
+  CC       charset.o
+  CC       coding.o
+  CC       category.o
+  CC       ccl.o
+  CC       character.o
+  CC       chartab.o
+  CC       bidi.o
+  CC       cm.o
+  CC       term.o
+  CC       terminal.o
+  CC       xfaces.o
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/ccl.c:35:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/bidi.c:246:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/frame.c:37:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/keyboard.h:23:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/menu.c:26:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+In file included from  1988 | /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/xdisp.c:475:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+        /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988       ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+ |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/window.c:30:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/keyboard.h:23:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTEIn file included from RBITS) | M/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/scroll.c:30:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/termchar.h:23:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:In file included from 1988/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispnew.c:28:36:
+In file included from : A/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/termchar.hX:23:
+_/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988Cwarning: H:signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |         AR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+       ?  1988 |                ? ((EM((EMACS_IACS_INT) MAX_FACE_ID << CHNT)AR MAX_FACE_ID << CHARACTERBITS) | MAX_CAHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+CTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/term.c:31:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/termchar.h:23:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/terminal.c:23:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/frame.h:22:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/termhooks.h:27:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/cm.c:25:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/frame.h:22:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/termhooks.h:27:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.c:297:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/character.c:37:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/frame.h:22:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/termhooks.h:27:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/charset.c:39:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+  CC       emacs.o
+1 warning generated.
+1 warning generated.
+  CC       keyboard.o
+  CC       macros.o
+1 warning generated.
+  CC       keymap.o
+1 warning generated.
+  CC       sysdep.o
+1 warning generated.
+  CC       bignum.o
+  CC       buffer.o
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/keyboard.c:26:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/macros.c:25:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/window.h:23:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+1 warning generated.
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/xfaces.c:228:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/frame.h:22:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/termhooks.h:27:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+  CC       filelock.o
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/emacs.c:97:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/window.h:23:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/keymap.c:50:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/keyboard.h:23:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+1 warning generated.
+  CC       insdel.o
+1 warning generated.
+1 warning generated.
+  CC       marker.o
+  CC       minibuf.o
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/sysdep.c:118:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/keyboard.h:23:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/buffer.c:36:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/window.h:23:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+1 warning generated.
+  CC       fileio.o
+1 warning generated.
+  CC       dired.o
+  CC       cmds.o
+1 warning generated.
+  CC       casetab.o
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/filelock.c:46:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/insdel.c:26:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+1 warning generated.
+  CC       casefiddle.o
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/marker.c:31:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/window.h:23:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+1 warning generated.
+  CC       indent.o
+1 warning generated.
+  CC       search.o
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/minibuf.c:29:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/keyboard.h:23:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+1 warning generated.
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dired.c:41:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/fileio.c:50:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+  CC       regex-emacs.o
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/fileio.c:3954:31: warning: implicit conversion from 'off_t' (aka 'long long') to 'double' changes value from 9223372036854775807 to 9223372036854775808 [-Wimplicit-const-int-float-conversion]
+ 3954 |       if (0 <= v && v < 1.0 + TYPE_MAXIMUM (off_t))
+      |                             ~ ^~~~~~~~~~~~~~~~~~~~
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/lib/intprops.h:48:4: note: expanded from macro 'TYPE_MAXIMUM'
+   48 |   ((t) (! TYPE_SIGNED (t)                                               \
+      |    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   49 |         ? (t) -1                                                        \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   50 |         : ((((t) 1 << (TYPE_WIDTH (t) - 2)) - 1) * 2 + 1)))
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/cmds.c:28:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/keyboard.h:23:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+1 warning generated.
+  CC       undo.o
+1 warning generated.
+1 warning generated.
+  CC       alloc.o
+  CC       pdumper.o
+  CC       data.o
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/casefiddle.c:30:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/search.c:36:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/indent.c:26 1988 |                ? ((EMACS_INT) MAX_F:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+1 warning generated.
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/regex-emacs.c:36:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+  CC       doc.o
+1 warning generated.
+  CC       editfns.o
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/undo.c:25:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/keyboard.h:23:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/alloc.c:34:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/pdumper.c:36:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+1 warning generated.
+1 warning generated.
+  CC       callint.o
+1 warning generated.
+  CC       eval.o
+  CC       floatfns.o
+1 warning generated.
+  CC       fns.o
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/alloc.c:8003:7: error: use of undeclared identifier 'malloc_trim'
+ 8003 |   if (malloc_trim (pad) == 1)
+      |       ^~~~~~~~~~~
+1 warning and 1 error generated.
+make: *** [alloc.o] Error 1
+make: *** Waiting for unfinished jobs....
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/doc.c:34:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+1 warning generated.
+1 warning generated.
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/data.c:33:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/keyboard.h:23:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/editfns.c:51:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/callint.c:26:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/keyboard.h:23:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+1 warning generated.
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/eval.c:28:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/keyboard.h:23:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/editfns.c:3976:21: warning: implicit conversion from 'unsigned long long' to 'double' changes value from 18446744073709551615 to 18446744073709551616 [-Wimplicit-const-int-float-conversion]
+ 3976 |                       if (abs_d < UINTMAX_MAX + 1.0)
+      |                                   ^~~~~~~~~~~ ~
+/opt/homebrew/Cellar/emscripten/5.0.7/libexec/cache/sysroot/include/stdint.h:93:21: note: expanded from macro 'UINTMAX_MAX'
+   93 | #define UINTMAX_MAX __UINTMAX_MAX__
+      |                     ^~~~~~~~~~~~~~~
+<built-in>:72:25: note: expanded from macro '__UINTMAX_MAX__'
+   72 | #define __UINTMAX_MAX__ 18446744073709551615ULL
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~
+2 warnings generated.
+1 warning generated.
+1 warning generated.
+1 warning generated.
+1 warning generated.
+1 warning generated.
+2 warnings generated.
+1 warning generated.
+1 warning generated.
+1 warning generated.
+1 warning generated.
+
+exit_code: 2

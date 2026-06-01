@@ -1,0 +1,301 @@
+emmake: "make -j16 src" in "/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/build-gnu-host-internal-termcap"
+/Library/Developer/CommandLineTools/usr/bin/make -C lib all
+  GEN      alloca.h
+  GEN      dirent.h
+  GEN      execinfo.h
+  GEN      fcntl.h
+  GEN      getopt.h
+  GEN      getopt-cdefs.h
+  GEN      malloc/dynarray.gl.h
+  GEN      malloc/dynarray-skeleton.gl.h
+  GEN      malloc/scratch_buffer.gl.h
+  GEN      ieee754.h
+  GEN      inttypes.h
+echo '#include "mini-gmp.h"' > gmp.h-t
+  GEN      limits.h
+  GEN      signal.h
+  GEN      stdbit.h
+  GEN      stdint.h
+  GEN      stdio.h
+  GEN      stdlib.h
+  GEN      string.h
+  GEN      sys/random.h
+mv gmp.h-t gmp.h
+  GEN      sys/select.h
+  GEN      sys/stat.h
+  GEN      sys/time.h
+  GEN      sys/types.h
+  GEN      time.h
+  GEN      unistd.h
+  CC       fingerprint.o
+  CC       malloc.o
+  CC       mktime.o
+  CC       realloc.o
+  CC       acl-errno-valid.o
+  CC       acl-internal.o
+  CC       get-permissions.o
+  CC       set-permissions.o
+  CC       allocator.o
+  CC       binary-io.o
+  CC       boot-time.o
+  CC       c-ctype.o
+  CC       c-strcasecmp.o
+  CC       c-strncasecmp.o
+  CC       canonicalize-lgpl.o
+  CC       careadlinkat.o
+  CC       close-stream.o
+  CC       copy-file-range.o
+  CC       md5-stream.o
+  CC       md5.o
+  CC       sha1.o
+  CC       sha256.o
+  CC       sha512.o
+  CC       dtoastr.o
+  CC       dtotimespec.o
+  CC       execinfo.o
+  CC       fchmodat.o
+  CC       fcntl.o
+  CC       file-has-acl.o
+  CC       filemode.o
+  CC       filevercmp.o
+  CC       free.o
+  CC       fsusage.o
+  CC       futimens.o
+  CC       getdelim.o
+../../src/lib/dtotimespec.c:34:27: warning: implicit conversion from 'time_t' (aka 'long long') to 'double' changes value from 9223372036854775807 to 9223372036854775808 [-Wimplicit-const-int-float-conversion]
+   34 |   else if (! (sec < 1.0 + TYPE_MAXIMUM (time_t)))
+      |                         ~ ^~~~~~~~~~~~~~~~~~~~~
+../../src/lib/intprops.h:48:4: note: expanded from macro 'TYPE_MAXIMUM'
+   48 |   ((t) (! TYPE_SIGNED (t)                                               \
+      |    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   49 |         ? (t) -1                                                        \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   50 |         : ((((t) 1 << (TYPE_WIDTH (t) - 2)) - 1) * 2 + 1)))
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  CC       getdtablesize.o
+1 warning generated.
+  CC       getline.o
+  CC       getopt.o
+  CC       getopt1.o
+  CC       getrandom.o
+  CC       gettime.o
+  CC       malloc/dynarray_at_failure.o
+  CC       malloc/dynarray_emplace_enlarge.o
+  CC       malloc/dynarray_finalize.o
+  CC       malloc/dynarray_resize.o
+  CC       malloc/dynarray_resize_clear.o
+  CC       malloc/scratch_buffer_grow.o
+  CC       malloc/scratch_buffer_grow_preserve.o
+  CC       malloc/scratch_buffer_set_array_size.o
+  CC       mini-gmp-gnulib.o
+  CC       memset_explicit.o
+  CC       nanosleep.o
+  CC       nproc.o
+  CC       nstrftime.o
+  CC       pipe2.o
+  CC       qcopy-acl.o
+  CC       rawmemchr.o
+  CC       regex.o
+  CC       sig2str.o
+  CC       sigdescr_np.o
+  CC       stat-time.o
+  CC       stdbit.o
+  CC       stdc_bit_width.o
+  CC       stdc_count_ones.o
+  CC       stdc_leading_zeros.o
+  CC       stdc_trailing_zeros.o
+  CC       tempname.o
+  CC       time_rz.o
+  CC       timegm.o
+  CC       timespec.o
+  CC       timespec-add.o
+  CC       timespec-sub.o
+  CC       u64.o
+  CC       unistd.o
+  CC       utimens.o
+  CC       openat-die.o
+  CC       save-cwd.o
+  AR       libgnu.a
+/Library/Developer/CommandLineTools/usr/bin/make -C lib-src all
+  CCLD     etags
+  CCLD     ctags
+  CCLD     emacsclient
+  CCLD     ebrowse
+  CCLD     hexl
+  CC       pop.o
+  CCLD     make-docfile
+  CCLD     make-fingerprint
+  CCLD     movemail
+cache:INFO: generating system library: sysroot/lib/wasm32-emscripten/libnoexit.a... (this will be cached in "/opt/homebrew/Cellar/emscripten/5.0.7/libexec/cache/sysroot/lib/wasm32-emscripten/libnoexit.a" for subsequent builds)
+system_libs:INFO: compiled 1 inputs in 0.08s
+cache:INFO:  - ok
+emcc: warning: running limited binaryen optimizations because DWARF info requested (or indirectly required) [-Wlimited-postlink-optimizations]
+emcc: warning: running limited binaryen optimizations because DWARF info requested (or indirectly required) [-Wlimited-postlink-optimizations]
+emcc: warning: running limited binaryen optimizations because DWARF info requested (or indirectly required) [-Wlimited-postlink-optimizations]
+emcc: warning: running limited binaryen optimizations because DWARF info requested (or indirectly required) [-Wlimited-postlink-optimizations]
+emcc: warning: running limited binaryen optimizations because DWARF info requested (or indirectly required) [-Wlimited-postlink-optimizations]
+emcc: warning: running limited binaryen optimizations because DWARF info requested (or indirectly required) [-Wlimited-postlink-optimizations]
+emcc: warning: running limited binaryen optimizations because DWARF info requested (or indirectly required) [-Wlimited-postlink-optimizations]
+emcc: warning: running limited binaryen optimizations because DWARF info requested (or indirectly required) [-Wlimited-postlink-optimizations]
+/Library/Developer/CommandLineTools/usr/bin/make -C src BIN_DESTDIR=''/usr/local/bin/'' \
+		 ELN_DESTDIR='/usr/local/lib/emacs/30.2/' all
+  GEN      /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/build-gnu-host-internal-termcap/src/lisp.mk
+  GEN      globals.h
+  GEN      buildobj.h
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/charsets all
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/unidata charscript.el
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/unidata emoji-zwj.el
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/charsets cp51932.el
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/charsets eucjp-ms.el
+  GEN      ../../../src/etc/charsets/8859-2.map
+  GEN      ../../../src/etc/charsets/8859-3.map
+  GEN      ../../../src/etc/charsets/8859-4.map
+  GEN      ../../../src/etc/charsets/8859-5.map
+  GEN      ../../../src/etc/charsets/CP932-2BYTE.map
+  GEN      ../../../src/etc/charsets/8859-6.map
+  GEN      ../../../src/lisp/international/eucjp-ms.el
+  GEN      ../../../src/etc/charsets/8859-7.map
+  GEN      ../../../src/etc/charsets/8859-8.map
+  GEN      ../../../src/etc/charsets/8859-9.map
+  GEN      ../../../src/etc/charsets/8859-10.map
+  GEN      ../../../src/etc/charsets/8859-11.map
+  GEN      ../../../src/etc/charsets/8859-13.map
+  GEN      ../../../src/lisp/international/emoji-zwj.el
+  GEN      ../../../src/lisp/international/charscript.el
+  GEN      ../../../src/etc/charsets/8859-14.map
+  GEN      ../../../src/etc/charsets/8859-15.map
+  GEN      ../../../src/etc/charsets/8859-16.map
+  GEN      ../../../src/etc/charsets/IBM037.map
+file:///Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/build-gnu-host-internal-termcap/lib-src/make-docfile:68
+  var fs = require('node:fs');
+           ^
+
+ReferenceError: require is not defined in ES module scope, you can use import instead
+    at file:///Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/build-gnu-host-internal-termcap/lib-src/make-docfile:68:12
+    at ModuleJob.run (node:internal/modules/esm/module_job:437:25)
+    at async node:internal/modules/esm/loader:639:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.15.0
+make[1]: *** [gl-stamp] Error 1
+make[1]: *** Waiting for unfinished jobs....
+  GEN      ../../../src/etc/charsets/IBM038.map
+  GEN      ../../../src/etc/charsets/IBM256.map
+  GEN      ../../../src/etc/charsets/IBM273.map
+  GEN      ../../../src/etc/charsets/IBM274.map
+  GEN      ../../../src/etc/charsets/IBM275.map
+  GEN      ../../../src/etc/charsets/IBM277.map
+  GEN      ../../../src/etc/charsets/IBM278.map
+  GEN      ../../../src/etc/charsets/IBM280.map
+  GEN      ../../../src/etc/charsets/IBM281.map
+  GEN      ../../../src/etc/charsets/IBM284.map
+  GEN      ../../../src/etc/charsets/IBM285.map
+  GEN      ../../../src/etc/charsets/IBM290.map
+  GEN      ../../../src/etc/charsets/IBM297.map
+  GEN      ../../../src/etc/charsets/IBM420.map
+  GEN      ../../../src/etc/charsets/IBM423.map
+  GEN      ../../../src/etc/charsets/IBM424.map
+  GEN      ../../../src/etc/charsets/IBM437.map
+  GEN      ../../../src/etc/charsets/IBM500.map
+  GEN      ../../../src/lisp/international/cp51932.el
+  GEN      ../../../src/etc/charsets/IBM850.map
+  GEN      ../../../src/etc/charsets/IBM851.map
+  GEN      ../../../src/etc/charsets/IBM852.map
+  GEN      ../../../src/etc/charsets/IBM855.map
+  GEN      ../../../src/etc/charsets/IBM856.map
+  GEN      ../../../src/etc/charsets/IBM857.map
+  GEN      ../../../src/etc/charsets/IBM860.map
+  GEN      ../../../src/etc/charsets/IBM861.map
+  GEN      ../../../src/etc/charsets/IBM862.map
+  GEN      ../../../src/etc/charsets/IBM863.map
+  GEN      ../../../src/etc/charsets/IBM864.map
+  GEN      ../../../src/etc/charsets/IBM865.map
+  GEN      ../../../src/etc/charsets/IBM866.map
+  GEN      ../../../src/etc/charsets/IBM868.map
+  GEN      ../../../src/etc/charsets/IBM869.map
+  GEN      ../../../src/etc/charsets/IBM870.map
+  GEN      ../../../src/etc/charsets/IBM871.map
+  GEN      ../../../src/etc/charsets/IBM874.map
+  GEN      ../../../src/etc/charsets/IBM875.map
+  GEN      ../../../src/etc/charsets/IBM880.map
+  GEN      ../../../src/etc/charsets/IBM891.map
+  GEN      ../../../src/etc/charsets/IBM903.map
+  GEN      ../../../src/etc/charsets/IBM904.map
+  GEN      ../../../src/etc/charsets/IBM905.map
+  GEN      ../../../src/etc/charsets/IBM918.map
+  GEN      ../../../src/etc/charsets/IBM1004.map
+  GEN      ../../../src/etc/charsets/IBM1026.map
+  GEN      ../../../src/etc/charsets/IBM1047.map
+  GEN      ../../../src/etc/charsets/CP737.map
+  GEN      ../../../src/etc/charsets/CP775.map
+  GEN      ../../../src/etc/charsets/CP1125.map
+  GEN      ../../../src/etc/charsets/CP1250.map
+  GEN      ../../../src/etc/charsets/CP1251.map
+  GEN      ../../../src/etc/charsets/CP1252.map
+  GEN      ../../../src/etc/charsets/CP1253.map
+  GEN      ../../../src/etc/charsets/CP1254.map
+  GEN      ../../../src/etc/charsets/CP1255.map
+  GEN      ../../../src/etc/charsets/CP1256.map
+  GEN      ../../../src/etc/charsets/CP1257.map
+  GEN      ../../../src/etc/charsets/CP1258.map
+  GEN      ../../../src/etc/charsets/CP10007.map
+  GEN      ../../../src/etc/charsets/CP720.map
+  GEN      ../../../src/etc/charsets/CP858.map
+  GEN      ../../../src/etc/charsets/GB2312.map
+  GEN      ../../../src/etc/charsets/GBK.map
+  GEN      ../../../src/etc/charsets/GB180302.map
+  GEN      ../../../src/etc/charsets/BIG5.map
+  GEN      ../../../src/etc/charsets/BIG5-HKSCS.map
+  GEN      ../../../src/etc/charsets/CNS-1.map
+  GEN      ../../../src/etc/charsets/CNS-2.map
+  GEN      ../../../src/etc/charsets/CNS-3.map
+  GEN      ../../../src/etc/charsets/CNS-4.map
+  GEN      ../../../src/etc/charsets/CNS-5.map
+  GEN      ../../../src/etc/charsets/CNS-6.map
+  GEN      ../../../src/etc/charsets/CNS-7.map
+  GEN      ../../../src/etc/charsets/CNS-F.map
+  GEN      ../../../src/etc/charsets/JISX0201.map
+  GEN      ../../../src/etc/charsets/JISX0208.map
+  GEN      ../../../src/etc/charsets/JISX0212.map
+  GEN      ../../../src/etc/charsets/JISX2132.map
+  GEN      ../../../src/etc/charsets/JISC6226.map
+  GEN      ../../../src/etc/charsets/JISX213A.map
+  GEN      ../../../src/etc/charsets/KSC5601.map
+  GEN      ../../../src/etc/charsets/KSC5636.map
+  GEN      ../../../src/etc/charsets/JOHAB.map
+  GEN      ../../../src/etc/charsets/KOI-8.map
+  GEN      ../../../src/etc/charsets/KOI8-R.map
+  GEN      ../../../src/etc/charsets/KOI8-U.map
+  GEN      ../../../src/etc/charsets/KOI8-T.map
+  GEN      ../../../src/etc/charsets/ALTERNATIVNYJ.map
+  GEN      ../../../src/etc/charsets/MIK.map
+  GEN      ../../../src/etc/charsets/PTCP154.map
+  GEN      ../../../src/etc/charsets/TIS-620.map
+  GEN      ../../../src/etc/charsets/VISCII.map
+  GEN      ../../../src/etc/charsets/VSCII.map
+  GEN      ../../../src/etc/charsets/VSCII-2.map
+  GEN      ../../../src/etc/charsets/KA-PS.map
+  GEN      ../../../src/etc/charsets/KA-ACADEMY.map
+  GEN      ../../../src/etc/charsets/HP-ROMAN8.map
+  GEN      ../../../src/etc/charsets/NEXTSTEP.map
+  GEN      ../../../src/etc/charsets/MACINTOSH.map
+  GEN      ../../../src/etc/charsets/EBCDICUK.map
+  GEN      ../../../src/etc/charsets/EBCDICUS.map
+  GEN      ../../../src/etc/charsets/stdenc.map
+  GEN      ../../../src/etc/charsets/symbol.map
+  GEN      ../../../src/etc/charsets/CP949-2BYTE.map
+  GEN      ../../../src/etc/charsets/BIG5-1.map
+  GEN      ../../../src/etc/charsets/BIG5-2.map
+  GEN      ../../../src/etc/charsets/MULE-ethiopic.map
+  GEN      ../../../src/etc/charsets/MULE-ipa.map
+  GEN      ../../../src/etc/charsets/MULE-is13194.map
+  GEN      ../../../src/etc/charsets/MULE-sisheng.map
+  GEN      ../../../src/etc/charsets/MULE-tibetan.map
+  GEN      ../../../src/etc/charsets/MULE-lviscii.map
+  GEN      ../../../src/etc/charsets/MULE-uviscii.map
+  GEN      ../../../src/etc/charsets/JISX2131.map
+  GEN      ../../../src/etc/charsets/GB180304.map
+  GEN      ../../../src/admin/charsets/charsets.stamp
+make: *** [src] Error 2
+
+exit_code: 2

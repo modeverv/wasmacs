@@ -1,0 +1,49 @@
+emmake: "make -C src -j16 all" in "/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/build-gnu-host-internal-termcap"
+  GEN      globals.h
+  GEN      buildobj.h
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/charsets all
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/unidata charscript.el
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/unidata emoji-zwj.el
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/charsets cp51932.el
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/charsets eucjp-ms.el
+make[1]: Nothing to be done for `eucjp-ms.el'.
+make[1]: Nothing to be done for `cp51932.el'.
+make[1]: Nothing to be done for `charscript.el'.
+make[1]: Nothing to be done for `emoji-zwj.el'.
+make[1]: Nothing to be done for `all'.
+  CC       tparam.o
+  CC       doc.o
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/doc.c:34:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/coding.h:284:
+In file included from /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/composite.h:29:
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/src/dispextern.h:1988:36: warning: signed shift result (0x3FFFFC00000) requires 43 bits to represent, but 'EMACS_INT' (aka 'int') only has 32 bits [-Wshift-overflow]
+ 1988 |                ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~ ^  ~~~~~~~~~~~~~
+1 warning generated.
+  CCLD     temacs
+  GEN      ../etc/DOC
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: cm.o: undefined symbol: tputs
+wasm-ld: error: term.o: undefined symbol: tputs
+wasm-ld: error: too many errors emitted, stopping now (use -error-limit=0 to see all errors)
+emcc: error: '/opt/homebrew/Cellar/emscripten/5.0.7/libexec/llvm/bin/wasm-ld -o temacs.wasm /var/folders/l2/fl54zpqn0h52frtq4vglk4c80000gn/T/tmp4nh9ahjzlibemscripten_js_symbols.so --export=_emscripten_stack_alloc --export=__wasm_call_ctors --export=emscripten_stack_get_current --export=_emscripten_stack_restore --export-if-defined=__start_em_asm --export-if-defined=__stop_em_asm --export-if-defined=__start_em_lib_deps --export-if-defined=__stop_em_lib_deps --export-if-defined=__start_em_js --export-if-defined=__stop_em_js --export-if-defined=main --export-if-defined=__main_argc_argv --export-table -z stack-size=65536 --no-growable-memory --initial-heap=16777216 --no-entry --no-stack-first --table-base=1 --global-base=1024 dispnew.o frame.o scroll.o xdisp.o menu.o window.o charset.o coding.o category.o ccl.o character.o chartab.o bidi.o cm.o term.o terminal.o xfaces.o emacs.o keyboard.o macros.o keymap.o sysdep.o bignum.o buffer.o filelock.o insdel.o marker.o minibuf.o fileio.o dired.o cmds.o casetab.o casefiddle.o indent.o search.o regex-emacs.o undo.o alloc.o pdumper.o data.o doc.o editfns.o callint.o eval.o floatfns.o fns.o sort.o font.o print.o lread.o syntax.o bytecode.o comp.o process.o gnutls.o callproc.o region-cache.o sound.o timefns.o atimer.o doprnt.o intervals.o textprop.o composite.o xml.o lcms.o profiler.o decompress.o thread.o systhread.o sqlite.o treesit.o itree.o json.o tparam.o lastfile.o ../lib/libgnu.a -L/opt/homebrew/Cellar/emscripten/5.0.7/libexec/cache/sysroot/lib/wasm32-emscripten -L/opt/homebrew/Cellar/emscripten/5.0.7/libexec/src/lib -lGL-getprocaddr -lal -lhtml5 -lstubs -lnoexit -lc -ldlmalloc -lcompiler_rt -lc++-noexcept -lc++abi-noexcept -lsockets -mllvm -combiner-global-alias-analysis=false -mllvm -enable-emscripten-sjlj -mllvm -disable-lsr' failed (returned 1)
+make: *** [temacs] Error 1
+
+exit_code: 2

@@ -1,0 +1,9 @@
+emmake: "make -j16 -C src 'CFLAGS=-g3 -O0' 'LDFLAGS=-sEXIT_RUNTIME=1 -sSTACK_SIZE=1048576 -sSTACK_OVERFLOW_CHECK=2 -sINITIAL_MEMORY=268435456 -sALLOW_MEMORY_GROWTH=1 --preload-file /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/lisp@/usr/local/share/emacs/30.2/lisp --preload-file /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/src/etc@/usr/local/share/emacs/30.2/etc' temacs" in "/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/build-gnu-host-internal-termcap"
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/charsets all
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/unidata charscript.el
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/unidata emoji-zwj.el
+make[1]: Nothing to be done for `charscript.el'.
+make[1]: Nothing to be done for `emoji-zwj.el'.
+make[1]: Nothing to be done for `all'.
+  CCLD     temacs
+mkdir -p ../etc

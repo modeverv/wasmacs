@@ -1,0 +1,3 @@
+emacs: Invalid temacs mode 'bootstrap'
+
+exit_code: 1

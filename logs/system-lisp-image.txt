@@ -1,0 +1,14 @@
+# System Lisp Image
+
+date: 2026-06-01T00:57:21Z
+source: vendor/emacs
+commit: 636f166cfc86aa90d63f592fd99f3fdd9ef95ebd
+tag: emacs-30.2
+emacs_version: 30.2
+image: artifacts/system-lisp-emacs-30.2.wasifs
+manifest: artifacts/system-lisp-emacs-30.2.manifest.json
+lisp_el_files: 1651
+lisp_elc_files: 142
+loaddefs_files: 20
+total_files: 1968
+sha256: ecb842aedd96a73b71eed63305d739c4a9b6c07b43d35fa79ddb89221c673ae9

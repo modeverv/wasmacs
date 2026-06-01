@@ -1,0 +1,219 @@
+emconfigure: ../src/configure --host=wasm32-unknown-linux-gnu --build=aarch64-apple-darwin25.5.0 --without-all --without-x --without-ns --without-pgtk --without-sound --without-dbus --without-gconf --without-gsettings --without-native-compilation --with-dumping=none --with-pdumper=no --with-unexec=no in directory /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/build-gnu-host
+checking for xcrun... xcrun
+checking for make... yes
+checking for GNU Make... make
+checking build system type... aarch64-apple-darwin25.5.0
+checking host system type... wasm32-unknown-linux-gnu
+checking for wasm32-unknown-linux-gnu-gcc... /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc
+checking whether the C compiler works... yes
+checking for C compiler default output file name... a.out
+checking for suffix of executables... 
+checking whether we are cross compiling... yes
+checking for suffix of object files... o
+checking whether the compiler supports GNU C... yes
+checking whether /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc accepts -g... yes
+checking for /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc option to enable C23 features... -std=gnu23
+checking whether the compiler is clang... yes
+checking for compiler option needed when checking for declarations... -Werror=implicit-function-declaration
+checking for ar... /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emar
+checking whether /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 and cc understand -c and -o together... yes
+checking for stdio.h... yes
+checking for stdlib.h... yes
+checking for string.h... yes
+checking for inttypes.h... yes
+checking for stdint.h... yes
+checking for strings.h... yes
+checking for sys/stat.h... yes
+checking for sys/types.h... yes
+checking for unistd.h... yes
+checking for wchar.h... yes
+checking for minix/config.h... no
+checking for linux/fs.h... no
+checking for malloc.h... yes
+checking for sys/systeminfo.h... no
+checking for sys/sysinfo.h... yes
+checking for coff.h... no
+checking for pty.h... yes
+checking for sys/resource.h... yes
+checking for sys/utsname.h... yes
+checking for pwd.h... yes
+checking for util.h... no
+checking for sanitizer/lsan_interface.h... yes
+checking for sanitizer/asan_interface.h... yes
+checking for sanitizer/common_interface_defs.h... yes
+checking for sys/socket.h... yes
+checking for sys/param.h... yes
+checking for pthread.h... yes
+checking for malloc/malloc.h... no
+checking for sys/un.h... yes
+checking for vfork.h... no
+checking for utmp.h... yes
+checking for utmpx.h... yes
+checking for OS.h... no
+checking for byteswap.h... yes
+checking for dirent.h... yes
+checking for execinfo.h... no
+checking for linux/xattr.h... no
+checking for stdio_ext.h... yes
+checking for sys/vfs.h... yes
+checking for sys/fs_types.h... no
+checking for getopt.h... yes
+checking for sys/time.h... yes
+checking for ieee754.h... no
+checking for limits.h... yes
+checking for sys/select.h... yes
+checking for stdbit.h... no
+checking for stdbool.h... yes
+checking for stdckdint.h... yes
+checking for sys/random.h... yes
+checking for endian.h... yes
+checking whether it is safe to define __EXTENSIONS__... yes
+checking whether _XOPEN_SOURCE should be defined... no
+checking how to run the C preprocessor... /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 -E
+checking for egrep -e... /usr/bin/grep -E
+checking for Minix Amsterdam compiler... no
+checking for wasm32-unknown-linux-gnu-ar... (cached) /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emar
+checking for /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 option to support large files... none needed
+checking for /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 option to support timestamps after 2038... none needed
+checking whether /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 accepts -g3 -O2... yes
+checking whether the compiler is clang... yes
+checking whether C compiler handles -Werror -Wunknown-warning-option... no
+checking whether C compiler handles -Wno-pointer-sign... yes
+checking whether C compiler handles -Wno-string-plus-int... yes
+checking whether C compiler handles -Wno-unknown-attributes... yes
+checking whether C compiler handles -Wno-unknown-pragmas... yes
+checking whether C compiler handles -Wno-initializer-overrides... yes
+checking whether C compiler handles -Wno-tautological-compare... yes
+checking whether C compiler handles -Wno-tautological-constant-out-of-range-compare... yes
+checking for a BSD-compatible install... /usr/bin/install -c
+checking command to symlink files in the same directory... ln -s
+checking for install-info... /opt/homebrew/bin/install-info
+checking for gzip... /usr/bin/gzip
+checking for 'find' args to delete a file... -delete
+checking for brew... brew
+checking for makeinfo... /opt/homebrew/opt/texinfo/bin/makeinfo
+checking for -znocombreloc... not needed
+checking whether addresses are sanitized... no
+checking for math library... none required
+checking for wasm32-unknown-linux-gnu-pkg-config... no
+checking for pkg-config... /opt/homebrew/bin/pkg-config
+configure: WARNING: using cross tools not prefixed with host triplet
+checking pkg-config is at least version 0.9.0... yes
+checking for ADDR_NO_RANDOMIZE... no
+checking if Linux sysinfo may be used... yes
+checking for sys/wait.h that is POSIX.1 compatible... yes
+checking for net/if.h... yes
+checking for ifaddrs.h... yes
+checking for net/if_dl.h... no
+checking for struct ifreq.ifr_flags... yes
+checking for struct ifreq.ifr_hwaddr... yes
+checking for struct ifreq.ifr_netmask... yes
+checking for struct ifreq.ifr_broadaddr... yes
+checking for struct ifreq.ifr_addr... yes
+checking for struct ifreq.ifr_addr.sa_len... no
+checking whether gcc understands -MMD -MF... yes
+checking for /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 options to detect undeclared functions... none needed
+checking for /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 options to ignore future-version functions... none needed
+checking for struct passwd.pw_gecos... yes
+checking for X... disabled
+checking whether malloc is Doug Lea style... no
+checking for sbrk... yes
+checking for getpagesize... yes
+checking for __lsan_ignore_object... no
+checking for fork... yes
+checking for vfork... yes
+checking for fchmod... yes
+checking for utmpname... no
+checking for utmpxname... no
+checking for canonicalize_file_name... no
+checking for realpath... yes
+checking for lstat... yes
+checking for fchmodat... yes
+checking for lchmod... yes
+checking for fcntl... yes
+checking for fdopendir... yes
+checking for listxattr... no
+checking for fstatat... yes
+checking for fsync... yes
+checking for gettimeofday... yes
+checking for memset_s... no
+checking for pselect... yes
+checking for pthread_sigmask... yes
+checking for readlink... yes
+checking for isblank... yes
+checking for iswctype... yes
+checking for strtoimax... yes
+checking for symlink... yes
+checking for localtime_r... yes
+checking for getdtablesize... no
+checking for working mmap... yes
+checking for main in -lXbsd... no
+checking for pthread library... none needed
+checking for thread support... no
+checking for getaddrinfo_a in -lanl... no
+checking for malloc_trim... yes
+checking for maillock in -lmail... no
+checking for maillock in -llockfile... no
+checking for liblockfile.so... no
+checking for maillock.h... no
+checking for linux/seccomp.h... no
+checking for linux/filter.h... no
+checking for libseccomp >= 2.5.2... no
+checking size of long... 4
+checking for accept4... yes
+checking for fchdir... yes
+checking for gethostname... yes
+checking for getrusage... yes
+checking for get_current_dir_name... yes
+checking for lrand48... yes
+checking for random... yes
+checking for rint... yes
+checking for tcdrain... yes
+checking for trunc... yes
+checking for select... yes
+checking for getpagesize... (cached) yes
+checking for setlocale... yes
+checking for newlocale... yes
+checking for getrlimit... yes
+checking for setrlimit... yes
+checking for shutdown... yes
+checking for pthread_sigmask... (cached) yes
+checking for strsignal... yes
+checking for setitimer... yes
+checking for sendto... yes
+checking for recvfrom... yes
+checking for getsockname... yes
+checking for getifaddrs... yes
+checking for freeifaddrs... yes
+checking for gai_strerror... yes
+checking for sync... yes
+checking for endpwent... yes
+checking for getgrent... yes
+checking for endgrent... yes
+checking for cfmakeraw... yes
+checking for cfsetspeed... yes
+checking for __executable_start... no
+checking for log2... yes
+checking for pthread_setname_np... no
+checking for pthread_set_name_np... no
+checking for getpwent... yes
+checking for renameat2... no
+checking for aligned_alloc... yes
+checking whether aligned_alloc is declared... yes
+checking for posix_madvise... yes
+checking for madvise... yes
+checking for __builtin_frame_address... yes
+checking for __builtin_unwind_init... yes
+checking for declarations of fseeko and ftello... yes
+checking for grantpt... yes
+checking for getpt... no
+checking for posix_openpt... yes
+checking for library containing tputs... no
+configure: error: The required function 'tputs' was not found in any library.
+The following libraries were tried (in order):
+  libtinfo, libncurses, libterminfo, libcurses, libtermcap
+Please try installing whichever of these libraries is most appropriate
+for your system, together with its header files.
+For example, a libncurses-dev(el) or similar package.
+
+exit_code: 1

@@ -1,0 +1,4 @@
+Bare impure Emacs (standard Lisp code not loaded)
+Symbol's function definition is void: internal-timer-start-idle
+
+exit_code: 255

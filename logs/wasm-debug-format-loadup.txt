@@ -1,0 +1,246 @@
+# Milestone 7 wasm loadup narrowing
+
+Date: 2026-06-01
+
+Context:
+
+- Artifact exists: `artifacts/emacs-core-spike.wasm`
+- Node can start `temacs` with source-tree `EMACSDATA` and `EMACSLOADPATH`.
+- Standard `loadup.el` still fails before batch eval completes.
+
+Original failing smoke:
+
+```text
+Loading loadup.el (source)...
+Dump mode: nil
+Using load-path (.../lisp .../lisp/emacs-lisp .../lisp/progmodes ...)
+Loading emacs-lisp/debug-early (source)...
+Loading emacs-lisp/byte-run (source)...
+Loading emacs-lisp/backquote (source)...
+Loading subr (source)...
+
+Error: invalid-function ("")
+Wrong type argument: listp, 11186336
+  ("" "" ""
+exit_code: 255
+```
+
+Narrowing result:
+
+1. A custom `loadup.el` that loads `debug-early`, `byte-run`, `backquote`, and
+   the full `subr.el` succeeds through `subr.el`.
+2. Valid top-level `subr.el` prefixes through the full 7570-line source also
+   succeed when the pre-`subr.el` `message` call is removed.
+3. Adding only standard loadup's long `message` of the load path before
+   loading `subr.el` reproduces the failure.
+4. `(prin1 load-path)` before `subr.el` does not reproduce the failure.
+5. `(message "list %s" (list LONG LONG LONG))` reproduces once the printed
+   list/string payload is large enough.
+
+Representative debug cases:
+
+```text
+PASS no_message code=1
+PASS message_literal code=1
+FAIL message_loadpath_s code=255
+FAIL message_loadpath_S code=255
+PASS prin1_loadpath code=1
+```
+
+Representative minimal long-list cases:
+
+```text
+PASS len=10 code=1
+PASS len=20 code=1
+PASS len=30 code=1
+FAIL len=40 code=255
+PASS len=50 code=1
+FAIL len=60 code=255
+FAIL len=70 code=255
+FAIL len=80 code=255
+FAIL len=90 code=255
+FAIL len=100 code=255
+```
+
+The non-monotonic `len=50` pass suggests a memory-layout-sensitive wasm issue
+rather than an Elisp-level deterministic syntax problem.
+
+Follow-up GC evidence:
+
+```text
+FAIL baseline code=255
+PASS high_gc code=1
+PASS gc_before code=1
+FAIL gc_after code=255
+```
+
+Where:
+
+- `baseline` is `(message "case start")` followed by
+  `(format "list %s" LONG-LIST)` before loading `subr.el`.
+- `high_gc` sets `gc-cons-threshold` to `most-positive-fixnum` before that
+  format call.
+- `gc_before` explicitly collects before the format call.
+- `gc_after` explicitly collects after the format call.
+
+This makes the current failure much more likely to be a GC/rooting or
+wasm stack-scanning issue than a deterministic `format` syntax issue.
+
+`subr.el` prefix narrowing under the `format` + `garbage-collect` condition:
+
+```text
+PREFIX_PASS 5697
+PREFIX_FAIL 5717
+```
+
+The first failing top-level form is:
+
+```elisp
+(defun combine-and-quote-strings (strings &optional separator)
+  ...
+  (let* ((sep (or separator " "))
+         (re (concat "[\\\"]" "\\|" (regexp-quote sep))))
+    (mapconcat
+     (lambda (str)
+       (if (string-match re str)
+           (concat "\"" (replace-regexp-in-string "[\\\"]" "\\\\\\&" str) "\"")
+         str))
+     strings sep)))
+```
+
+That form introduces a closure inside `mapconcat`. A later full-loadup run with
+GC deferred and a larger wasm heap progressed to `cl-preloaded.el`, then failed
+in closure/vector allocation:
+
+```text
+RuntimeError: memory access out of bounds
+    at temacs.wasm.mem_insert
+    at temacs.wasm.allocate_vectorlike
+    at temacs.wasm.Fvector
+    at temacs.wasm.Fmake_interpreted_closure
+    at temacs.wasm.Ffunction
+```
+
+Reproduction helper:
+
+```sh
+scripts/debug-wasm-format-gc.sh
+```
+
+Additional negative experiments:
+
+- Disabling `print_object`'s local `current_thread->stack_top =
+  NEAR_STACK_TOP (buf)` update in the copied spike tree did not change the
+  focused failure.
+- Disabling stack-allocated temporary Lisp objects via the `lisp.h`
+  `USE_STACK_LISP_OBJECTS=false` debug knob in the copied spike tree did not
+  change the focused failure.
+- Inhibiting GC only inside `Fmake_interpreted_closure` in the copied spike
+  tree did not change the focused failure.
+
+Automatic-GC instrumentation:
+
+Instrumenting `maybe_garbage_collect` in the copied spike tree showed the
+focused failure occurs immediately after automatic GC fires during `subr.el`
+loading:
+
+```text
+Loading subr (source)...
+WASMACS_GC maybe_garbage_collect consing_until_gc=-80 threshold=800000
+WASMACS_GC maybe_garbage_collect consing_until_gc=-84 threshold=800000
+Error: invalid-function ("")
+Wrong type argument: listp, ##
+```
+
+Raising `gc-cons-threshold` after an explicit `(garbage-collect)` and before
+loading `subr.el` lets the same focused case pass. This points to
+allocation-triggered GC during later form evaluation, not to the explicit GC
+call itself.
+
+Heap/threshold experiments:
+
+With the wasm linked as `-sINITIAL_MEMORY=1024MB`:
+
+```text
+threshold=16000000:
+  progressed through files.el, macroexp.el, pcase.el, faces.el, ldefs-boot.el,
+  button.el, and into cl-preloaded.el, then failed with
+  memory access out of bounds at mem_insert -> allocate_vectorlike -> Fvector
+  -> Fmake_interpreted_closure -> Ffunction.
+
+threshold=64000000:
+  progressed into files.el, then automatic GC fired once and loadup failed
+  with Eager macro-expansion failure: (invalid-function "").
+```
+
+With the default smaller heap, raising the threshold enough to avoid the early
+`subr.el` corruption reaches `files.el` and then aborts with OOM.
+
+Optimization experiment:
+
+Rebuilding the copied spike tree with `CFLAGS=-g3 -O0` changes the focused GC
+case substantially:
+
+```text
+PASS format-only
+PASS format-gc
+PASS format-gc-raise
+PASS high-gc-format
+PREFIX_PASS 5697
+PREFIX_PASS 5717
+```
+
+This result holds without the Emscripten stack-boundary marking experiment, so
+the focused failure is primarily optimization-sensitive. The likely mechanism
+is that `-O2` keeps live `Lisp_Object` values in wasm locals / optimized
+temporaries that Emacs' conservative C-stack GC cannot see. With `-O0`, enough
+values are spilled to the linear-memory stack for the focused `subr.el` case to
+survive automatic GC.
+
+The full standard `loadup.el` still does not complete with clean `-O0`. It now
+gets past the original `subr.el` blocker and reaches `files.el`, then fails:
+
+```text
+Loading .../lisp/files.el (source)...
+RuntimeError: memory access out of bounds
+    at temacs.wasm.styled_format
+    at temacs.wasm.Fformat
+    at temacs.wasm.eval_sub
+```
+
+So `-O0` is a useful M7 build profile and proves the first blocker was
+optimization/root-visibility related, but it is not yet a complete batch-loadup
+solution.
+
+Source-level blocker candidates:
+
+- `vendor/emacs/src/editfns.c:3158` defines `message`.
+- `vendor/emacs/src/editfns.c:3192` routes `message` through
+  `Fformat_message`.
+- `vendor/emacs/src/editfns.c:3382` defines `format-message`.
+- `vendor/emacs/src/editfns.c:3401` implements `styled_format`.
+- `vendor/emacs/src/editfns.c:3631` converts `%s` / `%S` non-string arguments
+  with `Fprin1_to_string`.
+- `vendor/emacs/src/print.c:786` defines `prin1-to-string`.
+- `vendor/emacs/src/print.c:813` prints into `Vprin1_to_string_buffer`.
+- `vendor/emacs/src/print.c:2230` begins `print_object`, which handles list
+  object printing.
+- `vendor/emacs/src/eval.c` owns `Ffunction` and interpreted closure creation
+  paths involved in the later `memory access out of bounds` stack.
+- `vendor/emacs/src/alloc.c` owns vectorlike allocation and the GC path now
+  implicated by the `gc-cons-threshold` / `garbage-collect` split.
+- `vendor/emacs/src/thread.c` marks thread stacks via `mark_threads`,
+  `mark_one_thread`, and `mark_c_stack`; the wasm failure remains consistent
+  with conservative stack/root marking missing live Lisp values in wasm locals
+  or in an unexpected stack range.
+
+Current conclusion:
+
+The M7 blocker is no longer "unknown failure in `subr.el`". The first blocker
+is narrowed to optimization-sensitive wasm root visibility under automatic GC:
+`-O2` fails during early `subr.el`, while clean `-O0` passes the focused
+`subr.el` GC cases. The next blocker is full standard loadup failing in
+`files.el` / `styled_format` with `memory access out of bounds`. Continue
+instrumenting the copied spike build around `styled_format`, `Fformat`,
+`eval_sub`, `maybe_garbage_collect`, `garbage_collect`, and root marking, while
+keeping `vendor/emacs` read-only.

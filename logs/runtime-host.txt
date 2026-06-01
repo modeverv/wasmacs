@@ -1,0 +1,16 @@
+
+> test
+> node --test tests/runtime/*.test.js
+
+✔ mounts system image read-only and exposes lisp files (66.00025ms)
+✔ supports writable user files and directory operations (1.305292ms)
+✔ exports and imports user image roundtrip (3.096292ms)
+✔ provides non-GUI host shims (0.586916ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 118.488042

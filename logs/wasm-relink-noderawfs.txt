@@ -1,0 +1,12 @@
+emmake: "make -C src 'LDFLAGS=-sNODERAWFS=1 -sEXIT_RUNTIME=1' temacs" in "/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-core-spike/build-gnu-host-internal-termcap"
+/Library/Developer/CommandLineTools/usr/bin/make -C ../lib/ all
+make[1]: Nothing to be done for `all'.
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/charsets all
+make[1]: Nothing to be done for `all'.
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/unidata charscript.el
+make[1]: Nothing to be done for `charscript.el'.
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/unidata emoji-zwj.el
+make[1]: Nothing to be done for `emoji-zwj.el'.
+  CCLD     temacs
+emcc: warning: running limited binaryen optimizations because DWARF info requested (or indirectly required) [-Wlimited-postlink-optimizations]
+mkdir -p ../etc
