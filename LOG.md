@@ -706,3 +706,6 @@
   runner evidence alongside the older browser smoke logs.
 - `scripts/summarize-browser-editing-session.mjs` now includes the repo-local
   browser runner all-smoke evidence in `logs/browser-editing-session-smoke.txt`.
+- `scripts/run-browser-smoke.mjs` now starts `scripts/serve-app.mjs`
+  automatically when the target app server is not already running. Verified
+  with `WASMACS_BROWSER_URL=http://127.0.0.1:5184/... npm run browser:smoke`.

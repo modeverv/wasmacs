@@ -88,6 +88,33 @@ async function waitFor(client, sessionId, expression, timeoutMs = 60_000) {
   throw new Error(`timed out waiting for ${expression}`);
 }
 
+async function isAppServerReady(url) {
+  try {
+    const response = await fetch(url, { method: "HEAD" });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureAppServer(url) {
+  const origin = new URL(url).origin;
+  if (await isAppServerReady(origin)) return undefined;
+
+  const server = spawn(process.execPath, ["scripts/serve-app.mjs"], {
+    cwd: repoRoot,
+    env: { ...process.env, PORT: new URL(origin).port || "5173" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  const start = Date.now();
+  while (Date.now() - start < 20_000) {
+    if (await isAppServerReady(origin)) return server;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  server.kill("SIGTERM");
+  throw new Error(`timed out waiting for app server at ${origin}`);
+}
+
 function assertPassed(name, result) {
   if (!result?.passed) {
     throw new Error(`${name} failed: ${JSON.stringify(result)}`);
@@ -105,6 +132,7 @@ async function smokeState(client, sessionId) {
 }
 
 const userDataDir = await mkdtemp(join(tmpdir(), "wasmacs-browser-smoke-"));
+const appServer = await ensureAppServer(appUrl);
 const chrome = spawn(chromePath, [
   "--headless=new",
   "--disable-gpu",
@@ -125,6 +153,7 @@ try {
   await client.send("Page.navigate", { url: appUrl }, sessionId);
   await waitFor(client, sessionId, "document.readyState === 'complete' || document.readyState === 'interactive'", 30_000);
   await waitFor(client, sessionId, "Boolean(window.__wasmacsSmoke && document.querySelector('#minibuffer'))", 300_000);
+  await evaluate(client, sessionId, "window.__wasmacsSmoke.waitForIdle()", 300_000);
 
   if (scenarios.includes("minibuffer")) {
     await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ ctrlKey: true, key: 'x' }); true");
@@ -231,6 +260,7 @@ try {
 } finally {
   if (client) client.close();
   chrome.kill("SIGTERM");
+  if (appServer) appServer.kill("SIGTERM");
   await new Promise((resolve) => {
     const timeout = setTimeout(resolve, 2_000);
     chrome.once("exit", () => {

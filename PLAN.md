@@ -1134,6 +1134,10 @@ Validation notes:
 - 2026-06-02: `scripts/summarize-browser-editing-session.mjs` now includes
   the repo-local browser runner all-smoke evidence in
   `logs/browser-editing-session-smoke.txt`.
+- 2026-06-02: `scripts/run-browser-smoke.mjs` now starts
+  `scripts/serve-app.mjs` automatically when the target app server is not
+  already running, so `npm run browser:smoke*` no longer depends on a manually
+  prestarted dev server.
 
 ## Milestone 14: Emacs Fidelity Expansion
 
@@ -1299,10 +1303,11 @@ minibuffer echo check, real undo/repeated undo/redo UI smoke hooks, project
 open/reload, file switching, textarea autosave, process-unavailable recovery,
 clipboard-unavailable, and keyboard quit. Runner evidence is recorded in
 `logs/browser-runner-smoke.txt` and checked by the browser editing evidence
-validator. Continue by either retiring the older static browser smoke logs or
-keeping them as historical fixtures, then grow the minibuffer echo slice toward
-real Emacs minibuffer state only after the command-loop/window state boundary
-is designed. Keep process and pty unavailable.
+validator. The runner now starts the app server on demand. Continue by either
+retiring the older static browser smoke logs or keeping them as historical
+fixtures, then grow the minibuffer echo slice toward real Emacs minibuffer
+state only after the command-loop/window state boundary is designed. Keep
+process and pty unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior

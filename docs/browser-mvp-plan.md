@@ -316,7 +316,9 @@ extends that runner to the real undo, repeated undo, and redo UI smoke hooks.
 switching, textarea autosave, process-unavailable recovery,
 clipboard-unavailable, and keyboard quit. The runner writes
 `logs/browser-runner-smoke.txt`, which is now checked by
-`scripts/validate-browser-editing-smoke-evidence.sh`.
+`scripts/validate-browser-editing-smoke-evidence.sh`. It also starts
+`scripts/serve-app.mjs` automatically when the target app server is not already
+running.
 
 The next shared dependency for undo, kill-ring, and minibuffer fidelity is a
 stable persistent Emacs buffer path.
