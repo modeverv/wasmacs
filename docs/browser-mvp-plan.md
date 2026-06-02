@@ -310,7 +310,8 @@ command loop, minibuffer window state, and completion UI. The design note is
 does not own minibuffer input, completion, or history.
 `npm run browser:smoke` provides the first repo-local headless Chrome/CDP
 runner for this surface; it sends `C-x C-f` through the smoke hook and checks
-the explicit minibuffer-unavailable echo.
+the explicit minibuffer-unavailable echo. `npm run browser:smoke:editing`
+extends that runner to the real undo, repeated undo, and redo UI smoke hooks.
 
 The next shared dependency for undo, kill-ring, and minibuffer fidelity is a
 stable persistent Emacs buffer path.

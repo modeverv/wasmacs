@@ -104,6 +104,7 @@ rg '/artifacts/emacs-browser-persistent-spike/' "${repo_root}/app/src/wasm-worke
 rg 'importScripts\("/artifacts/emacs-browser-persistent-spike/temacs"\)' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'basename\(filePath\) === "temacs"' "${repo_root}/scripts/serve-app.mjs" >/dev/null
 rg 'run-browser-smoke\.mjs' "${repo_root}/package.json" >/dev/null
+rg 'browser:smoke:editing' "${repo_root}/package.json" >/dev/null
 rg '"dev": "node scripts/serve-app\.mjs"' "${repo_root}/package.json" >/dev/null
 
 echo "browser worker app validation passed"

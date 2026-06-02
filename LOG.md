@@ -692,3 +692,6 @@
   launches system Chrome headless with CDP, opens the local app, sends
   `C-x C-f` through the repo-local smoke hook, and verifies that the minibuffer
   echo line reports the explicit unavailable boundary.
+- Expanded the runner with `npm run browser:smoke:editing`, which runs the
+  minibuffer echo check plus the existing real undo, repeated undo, and redo UI
+  smoke hooks through the same headless Chrome/CDP path.

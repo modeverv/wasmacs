@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const appUrl = process.env.WASMACS_BROWSER_URL || "http://127.0.0.1:5173/?clear-storage=1&browser-smoke=minibuffer";
+const scenarios = process.argv.slice(2);
+if (scenarios.length === 0) scenarios.push("minibuffer");
 
 class CdpClient {
   constructor(url) {
@@ -83,6 +85,12 @@ async function waitFor(client, sessionId, expression, timeoutMs = 60_000) {
   throw new Error(`timed out waiting for ${expression}`);
 }
 
+function assertPassed(name, result) {
+  if (!result?.passed) {
+    throw new Error(`${name} failed: ${JSON.stringify(result)}`);
+  }
+}
+
 const userDataDir = await mkdtemp(join(tmpdir(), "wasmacs-browser-smoke-"));
 const chrome = spawn(chromePath, [
   "--headless=new",
@@ -105,20 +113,39 @@ try {
   await waitFor(client, sessionId, "document.readyState === 'complete' || document.readyState === 'interactive'", 30_000);
   await waitFor(client, sessionId, "Boolean(window.__wasmacsSmoke && document.querySelector('#minibuffer'))", 300_000);
 
-  await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ ctrlKey: true, key: 'x' }); true");
-  const prefixState = await evaluate(client, sessionId, "window.__wasmacsSmoke.state()");
-  if (prefixState.minibuffer !== "C-x" || prefixState.status !== "C-x") {
-    throw new Error(`expected C-x prefix in minibuffer, got ${JSON.stringify(prefixState)}`);
+  if (scenarios.includes("minibuffer")) {
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ ctrlKey: true, key: 'x' }); true");
+    const prefixState = await evaluate(client, sessionId, "window.__wasmacsSmoke.state()");
+    if (prefixState.minibuffer !== "C-x" || prefixState.status !== "C-x") {
+      throw new Error(`expected C-x prefix in minibuffer, got ${JSON.stringify(prefixState)}`);
+    }
+
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ ctrlKey: true, key: 'f' }); true");
+    await waitFor(client, sessionId, "window.__wasmacsSmoke.state().status === 'minibuffer unavailable'", 30_000);
+    const unavailableState = await evaluate(client, sessionId, "window.__wasmacsSmoke.state()");
+    if (!unavailableState.minibuffer.includes("minibuffer unavailable")) {
+      throw new Error(`expected minibuffer unavailable echo, got ${JSON.stringify(unavailableState)}`);
+    }
+    console.log("browser smoke scenario passed: minibuffer");
   }
 
-  await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ ctrlKey: true, key: 'f' }); true");
-  await waitFor(client, sessionId, "window.__wasmacsSmoke.state().status === 'minibuffer unavailable'", 30_000);
-  const unavailableState = await evaluate(client, sessionId, "window.__wasmacsSmoke.state()");
-  if (!unavailableState.minibuffer.includes("minibuffer unavailable")) {
-    throw new Error(`expected minibuffer unavailable echo, got ${JSON.stringify(unavailableState)}`);
+  if (scenarios.includes("editing")) {
+    assertPassed(
+      "realUndoSmoke",
+      await evaluate(client, sessionId, "window.__wasmacsSmoke.realUndoSmoke()", 300_000),
+    );
+    assertPassed(
+      "repeatedUndoSmoke",
+      await evaluate(client, sessionId, "window.__wasmacsSmoke.repeatedUndoSmoke()", 300_000),
+    );
+    assertPassed(
+      "redoSmoke",
+      await evaluate(client, sessionId, "window.__wasmacsSmoke.redoSmoke()", 300_000),
+    );
+    console.log("browser smoke scenario passed: editing");
   }
 
-  console.log(`browser smoke passed: ${appUrl}`);
+  console.log(`browser smoke passed: ${scenarios.join(",")} ${appUrl}`);
 } finally {
   if (client) client.close();
   chrome.kill("SIGTERM");
