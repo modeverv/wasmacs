@@ -5,10 +5,13 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 build_dir="${repo_root}/build/emacs-core-spike/build-gnu-host-internal-termcap"
 source_copy="${repo_root}/build/emacs-core-spike/src"
 out_dir="${repo_root}/artifacts/emacs-browser-asyncify-spike"
+asyncify_host_library="${repo_root}/scripts/wasmacs-asyncify-host-library.js"
 emmake_bin="${EMMAKE:-emmake}"
 emacs_wasm_cflags="${EMACS_WASM_CFLAGS:--g3 -O0}"
-base_exports="_main,_wasmacs_eval_string,_wasmacs_last_result,_wasmacs_minibuffer_state,_wasmacs_command_state,_wasmacs_command_begin_minibuffer_probe"
-emacs_asyncify_ldflags="${EMACS_ASYNCIFY_LDFLAGS:--sEXIT_RUNTIME=0 -sASYNCIFY=1 -sASYNCIFY_STACK_SIZE=65536 -sEXPORTED_FUNCTIONS=${base_exports} -sEXPORTED_RUNTIME_METHODS=callMain,ccall,FS,FS_createPath,FS_createDataFile,FS_readFile -sSTACK_SIZE=1048576 -sSTACK_OVERFLOW_CHECK=2 -sINITIAL_MEMORY=268435456 -sALLOW_MEMORY_GROWTH=1 --preload-file ${source_copy}/lisp@/usr/local/share/emacs/30.2/lisp --preload-file ${source_copy}/etc@/usr/local/share/emacs/30.2/etc}"
+base_exports="_main,_wasmacs_eval_string,_wasmacs_last_result,_wasmacs_minibuffer_state,_wasmacs_command_state,_wasmacs_command_begin_minibuffer_probe,_wasmacs_command_begin_minibuffer_force_probe,_wasmacs_input_text,_wasmacs_input_cancel"
+emacs_asyncify_extra_ldflags="${EMACS_ASYNCIFY_EXTRA_LDFLAGS:-}"
+emacs_asyncify_ldflags="${EMACS_ASYNCIFY_LDFLAGS:--sEXIT_RUNTIME=0 -sASYNCIFY=1 -sASYNCIFY_IMPORTS=wasmacs_host_wait_for_input -sASYNCIFY_STACK_SIZE=4194304 -sEXPORTED_FUNCTIONS=${base_exports} -sEXPORTED_RUNTIME_METHODS=callMain,ccall,FS,FS_createPath,FS_createDataFile,FS_readFile -sSTACK_SIZE=1048576 -sSTACK_OVERFLOW_CHECK=2 -sINITIAL_MEMORY=268435456 -sALLOW_MEMORY_GROWTH=1 --js-library ${asyncify_host_library} --preload-file ${source_copy}/lisp@/usr/local/share/emacs/30.2/lisp --preload-file ${source_copy}/etc@/usr/local/share/emacs/30.2/etc} ${emacs_asyncify_extra_ldflags}"
+wasmacs_asyncify_waitpoint_mode="${WASMACS_ASYNCIFY_WAITPOINT_MODE:-read-char}"
 
 if ! command -v "${emmake_bin}" >/dev/null 2>&1; then
   echo "error: ${emmake_bin} not found; install/activate Emscripten first" >&2
@@ -19,7 +22,9 @@ if [ ! -f "${build_dir}/src/Makefile" ] || [ ! -d "${source_copy}/lisp" ]; then
   "${repo_root}/scripts/build-emacs-core-spike.sh"
 fi
 
-"${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh"
+WASMACS_ENABLE_ASYNCIFY_WAITPOINT=1 \
+WASMACS_ASYNCIFY_WAITPOINT_MODE="${wasmacs_asyncify_waitpoint_mode}" \
+  "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh"
 
 (
   cd "${build_dir}"

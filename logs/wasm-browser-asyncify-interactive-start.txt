@@ -1,0 +1,36 @@
+CASE:interactive-start-no-batch
+STATUS:null
+SIGNAL:SIGTERM
+TIMEOUT:true
+TIMEOUT_MS:5000
+STDOUT:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+STDERR:warning: unsupported syscall: __syscall_prlimit64
+Warning: arch-dependent data dir '/usr/local/libexec/emacs/30.2/wasm32-unknown-linux-gnu/': No such file or directory
+warning: unsupported syscall: __syscall_prlimit64
+warning: unsupported syscall: __syscall_prlimit64
+

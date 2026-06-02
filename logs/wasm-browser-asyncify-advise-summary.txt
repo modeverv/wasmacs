@@ -1,0 +1,166 @@
+CASE:asyncify-advise-summary
+SOURCE:/Users/seijiro/Sync/sync_work/by-llms/wasmacs/logs/wasm-browser-asyncify-advise.txt
+
+FUNCTION:wasmacs_host_wait_for_input
+COUNT:1
+28:[asyncify] wasmacs_host_wait_for_input is an import that can change the state
+
+FUNCTION:wasmacs_command_begin_minibuffer_force_probe
+COUNT:4
+12861:[asyncify] wasmacs_command_begin_minibuffer_force_probe can change the state due to build_string_2467
+12862:[asyncify] wasmacs_command_begin_minibuffer_force_probe can change the state due to internal_condition_case_1
+12863:[asyncify] wasmacs_command_begin_minibuffer_force_probe can change the state due to wasmacs_store_c_string_result
+12864:[asyncify] wasmacs_command_begin_minibuffer_force_probe can change the state due to wasmacs_store_result
+
+FUNCTION:wasmacs_read_minibuffer_probe_body
+COUNT:2
+12889:[asyncify] wasmacs_read_minibuffer_probe_body can change the state due to Ffuncall
+12890:[asyncify] wasmacs_read_minibuffer_probe_body can change the state due to intern_c_string_2460
+
+FUNCTION:Fread_from_minibuffer
+COUNT:6
+3611:[asyncify] Fread_from_minibuffer can change the state due to CHECK_STRING_3788
+3612:[asyncify] Fread_from_minibuffer can change the state due to barf_if_interaction_inhibited
+3613:[asyncify] Fread_from_minibuffer can change the state due to get_keymap
+3614:[asyncify] Fread_from_minibuffer can change the state due to read_minibuf
+3625:[asyncify] Fread_string can change the state due to Fread_from_minibuffer
+4764:[asyncify] Fyes_or_no_p can change the state due to Fread_from_minibuffer
+
+FUNCTION:read_minibuf
+COUNT:53
+3614:[asyncify] Fread_from_minibuffer can change the state due to read_minibuf
+10270:[asyncify] read_minibuf can change the state due to CHECK_STRING_3788
+10271:[asyncify] read_minibuf can change the state due to Fadd_face_text_property
+10272:[asyncify] read_minibuf can change the state due to Fcons
+10273:[asyncify] read_minibuf can change the state due to Fcopy_sequence
+10274:[asyncify] read_minibuf can change the state due to Fcurrent_window_configuration
+10275:[asyncify] read_minibuf can change the state due to Ferase_buffer
+10276:[asyncify] read_minibuf can change the state due to Ffboundp
+OMITTED:45
+
+FUNCTION:recursive_edit_1
+COUNT:9
+3651:[asyncify] Frecursive_edit can change the state due to recursive_edit_1
+10311:[asyncify] read_minibuf can change the state due to recursive_edit_1
+10553:[asyncify] recursive_edit_1 can change the state due to FUNCTIONP
+10554:[asyncify] recursive_edit_1 can change the state due to call0_2518
+10555:[asyncify] recursive_edit_1 can change the state due to command_loop
+10556:[asyncify] recursive_edit_1 can change the state due to quit
+10557:[asyncify] recursive_edit_1 can change the state due to specbind
+10558:[asyncify] recursive_edit_1 can change the state due to unbind_to
+OMITTED:1
+
+FUNCTION:command_loop
+COUNT:5
+5791:[asyncify] command_loop can change the state due to invoke_ji
+5792:[asyncify] command_loop can change the state due to invoke_jjij
+5793:[asyncify] command_loop can change the state due to invoke_jjj
+5794:[asyncify] command_loop can change the state due to invoke_v
+10555:[asyncify] recursive_edit_1 can change the state due to command_loop
+
+FUNCTION:command_loop_1
+COUNT:28
+5795:[asyncify] command_loop_1 can change the state due to Fcons
+5796:[asyncify] command_loop_1 can change the state due to Ffuncall
+5797:[asyncify] command_loop_1 can change the state due to Fkill_emacs
+5798:[asyncify] command_loop_1 can change the state due to Flength
+5799:[asyncify] command_loop_1 can change the state due to Fmemq
+5800:[asyncify] command_loop_1 can change the state due to Frun_hook_with_args
+5801:[asyncify] command_loop_1 can change the state due to Fterminal_parameter
+5802:[asyncify] command_loop_1 can change the state due to Fwindow_system
+OMITTED:20
+
+FUNCTION:read_key_sequence
+COUNT:35
+5812:[asyncify] command_loop_1 can change the state due to read_key_sequence
+10223:[asyncify] read_key_sequence can change the state due to Fcommand_remapping
+10224:[asyncify] read_key_sequence can change the state due to Fcons
+10225:[asyncify] read_key_sequence can change the state due to Fcopy_sequence
+10226:[asyncify] read_key_sequence can change the state due to Fget
+10227:[asyncify] read_key_sequence can change the state due to Fkill_emacs
+10228:[asyncify] read_key_sequence can change the state due to Fmemq
+10229:[asyncify] read_key_sequence can change the state due to Fset_buffer
+OMITTED:27
+
+FUNCTION:read_key_sequence_vs
+COUNT:8
+136:[asyncify] read_key_sequence_vs can change the state due to initial scan
+3618:[asyncify] Fread_key_sequence can change the state due to read_key_sequence_vs
+3619:[asyncify] Fread_key_sequence_vector can change the state due to read_key_sequence_vs
+10255:[asyncify] read_key_sequence_vs can change the state due to CHECK_STRING_2542
+10256:[asyncify] read_key_sequence_vs can change the state due to maybe_quit_2560
+10257:[asyncify] read_key_sequence_vs can change the state due to read_key_sequence
+10258:[asyncify] read_key_sequence_vs can change the state due to specbind
+10259:[asyncify] read_key_sequence_vs can change the state due to unbind_to
+
+FUNCTION:read_char
+COUNT:28
+10128:[asyncify] read_char can change the state due to invoke_i
+10129:[asyncify] read_char can change the state due to invoke_ii
+10130:[asyncify] read_char can change the state due to invoke_iii
+10131:[asyncify] read_char can change the state due to invoke_iiii
+10132:[asyncify] read_char can change the state due to invoke_ij
+10133:[asyncify] read_char can change the state due to invoke_ijj
+10134:[asyncify] read_char can change the state due to invoke_j
+10135:[asyncify] read_char can change the state due to invoke_ji
+OMITTED:20
+
+FUNCTION:read_filtered_event
+COUNT:10
+3598:[asyncify] Fread_char can change the state due to read_filtered_event
+3601:[asyncify] Fread_char_exclusive can change the state due to read_filtered_event
+3610:[asyncify] Fread_event can change the state due to read_filtered_event
+10206:[asyncify] read_filtered_event can change the state due to Fcar
+10207:[asyncify] read_filtered_event can change the state due to Fcdr
+10208:[asyncify] read_filtered_event can change the state due to Fget
+10209:[asyncify] read_filtered_event can change the state due to XFLOATINT_6820
+10210:[asyncify] read_filtered_event can change the state due to error
+OMITTED:2
+
+FUNCTION:read_event_from_main_queue
+COUNT:8
+10193:[asyncify] read_decoded_event_from_main_queue can change the state due to read_event_from_main_queue
+10198:[asyncify] read_event_from_main_queue can change the state due to Fkill_emacs
+10199:[asyncify] read_event_from_main_queue can change the state due to emacs_abort
+10200:[asyncify] read_event_from_main_queue can change the state due to kbd_buffer_get_event
+10201:[asyncify] read_event_from_main_queue can change the state due to list1
+10202:[asyncify] read_event_from_main_queue can change the state due to record_unwind_protect_ptr
+10203:[asyncify] read_event_from_main_queue can change the state due to timer_start_idle
+10204:[asyncify] read_event_from_main_queue can change the state due to unbind_to
+
+FUNCTION:read_decoded_event_from_main_queue
+COUNT:3
+10191:[asyncify] read_decoded_event_from_main_queue can change the state due to Fcons
+10192:[asyncify] read_decoded_event_from_main_queue can change the state due to decode_coding_object
+10193:[asyncify] read_decoded_event_from_main_queue can change the state due to read_event_from_main_queue
+
+FUNCTION:kbd_buffer_get_event
+COUNT:19
+139:[asyncify] kbd_buffer_get_event can change the state due to initial scan
+8234:[asyncify] kbd_buffer_get_event can change the state due to Faref
+8235:[asyncify] kbd_buffer_get_event can change the state due to Fcons
+8236:[asyncify] kbd_buffer_get_event can change the state due to Fnth
+8237:[asyncify] kbd_buffer_get_event can change the state due to Fnthcdr
+8238:[asyncify] kbd_buffer_get_event can change the state due to Frun_hook_with_args
+8239:[asyncify] kbd_buffer_get_event can change the state due to emacs_abort
+8240:[asyncify] kbd_buffer_get_event can change the state due to getchar_unlocked
+OMITTED:11
+
+FUNCTION:tty_read_avail_input
+COUNT:3
+12523:[asyncify] tty_read_avail_input can change the state due to emacs_abort
+12524:[asyncify] tty_read_avail_input can change the state due to emacs_read
+12525:[asyncify] tty_read_avail_input can change the state due to kbd_buffer_store_event
+
+FUNCTION:wait_reading_process_output
+COUNT:34
+193:[asyncify] wait_reading_process_output can change the state due to initial scan
+605:[asyncify] Faccept_process_output can change the state due to wait_reading_process_output
+4195:[asyncify] Fsleep_for can change the state due to wait_reading_process_output
+8250:[asyncify] kbd_buffer_get_event can change the state due to wait_reading_process_output
+11123:[asyncify] send_process can change the state due to wait_reading_process_output
+11470:[asyncify] sit_for can change the state due to wait_reading_process_output
+12829:[asyncify] wait_for_socket_fds can change the state due to wait_reading_process_output
+12831:[asyncify] wait_reading_process_output can change the state due to build_string_7363
+OMITTED:26
+

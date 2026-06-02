@@ -1182,6 +1182,97 @@ Validation notes:
   `scripts/probe-browser-persistent-buffer-cross-eval.mjs` for the
   file-visiting cross-eval cases, matching the matrix probe's routine
   regression behavior while keeping the blocker visible in logs.
+- 2026-06-02: added the first gated Asyncify host wait import:
+  `scripts/wasmacs-asyncify-host-library.js` provides
+  `wasmacs_host_wait_for_input`, the asyncify build links it with
+  `-sASYNCIFY_IMPORTS=wasmacs_host_wait_for_input`, and
+  `scripts/patch-emacs-host-entrypoint-spike.sh` inserts the copied-source
+  `keyboard.c` waitpoint only when
+  `WASMACS_ENABLE_ASYNCIFY_WAITPOINT=1`. The persistent non-Asyncify profile
+  remains free of the wait import. Targeted validation passed with
+  `scripts/build-emacs-browser-asyncify-spike.sh` and
+  `scripts/validate-minibuffer-asyncify-entrypoint-plan.sh`; the current
+  active-read boundary is still `unavailable:noninteractive-batch`.
+- 2026-06-02: full `npm test` passed after the gated Asyncify wait-import
+  change. The long-running known-blocker probes still record the existing
+  high-level undo, live visited-file, and host-eval GC/root blockers without
+  regressing the worker-shaped ordinary editing flows.
+- 2026-06-02: added browser-safe asyncify environment defaults in
+  `scripts/wasmacs-asyncify-host-library.js`: `TERM=dumb`, inline `TERMCAP`,
+  and `/home/user` identity. Added
+  `scripts/probe-browser-asyncify-interactive-start.mjs` and wired it into
+  `npm test`. The probe starts the asyncify artifact without `--batch` and
+  expects it to remain alive until timeout without the earlier `TERM` or
+  termcap initialization errors. Evidence is in
+  `logs/wasm-browser-asyncify-interactive-start.txt`. This moves the
+  asyncify lane past the noninteractive startup class of failure, but active
+  minibuffer support still requires a command begin/input/cancel entrypoint.
+- 2026-06-02: full `npm test` passed after wiring
+  `scripts/probe-browser-asyncify-interactive-start.mjs` into the suite.
+- 2026-06-02: added
+  `scripts/probe-browser-asyncify-minibuffer-waitpoint.mjs`. It uses the
+  asyncify artifact's forced C-side minibuffer probe to call a real
+  `read-from-minibuffer` path. The probe proves
+  `wasmacs_host_wait_for_input` is reached, then records the current
+  `KNOWN_BLOCKER`: Asyncify rewind reports heap-cookie corruption even with a
+  1MB Asyncify stack. This narrows the next work from "can we enter
+  read_minibuf?" to "can the read_minibuf stack/specpdl path survive
+  suspension/resume safely?"
+- 2026-06-02: full `npm test` passed after wiring the asyncify minibuffer
+  waitpoint probe into the suite as a recorded known blocker.
+- 2026-06-02: added `scripts/summarize-asyncify-advise.mjs` plus
+  `npm run asyncify:advise:summary`. The diagnostic
+  `-sASYNCIFY_ADVISE=1` profile now has a focused summary in
+  `logs/wasm-browser-asyncify-advise-summary.txt`, and it confirms that the
+  named wait import, forced minibuffer probe, `Fread_from_minibuffer`,
+  `read_minibuf`, `recursive_edit_1`, `command_loop`,
+  `read_key_sequence_vs`, `read_char`,
+  `read_decoded_event_from_main_queue`, `kbd_buffer_get_event`, and
+  `tty_read_avail_input` are visible in Asyncify's propagated
+  state-change set. That makes the remaining blocker a rewind/suspension
+  safety issue around the real minibuffer stack, not missing instrumentation
+  of the reader path.
+- 2026-06-02: generated
+  `logs/wasm-browser-asyncify-advise-summary.txt`, reran
+  `scripts/validate-minibuffer-asyncify-entrypoint-plan.sh`,
+  `node scripts/probe-browser-asyncify-minibuffer-waitpoint.mjs`, and full
+  `npm test`; all passed. The full suite still records the Asyncify
+  minibuffer suspend failure as a known blocker after the waitpoint is
+  reached.
+- 2026-06-02: added `WASMACS_ASYNCIFY_WAITPOINT_MODE` to compare waitpoint
+  placement. `read-char` keeps the current `keyboard.c` waitpoint;
+  `minibuf-setup` inserts a split waitpoint in `minibuf.c` after prompt,
+  window, keymap, and setup-hook ownership are active but before
+  `recursive_edit_1` consumes input.
+- 2026-06-02: rebuilt the asyncify artifact with
+  `WASMACS_ASYNCIFY_WAITPOINT_MODE=minibuf-setup` and added
+  `scripts/probe-browser-asyncify-minibuffer-suspend-state.mjs`. Evidence in
+  `logs/wasm-browser-asyncify-minibuffer-suspend-state.txt` proves the
+  browser/worker side can observe a real suspended minibuffer command:
+  `COMMAND_STATE:pending`, `active:true`, `depth:1`, `prompt:Find file:`,
+  and `current-minibuffer:true`.
+- 2026-06-02: extended the suspend-state probe to cover ownership guards while
+  the command is pending. Reentrant `wasmacs_eval_string` and a second forced
+  command begin now both return status `3` with `unavailable:busy`.
+- 2026-06-02: targeted asyncify validation and full `npm test` passed after
+  adding the pending-command busy assertions; existing known-blocker
+  classifications remain unchanged.
+- 2026-06-02: the completion-oriented waitpoint probe still records
+  heap-cookie corruption if the caller awaits the full `read-from-minibuffer`
+  command. The next slice should keep the command as an owned suspended
+  operation, reject reentrant calls while pending, inject input events, and
+  resume, instead of requiring the host call to synchronously complete.
+- 2026-06-02: targeted asyncify validation and full `npm test` passed with the
+  new `minibuf-setup` suspend-state probe included. A duplicate `npm test`
+  process was detected during the full run and stopped to avoid log
+  overwrites; the main run then completed successfully.
+- 2026-06-02: added `emacs.md` and `p.md` from a source-grounded pass over
+  `alloc.c`, `thread.c`, `eval.c`, `keyboard.c`, `minibuf.c`, `lread.c`,
+  `fileio.c`, `buffer.c`, `simple.el`, and `minibuffer.el`. The documents
+  record that real undo/minibuffer/file visiting depend on Emacs-owned buffers,
+  `specpdl`, handler unwinding, conservative stack marking, live-buffer undo
+  GC treatment, and a narrow Asyncify input wait rather than browser-side
+  semantic substitutes.
 
 ## Milestone 14: Emacs Fidelity Expansion
 
@@ -1349,14 +1440,35 @@ clipboard-unavailable, and keyboard quit. Runner evidence is recorded in
 `logs/browser-runner-smoke.txt` and checked by the browser editing evidence
 validator. The runner now starts the app server on demand. Continue by either
 retiring the older static browser smoke logs or keeping them as historical
-fixtures, then implement the interactive/suspended command entrypoint described
+fixtures, then continue the interactive/suspended command entrypoint described
 in `docs/minibuffer-suspended-read-plan.md` and
-`docs/minibuffer-asyncify-entrypoint-plan.md`: add the first explicit
-`wasmacs_host_wait_for_input` import near the Emacs input wait path, narrow
-Asyncify instrumentation around that waitpoint, move beyond the current
-`unavailable:noninteractive-batch` probe, start a real
-`read-from-minibuffer`, observe `active:true` / `depth:1`, reject reentrant
-eval as `unavailable:busy`, and keep process and pty unavailable.
+`docs/minibuffer-asyncify-entrypoint-plan.md`: the first gated
+`wasmacs_host_wait_for_input` Asyncify import now exists near the Emacs input
+wait path, and non-batch asyncify startup now survives TERM/termcap
+initialization until timeout. The forced `read-from-minibuffer` probe reaches
+the host waitpoint, and the Asyncify advisory summary shows the expected
+reader/command-loop functions in the propagated set. With
+`WASMACS_ASYNCIFY_WAITPOINT_MODE=minibuf-setup`, the browser/worker side can
+now observe a real suspended minibuffer command with `active:true` /
+`depth:1` and `wasmacs_command_state` as `pending`. The next slice is
+therefore to turn this into an owned suspended command protocol. Reentrant
+eval and a second command begin are now rejected as `unavailable:busy` while
+the forced minibuffer read is pending. The asyncify artifact also exports
+`_wasmacs_input_text` and `_wasmacs_input_cancel`, and the host wait import now
+uses an explicitly resolved pending Promise so a browser/worker operation can
+own the suspension. The current input-injection probe records
+`STATUS:PASS`: the real waitpoint is reached, `_wasmacs_input_text` returns
+`0`, `WAIT_RESOLVED:true` is recorded, and the forced minibuffer read completes
+with `wasmacs-input.txt`. The crucial fix was to inhibit GC for the lifetime of
+the suspended exported command; without that, resuming after host input reached
+Emacs GC marking and crashed in `mark_specpdl` / stack-root scanning. Cancel
+now also passes, but only after changing `_wasmacs_input_cancel` to append
+`quit_char` to `Vunread_command_events`; directly calling
+`kbd_buffer_store_event` for C-g from the host-call side triggered
+`handle_interrupt` outside the suspended read and left the command pending.
+Keep process and pty unavailable. The next slice is to turn the forced
+minibuffer probe into an owned worker/browser command protocol and add
+GC-after-completion coverage before exposing it through the app.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior

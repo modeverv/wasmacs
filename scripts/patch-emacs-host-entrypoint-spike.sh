@@ -3,8 +3,11 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source_file="${repo_root}/build/emacs-core-spike/src/src/emacs.c"
+keyboard_file="${repo_root}/build/emacs-core-spike/src/src/keyboard.c"
+minibuf_file="${repo_root}/build/emacs-core-spike/src/src/minibuf.c"
+waitpoint_mode="${WASMACS_ASYNCIFY_WAITPOINT_MODE:-read-char}"
 
-if [ ! -f "${source_file}" ]; then
+if [ ! -f "${source_file}" ] || [ ! -f "${keyboard_file}" ] || [ ! -f "${minibuf_file}" ]; then
   "${repo_root}/scripts/build-emacs-core-spike.sh"
 fi
 
@@ -12,6 +15,9 @@ read -r -d '' entrypoint_block <<'EOF' || true
 static char *wasmacs_last_eval_result;
 static char *wasmacs_last_minibuffer_state;
 static int wasmacs_command_busy;
+static int wasmacs_eval_had_error;
+
+static Lisp_Object wasmacs_eval_error_handler (Lisp_Object error);
 
 __attribute__ ((used, visibility ("default")))
 const char *
@@ -160,7 +166,39 @@ wasmacs_command_begin_minibuffer_probe (void)
   return 3;
 }
 
-static int wasmacs_eval_had_error;
+static Lisp_Object
+wasmacs_read_minibuffer_probe_body (Lisp_Object prompt)
+{
+  return call1 (intern_c_string ("read-from-minibuffer"), prompt);
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_command_begin_minibuffer_force_probe (void)
+{
+  if (wasmacs_command_busy)
+    {
+      wasmacs_store_c_string_result ("unavailable:busy");
+      return 3;
+    }
+
+  wasmacs_command_busy = 1;
+  bool saved_noninteractive = noninteractive;
+  noninteractive = false;
+  wasmacs_eval_had_error = 0;
+  specpdl_ref gc_count = inhibit_garbage_collection ();
+
+  Lisp_Object prompt = build_string ("Find file: ");
+  Lisp_Object result = internal_condition_case_1 (wasmacs_read_minibuffer_probe_body,
+                                                 prompt,
+                                                 Qt,
+                                                 wasmacs_eval_error_handler);
+  wasmacs_store_result (result);
+  unbind_to (gc_count, Qnil);
+  noninteractive = saved_noninteractive;
+  wasmacs_command_busy = 0;
+  return wasmacs_eval_had_error ? 1 : 0;
+}
 
 static Lisp_Object
 wasmacs_eval_body (Lisp_Object source)
@@ -220,3 +258,79 @@ if rg 'wasmacs_eval_string' "${source_file}" >/dev/null; then
 fi
 
 perl -0pi -e 'BEGIN { $block = $ENV{"WASMACS_ENTRYPOINT_BLOCK"} } s/DEFUN \("invocation-name", Finvocation_name, Sinvocation_name, 0, 0, 0,\n/${block}\nDEFUN ("invocation-name", Finvocation_name, Sinvocation_name, 0, 0, 0,\n/' "$source_file"
+
+if rg 'wasmacs_host_wait_for_input' "${keyboard_file}" >/dev/null; then
+  perl -0pi -e 's#/\* wasmacs browser input injection spike\. \*/.*?\nvoid\nkbd_buffer_store_event#void\nkbd_buffer_store_event#sg' "${keyboard_file}"
+  perl -0pi -e 's/\n\/\* wasmacs asyncify input waitpoint spike\. \*\/\nextern int wasmacs_host_wait_for_input \(void\);\n//s' "${keyboard_file}"
+  perl -0pi -e 's/\n\s+\/\* wasmacs asyncify input waitpoint spike: yield only while an\n\s+active minibuffer read is waiting for real input\.  The JS import is\n\s+currently a no-op probe hook; later input-event work must make this\n\s+the suspension point that browser input resumes\.  \*\/\n\s+if \(minibuf_level > 0 && !end_time && !input_pending\n\s+&& !detect_input_pending_run_timers \(0\)\)\n\s+wasmacs_host_wait_for_input \(\);\n//s' "${keyboard_file}"
+fi
+
+if rg 'wasmacs_host_wait_for_input' "${minibuf_file}" >/dev/null; then
+  perl -0pi -e 's/\n\/\* wasmacs asyncify minibuffer setup waitpoint spike\. \*\/\nextern int wasmacs_host_wait_for_input \(void\);\n//s' "${minibuf_file}"
+  perl -0pi -e 's/\n\s+\/\* wasmacs asyncify minibuffer setup waitpoint spike: yield after\n\s+the minibuffer buffer, prompt, window, keymap, and setup hook are active,\n\s+but before recursive_edit_1 starts consuming input\.  This compares a\n\s+shallower suspend boundary against the read_char waitpoint\.  \*\/\n\s+wasmacs_host_wait_for_input \(\);\n//s' "${minibuf_file}"
+fi
+
+read -r -d '' input_block <<'EOF' || true
+/* wasmacs browser input injection spike. */
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_input_text (const char *utf8)
+{
+  if (!utf8)
+    return 2;
+
+  while (*utf8)
+    {
+      unsigned char byte = (unsigned char) *utf8++;
+      if (byte >= 0x80)
+        return 4;
+
+      struct input_event event;
+      EVENT_INIT (event);
+      event.kind = ASCII_KEYSTROKE_EVENT;
+      event.modifiers = 0;
+      event.code = byte;
+      event.frame_or_window = selected_frame;
+      event.arg = Qnil;
+      event.timestamp = 0;
+      kbd_buffer_store_event (&event);
+    }
+
+  return 0;
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_input_cancel (void)
+{
+  Vunread_command_events = list1i (quit_char);
+  return 0;
+}
+
+EOF
+export WASMACS_INPUT_BLOCK="${input_block}"
+
+if rg 'wasmacs_input_text' "${keyboard_file}" >/dev/null; then
+  perl -0pi -e 's#/\* wasmacs browser input injection spike\. \*/.*?\nvoid\nkbd_buffer_store_event#void\nkbd_buffer_store_event#sg' "${keyboard_file}"
+fi
+
+perl -0pi -e 'BEGIN { $block = $ENV{"WASMACS_INPUT_BLOCK"} } s#void\nkbd_buffer_store_event \(register struct input_event \*event\)\n\{#\n\n${block}\nvoid\nkbd_buffer_store_event (register struct input_event *event)\n{#' "${keyboard_file}"
+
+if [ "${WASMACS_ENABLE_ASYNCIFY_WAITPOINT:-0}" = "1" ]; then
+  case "${waitpoint_mode}" in
+    read-char)
+      perl -0pi -e 's#/\* Read a character from the keyboard; call the redisplay if needed\.  \*/#/\* wasmacs asyncify input waitpoint spike. \*/\nextern int wasmacs_host_wait_for_input (void);\n\n/\* Read a character from the keyboard; call the redisplay if needed.  \*/#' "${keyboard_file}"
+
+      perl -0pi -e 's#  if \(NILP \(c\)\)\n    \{\n      c = read_decoded_event_from_main_queue \(end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu\);#  if (NILP (c))\n    {\n      /* wasmacs asyncify input waitpoint spike: yield only while an\n         active minibuffer read is waiting for real input.  The JS import is\n         currently a no-op probe hook; later input-event work must make this\n         the suspension point that browser input resumes.  */\n      if (minibuf_level > 0 && !end_time && !input_pending\n          && !detect_input_pending_run_timers (0))\n        wasmacs_host_wait_for_input ();\n\n      c = read_decoded_event_from_main_queue (end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu);#' "${keyboard_file}"
+      ;;
+    minibuf-setup)
+      perl -0pi -e 's#static Lisp_Object\nread_minibuf #/\* wasmacs asyncify minibuffer setup waitpoint spike. \*/\nextern int wasmacs_host_wait_for_input (void);\n\nstatic Lisp_Object\nread_minibuf #' "${minibuf_file}"
+
+      perl -0pi -e 's#\n  recursive_edit_1 \(\);#\n  /* wasmacs asyncify minibuffer setup waitpoint spike: yield after\n     the minibuffer buffer, prompt, window, keymap, and setup hook are active,\n     but before recursive_edit_1 starts consuming input.  This compares a\n     shallower suspend boundary against the read_char waitpoint.  */\n  wasmacs_host_wait_for_input ();\n\n  recursive_edit_1 ();#' "${minibuf_file}"
+      ;;
+    *)
+      echo "error: unsupported WASMACS_ASYNCIFY_WAITPOINT_MODE=${waitpoint_mode}" >&2
+      exit 2
+      ;;
+  esac
+fi

@@ -7,7 +7,7 @@ source_copy="${repo_root}/build/emacs-core-spike/src"
 out_dir="${repo_root}/artifacts/emacs-browser-persistent-spike"
 emmake_bin="${EMMAKE:-emmake}"
 emacs_wasm_cflags="${EMACS_WASM_CFLAGS:--g3 -O0}"
-emacs_persistent_ldflags="${EMACS_PERSISTENT_LDFLAGS:--sEXIT_RUNTIME=0 -sEXPORTED_FUNCTIONS=_main,_wasmacs_eval_string,_wasmacs_last_result,_wasmacs_minibuffer_state,_wasmacs_command_state,_wasmacs_command_begin_minibuffer_probe -sEXPORTED_RUNTIME_METHODS=callMain,ccall,FS,FS_createPath,FS_createDataFile,FS_readFile -sSTACK_SIZE=1048576 -sSTACK_OVERFLOW_CHECK=2 -sINITIAL_MEMORY=268435456 -sALLOW_MEMORY_GROWTH=1 --preload-file ${source_copy}/lisp@/usr/local/share/emacs/30.2/lisp --preload-file ${source_copy}/etc@/usr/local/share/emacs/30.2/etc}"
+emacs_persistent_ldflags="${EMACS_PERSISTENT_LDFLAGS:--sEXIT_RUNTIME=0 -sEXPORTED_FUNCTIONS=_main,_wasmacs_eval_string,_wasmacs_last_result,_wasmacs_minibuffer_state,_wasmacs_command_state,_wasmacs_command_begin_minibuffer_probe,_wasmacs_command_begin_minibuffer_force_probe -sEXPORTED_RUNTIME_METHODS=callMain,ccall,FS,FS_createPath,FS_createDataFile,FS_readFile -sSTACK_SIZE=1048576 -sSTACK_OVERFLOW_CHECK=2 -sINITIAL_MEMORY=268435456 -sALLOW_MEMORY_GROWTH=1 --preload-file ${source_copy}/lisp@/usr/local/share/emacs/30.2/lisp --preload-file ${source_copy}/etc@/usr/local/share/emacs/30.2/etc}"
 
 if ! command -v "${emmake_bin}" >/dev/null 2>&1; then
   echo "error: ${emmake_bin} not found; install/activate Emscripten first" >&2

@@ -257,6 +257,7 @@ lines.push(`BOOT_EXIT:${boot}`);
 lines.push(`EVAL_STATUS:${evalStatus}`);
 lines.push(`READBACK:${readback}`);
 console.log(lines.join("\n"));
+process.exit(evalStatus === 0 ? 0 : 1);
 
 if (boot !== 0) throw new Error(`expected boot exit 0, got ${boot}`);
 if (evalStatus !== 0) throw new Error(`expected eval status 0, got ${evalStatus}`);
