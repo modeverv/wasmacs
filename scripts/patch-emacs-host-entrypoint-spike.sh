@@ -11,12 +11,22 @@ fi
 read -r -d '' entrypoint_block <<'EOF' || true
 static char *wasmacs_last_eval_result;
 static char *wasmacs_last_minibuffer_state;
+static int wasmacs_command_busy;
 
 __attribute__ ((used, visibility ("default")))
 const char *
 wasmacs_last_result (void)
 {
   return wasmacs_last_eval_result ? wasmacs_last_eval_result : "";
+}
+
+__attribute__ ((used, visibility ("default")))
+const char *
+wasmacs_command_state (void)
+{
+  if (wasmacs_command_busy)
+    return "pending";
+  return "idle";
 }
 
 static void
@@ -123,6 +133,33 @@ wasmacs_store_result (Lisp_Object value)
   wasmacs_last_eval_result = copy;
 }
 
+static void
+wasmacs_store_c_string_result (const char *value)
+{
+  xfree (wasmacs_last_eval_result);
+  wasmacs_last_eval_result = xstrdup (value);
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_command_begin_minibuffer_probe (void)
+{
+  if (wasmacs_command_busy)
+    {
+      wasmacs_store_c_string_result ("unavailable:busy");
+      return 3;
+    }
+
+  if (noninteractive)
+    {
+      wasmacs_store_c_string_result ("unavailable:noninteractive-batch");
+      return 3;
+    }
+
+  wasmacs_store_c_string_result ("unavailable:interactive-suspend-entrypoint-not-implemented");
+  return 3;
+}
+
 static int wasmacs_eval_had_error;
 
 static Lisp_Object
@@ -145,6 +182,12 @@ __attribute__ ((used, visibility ("default")))
 int
 wasmacs_eval_string (const char *utf8)
 {
+  if (wasmacs_command_busy)
+    {
+      wasmacs_store_c_string_result ("unavailable:busy");
+      return 3;
+    }
+
   /* callMain returns before JavaScript invokes this entrypoint.  Refresh the
      stack scan bottom so Emacs GC does not scan the old main frame.  */
   void *stack_bottom_variable;

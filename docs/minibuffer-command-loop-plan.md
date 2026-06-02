@@ -118,3 +118,10 @@ The copied-source persistent artifact now also exports
 `scripts/probe-browser-minibuffer-state-export.mjs`. This is the first
 non-eval minibuffer observation surface; it currently proves inactive state
 only.
+
+`scripts/probe-browser-minibuffer-active-read-boundary.mjs` fixes the next
+boundary: the current `--batch` boot returns
+`unavailable:noninteractive-batch` from
+`wasmacs_command_begin_minibuffer_probe`, leaves command state `idle`, and
+keeps minibuffer state inactive. Active minibuffer reads therefore require the
+planned interactive/suspended command entrypoint.

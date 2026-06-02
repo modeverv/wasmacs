@@ -184,3 +184,25 @@ Evidence is in `logs/wasm-browser-minibuffer-state-export.txt`. This still
 does not start an active read; it creates the C-side observation surface that
 the suspended read entrypoint must use once `read_char` can yield for browser
 input.
+
+`scripts/patch-emacs-host-entrypoint-spike.sh` also now exports
+`wasmacs_command_state` and `wasmacs_command_begin_minibuffer_probe`.
+`wasmacs_eval_string` rejects future in-flight command ownership as
+`unavailable:busy`; the current probe does not set that state yet because the
+artifact still boots with `--batch`.
+
+`scripts/probe-browser-minibuffer-active-read-boundary.mjs` verifies the first
+active-read boundary condition:
+
+```text
+INITIAL_COMMAND_STATE:idle
+BEGIN_STATUS:3
+BEGIN_READBACK:unavailable:noninteractive-batch
+AFTER_COMMAND_STATE:idle
+AFTER_MINIBUFFER_STATE:active:false
+```
+
+Evidence is in `logs/wasm-browser-minibuffer-active-read-boundary.txt`. This
+proves the current batch profile cannot enter active `read_minibuf`; the next
+implementation step is an interactive/suspended command entrypoint rather than
+a browser-side reader or a raw `read_minibuf` call.

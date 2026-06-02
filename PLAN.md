@@ -1163,6 +1163,12 @@ Validation notes:
   usable while preserving the blocker signal.
 - 2026-06-02: full `npm test` passed after the minibuffer state export and
   matrix timeout changes.
+- 2026-06-02: added copied-source `wasmacs_command_state` and
+  `wasmacs_command_begin_minibuffer_probe`. The new
+  `scripts/probe-browser-minibuffer-active-read-boundary.mjs` records
+  `unavailable:noninteractive-batch`, proving the current `--batch` profile
+  cannot enter active `read_minibuf` and must move to an interactive/suspended
+  command entrypoint.
 
 ## Milestone 14: Emacs Fidelity Expansion
 
@@ -1330,11 +1336,11 @@ clipboard-unavailable, and keyboard quit. Runner evidence is recorded in
 `logs/browser-runner-smoke.txt` and checked by the browser editing evidence
 validator. The runner now starts the app server on demand. Continue by either
 retiring the older static browser smoke logs or keeping them as historical
-fixtures, then use the new `wasmacs_minibuffer_state` observation surface to
-implement the first active read probe described in
-`docs/minibuffer-suspended-read-plan.md`: start a real
-`read-from-minibuffer`, observe `active:true` / `depth:1`, reject reentrant
-eval as `unavailable:busy`, and keep process and pty unavailable.
+fixtures, then implement the interactive/suspended command entrypoint described
+in `docs/minibuffer-suspended-read-plan.md`: move beyond the current
+`unavailable:noninteractive-batch` probe, start a real `read-from-minibuffer`,
+observe `active:true` / `depth:1`, reject reentrant eval as
+`unavailable:busy`, and keep process and pty unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior

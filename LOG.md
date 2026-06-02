@@ -734,3 +734,10 @@
   isolated blocker paths.
 - Rebuilt `artifacts/emacs-browser-persistent-spike/` with
   `_wasmacs_minibuffer_state` and ran full `npm test`; all checks passed.
+- Added copied-source `wasmacs_command_state` and
+  `wasmacs_command_begin_minibuffer_probe` exports plus
+  `scripts/probe-browser-minibuffer-active-read-boundary.mjs`. The probe
+  records the current active-read boundary as
+  `unavailable:noninteractive-batch`, so the next implementation has to move
+  from batch host eval to an interactive/suspended command entrypoint before
+  real `read_minibuf` can become active.
