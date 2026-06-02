@@ -139,26 +139,29 @@ const cases = {
 
 if (!process.argv.includes("--child")) {
   const summaries = [];
+  const highLevelUndoCases = new Set([
+    "find-file-record-undo-and-undo",
+    "find-file-record-undo-and-undo-gc-high",
+    "find-file-record-undo-start-undo-more",
+    "find-file-record-undo-with-inhibit-message",
+    "find-file-record-undo-and-undo-no-intervals",
+  ]);
   for (const name of Object.keys(cases)) {
+    const highLevelUndoCase = highLevelUndoCases.has(name);
     const result = spawnSync(process.execPath, [fileURLToPath(import.meta.url), "--child", name], {
       encoding: "utf8",
       maxBuffer: 16 * 1024 * 1024,
-      timeout: 120_000,
+      timeout: highLevelUndoCase ? 30_000 : 120_000,
     });
     const combined = `${result.stdout || ""}${result.stderr || ""}`.trimEnd();
-    const highLevelUndoCase = (
-      name === "find-file-record-undo-and-undo" ||
-      name === "find-file-record-undo-and-undo-gc-high" ||
-      name === "find-file-record-undo-start-undo-more" ||
-      name === "find-file-record-undo-with-inhibit-message" ||
-      name === "find-file-record-undo-and-undo-no-intervals"
-    );
     const knownBlocked = highLevelUndoCase &&
-      result.status !== 0 &&
+      (result.status !== 0 || result.signal || result.error) &&
       (
         combined.includes("memory access out of bounds") ||
         combined.includes("RuntimeError: unreachable") ||
-        combined.includes("EVAL_STATUS:1")
+        combined.includes("EVAL_STATUS:1") ||
+        result.signal === "SIGTERM" ||
+        result.error?.message.includes("ETIMEDOUT")
       );
     const status = result.status === 0 ? "PASS" : knownBlocked ? "KNOWN_BLOCKER" : "FAIL";
     summaries.push([

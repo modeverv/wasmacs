@@ -105,3 +105,16 @@ Evidence is in `logs/wasm-browser-minibuffer-state.txt`. This proves the
 browser host can read inactive Emacs minibuffer state through
 `wasmacs_eval_string`; it does not yet prove that the host can enter,
 suspend, resume, or complete an active minibuffer read.
+
+`docs/minibuffer-suspended-read-plan.md` defines the next implementation
+boundary: a suspended command-loop entrypoint that preserves the active
+`read_minibuf` C stack, treats browser input as Emacs input events, rejects
+reentrant host eval as `unavailable:busy`, and keeps browser minibuffer
+commands unavailable until active read, accept, quit, and GC/root-safety probes
+pass.
+
+The copied-source persistent artifact now also exports
+`wasmacs_minibuffer_state`, verified by
+`scripts/probe-browser-minibuffer-state-export.mjs`. This is the first
+non-eval minibuffer observation surface; it currently proves inactive state
+only.

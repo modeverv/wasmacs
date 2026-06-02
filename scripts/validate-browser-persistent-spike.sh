@@ -21,6 +21,7 @@ rg "Module\\['ccall'\\] = ccall" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['FS_readFile'\\] = FS_readFile" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_eval_string'\\].*wasmacs_eval_string" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_last_result'\\].*wasmacs_last_result" "${artifact_dir}/temacs" >/dev/null
+rg "Module\\['_wasmacs_minibuffer_state'\\].*wasmacs_minibuffer_state" "${artifact_dir}/temacs" >/dev/null
 
 (
   cd "${artifact_dir}"

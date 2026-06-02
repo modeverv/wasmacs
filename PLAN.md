@@ -1147,6 +1147,22 @@ Validation notes:
   into `npm test`. It reads inactive Emacs minibuffer state through
   `wasmacs_eval_string` without entering `read_minibuf`; evidence is in
   `logs/wasm-browser-minibuffer-state.txt`.
+- 2026-06-02: added `docs/minibuffer-suspended-read-plan.md` and
+  `scripts/validate-minibuffer-suspended-read-plan.sh`. The plan rejects
+  browser-side minibuffer readers and fixes the next implementation boundary
+  as a suspended Emacs command-loop waitpoint with `unavailable:busy`
+  protection for reentrant host eval.
+- 2026-06-02: added copied-source `wasmacs_minibuffer_state` export,
+  `_wasmacs_minibuffer_state` to the persistent browser profile, and
+  `scripts/probe-browser-minibuffer-state-export.mjs`. Evidence in
+  `logs/wasm-browser-minibuffer-state-export.txt` proves inactive minibuffer
+  state can be read from C without `wasmacs_eval_string`.
+- 2026-06-02: shortened only the high-level known-blocker cases in
+  `scripts/probe-browser-persistent-buffer-matrix.mjs` to a 30s timeout and
+  records timeout as `KNOWN_BLOCKER`. This keeps the full `npm test` loop
+  usable while preserving the blocker signal.
+- 2026-06-02: full `npm test` passed after the minibuffer state export and
+  matrix timeout changes.
 
 ## Milestone 14: Emacs Fidelity Expansion
 
@@ -1314,9 +1330,11 @@ clipboard-unavailable, and keyboard quit. Runner evidence is recorded in
 `logs/browser-runner-smoke.txt` and checked by the browser editing evidence
 validator. The runner now starts the app server on demand. Continue by either
 retiring the older static browser smoke logs or keeping them as historical
-fixtures, then design the suspended `read_minibuf` host entrypoint needed to
-enter, pause, resume, and quit a real Emacs minibuffer read. Keep process and
-pty unavailable.
+fixtures, then use the new `wasmacs_minibuffer_state` observation surface to
+implement the first active read probe described in
+`docs/minibuffer-suspended-read-plan.md`: start a real
+`read-from-minibuffer`, observe `active:true` / `depth:1`, reject reentrant
+eval as `unavailable:busy`, and keep process and pty unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior

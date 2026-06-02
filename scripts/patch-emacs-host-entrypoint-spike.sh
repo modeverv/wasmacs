@@ -10,12 +10,105 @@ fi
 
 read -r -d '' entrypoint_block <<'EOF' || true
 static char *wasmacs_last_eval_result;
+static char *wasmacs_last_minibuffer_state;
 
 __attribute__ ((used, visibility ("default")))
 const char *
 wasmacs_last_result (void)
 {
   return wasmacs_last_eval_result ? wasmacs_last_eval_result : "";
+}
+
+static void
+wasmacs_append_text (char **buffer, ptrdiff_t *length, ptrdiff_t *capacity,
+                     const char *text)
+{
+  ptrdiff_t text_length = strlen (text);
+  if (*length + text_length + 1 > *capacity)
+    {
+      while (*length + text_length + 1 > *capacity)
+        *capacity *= 2;
+      *buffer = xrealloc (*buffer, *capacity);
+    }
+  memcpy (*buffer + *length, text, text_length);
+  *length += text_length;
+  (*buffer)[*length] = '\0';
+}
+
+static void
+wasmacs_append_lisp_string (char **buffer, ptrdiff_t *length,
+                            ptrdiff_t *capacity, Lisp_Object value)
+{
+  if (!STRINGP (value))
+    return;
+
+  const char *data = SSDATA (value);
+  ptrdiff_t bytes = SBYTES (value);
+  for (ptrdiff_t i = 0; i < bytes; i++)
+    {
+      char escaped[3];
+      if (data[i] == '\n')
+        wasmacs_append_text (buffer, length, capacity, "\\n");
+      else if (data[i] == '\\')
+        wasmacs_append_text (buffer, length, capacity, "\\\\");
+      else
+        {
+          escaped[0] = data[i];
+          escaped[1] = '\0';
+          wasmacs_append_text (buffer, length, capacity, escaped);
+        }
+    }
+}
+
+__attribute__ ((used, visibility ("default")))
+const char *
+wasmacs_minibuffer_state (void)
+{
+  specpdl_ref gc_count = inhibit_garbage_collection ();
+  ptrdiff_t capacity = 1024;
+  ptrdiff_t length = 0;
+  ptrdiff_t point_value = PT;
+  char *state = xmalloc (capacity);
+  state[0] = '\0';
+
+  wasmacs_append_text (&state, &length, &capacity,
+                       minibuf_level > 0 ? "active:true\n" : "active:false\n");
+
+  char depth[64];
+  snprintf (depth, sizeof depth, "depth:%"pI"d\n", minibuf_level);
+  wasmacs_append_text (&state, &length, &capacity, depth);
+
+  wasmacs_append_text (&state, &length, &capacity, "prompt:");
+  if (minibuf_level > 0)
+    wasmacs_append_lisp_string (&state, &length, &capacity,
+                                call0 (intern_c_string ("minibuffer-prompt")));
+  wasmacs_append_text (&state, &length, &capacity, "\n");
+
+  wasmacs_append_text (&state, &length, &capacity, "input:");
+  if (minibuf_level > 0)
+    {
+      Lisp_Object saved_buffer = Fcurrent_buffer ();
+      Fset_buffer (get_minibuffer (minibuf_level));
+      wasmacs_append_lisp_string (&state, &length, &capacity,
+                                  call0 (intern_c_string ("minibuffer-contents-no-properties")));
+      point_value = PT;
+      Fset_buffer (saved_buffer);
+    }
+  wasmacs_append_text (&state, &length, &capacity, "\n");
+
+  char point[64];
+  snprintf (point, sizeof point, "point:%"pD"d\n", point_value);
+  wasmacs_append_text (&state, &length, &capacity, point);
+
+  wasmacs_append_text (&state, &length, &capacity,
+                       minibuf_level > 0 && is_minibuffer (minibuf_level, Fcurrent_buffer ())
+                       ? "current-minibuffer:true\n"
+                       : "current-minibuffer:false\n");
+
+  xfree (wasmacs_last_minibuffer_state);
+  wasmacs_last_minibuffer_state = state;
+  unbind_to (gc_count, Qnil);
+  return wasmacs_last_minibuffer_state;
 }
 
 static void

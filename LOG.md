@@ -717,3 +717,20 @@
   `npm test`. It reads inactive Emacs minibuffer state through
   `wasmacs_eval_string` without entering `read_minibuf`; evidence is in
   `logs/wasm-browser-minibuffer-state.txt`.
+- Added `docs/minibuffer-suspended-read-plan.md` and
+  `scripts/validate-minibuffer-suspended-read-plan.sh`. The plan grounds the
+  next real-minibuffer implementation in `read_minibuf`,
+  `recursive_edit_1`, `command_loop`, `read_char`, and the native input queue,
+  while rejecting browser-side readers and reentrant host eval during active
+  reads.
+- Added copied-source `wasmacs_minibuffer_state`, exported it from the
+  persistent browser artifact as `_wasmacs_minibuffer_state`, and added
+  `scripts/probe-browser-minibuffer-state-export.mjs`. The probe reads
+  inactive minibuffer state from C without `wasmacs_eval_string`; evidence is
+  in `logs/wasm-browser-minibuffer-state-export.txt`.
+- Tightened `scripts/probe-browser-persistent-buffer-matrix.mjs`: high-level
+  undo known-blocker cases now use a 30s timeout and classify timeout as
+  `KNOWN_BLOCKER`, keeping `npm test` from spending many minutes on already
+  isolated blocker paths.
+- Rebuilt `artifacts/emacs-browser-persistent-spike/` with
+  `_wasmacs_minibuffer_state` and ran full `npm test`; all checks passed.
