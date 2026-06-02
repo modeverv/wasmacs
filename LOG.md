@@ -667,3 +667,19 @@
   `buffer-undo-list` head away from the `undo-equiv-table` mapping. The worker
   now skips `save-buffer` for undo/redo and persists the browser user image
   from the Emacs readback instead.
+- Added `scripts/probe-browser-worker-point-undo-redo.mjs` and wired it into
+  `npm test`. It proves a point-sensitive ordinary editing path through the
+  live file-visiting buffer: insert `AB`, move point left, insert `X` in the
+  middle, then run real Emacs `undo-only` and `undo-redo` over that middle
+  insertion. Evidence is in
+  `logs/wasm-browser-worker-point-undo-redo.txt`.
+- Added `scripts/probe-browser-worker-file-switch-undo.mjs` and wired it into
+  `npm test`. It switches between two live file-visiting buffers, edits both,
+  then proves each buffer keeps its own real Emacs undo/redo state across
+  `find-file` switches. Evidence is in
+  `logs/wasm-browser-worker-file-switch-undo.txt`.
+- Hardened `scripts/probe-browser-find-file-phases.mjs` by making successful
+  child cases call `process.exit(0)` after printing their evidence. The child
+  runtime can otherwise remain alive under Emscripten `keepRuntimeAlive()`,
+  which made full-suite validation look hung even after a child case had
+  finished successfully.

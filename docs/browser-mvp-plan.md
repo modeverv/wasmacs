@@ -379,8 +379,14 @@ so moves the `buffer-undo-list` head away from the `undo-equiv-table` redo
 mapping. The worker now treats the active file-visiting buffer as Emacs-owned
 after boot, skipping browser image rematerialization for that path before
 subsequent commands so `save-buffer` does not see its visited file as
-externally changed. Clipboard / kill-ring and minibuffer commands remain
-explicit unavailable boundaries.
+externally changed. `scripts/probe-browser-worker-point-undo-redo.mjs` adds a
+more editor-shaped case: insert `AB`, move point left, insert `X` in the
+middle, then undo and redo that middle insertion through the same live
+file-visiting buffer. `scripts/probe-browser-worker-file-switch-undo.mjs`
+extends the same contract across two file-visiting buffers: edits in
+`worker-switch-a.txt` and `worker-switch-b.txt` keep separate undo/redo state
+after switching through `find-file`. Clipboard / kill-ring and minibuffer
+commands remain explicit unavailable boundaries.
 
 ## Validation
 

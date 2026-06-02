@@ -300,3 +300,4 @@ for (const [index, form] of forms.entries()) {
 }
 
 console.log(lines.join("\n"));
+process.exit(0);

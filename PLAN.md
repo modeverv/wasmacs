@@ -1095,6 +1095,21 @@ Validation notes:
   command: redo bookkeeping, `undo-equiv-table`, `pending-undo-list`, point
   record cleanup, modified-state/autosave handling, or host-entrypoint GC
   safety after those structures are updated.
+- 2026-06-02: added `scripts/probe-browser-worker-point-undo-redo.mjs` and
+  wired it into `npm test`. It proves a worker-shaped ordinary editing flow
+  that inserts `AB`, moves point left, inserts `X` in the middle, then performs
+  real Emacs `undo-only` and `undo-redo` over that middle insertion in the live
+  file-visiting buffer. Evidence is in
+  `logs/wasm-browser-worker-point-undo-redo.txt`.
+- 2026-06-02: added `scripts/probe-browser-worker-file-switch-undo.mjs` and
+  wired it into `npm test`. It switches between two live file-visiting buffers,
+  edits both, then proves each buffer keeps its own real Emacs undo/redo state
+  after switching. Evidence is in
+  `logs/wasm-browser-worker-file-switch-undo.txt`.
+- 2026-06-02: hardened `scripts/probe-browser-find-file-phases.mjs` so child
+  cases call `process.exit(0)` after emitting successful evidence. Without
+  that explicit exit, successful Emscripten runtime children could stay alive
+  because `keepRuntimeAlive()` was set, making the full test path appear hung.
 
 ## Milestone 14: Emacs Fidelity Expansion
 
@@ -1248,9 +1263,15 @@ after changing the buffer, because that shifts the `buffer-undo-list` head away
 from the `undo-equiv-table` redo mapping. With undo/redo treated as Emacs
 buffer-state commands and browser persistence handled through the worker
 readback, `A`, `B`, `undo-only`, `undo-redo` now passes in
-`logs/wasm-browser-worker-redo-interleaving.txt`. Continue by expanding
-coverage around point movement and file switching while preserving the
-Emacs-owned active file buffer boundary. Keep process and pty unavailable.
+`logs/wasm-browser-worker-redo-interleaving.txt`. Point movement now has
+worker-shaped coverage in `logs/wasm-browser-worker-point-undo-redo.txt`:
+`AB`, move-left, middle insert `X`, `undo-only`, and `undo-redo` all pass
+against the same live file-visiting buffer. File switching now has
+worker-shaped coverage in `logs/wasm-browser-worker-file-switch-undo.txt`: two
+live file-visiting buffers retain separate undo/redo state across `find-file`
+switches. Continue by turning these worker-shaped cases into repeatable browser
+automation once the repo-local browser runner exists, and by designing the next
+minibuffer UI slice. Keep process and pty unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior
