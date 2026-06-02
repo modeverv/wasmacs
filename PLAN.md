@@ -1138,6 +1138,11 @@ Validation notes:
   `scripts/serve-app.mjs` automatically when the target app server is not
   already running, so `npm run browser:smoke*` no longer depends on a manually
   prestarted dev server.
+- 2026-06-02: added `docs/minibuffer-command-loop-plan.md` and
+  `scripts/validate-minibuffer-command-loop-plan.sh`. The plan grounds real
+  minibuffer support in `files.el`, `window.el`, `simple.el`, `minibuffer.el`,
+  `minibuf.c`, `keyboard.c`, and `window.c`, and defines the first
+  `host.gui.minibuffer-state` / `host.gui.minibuffer-input` protocol boundary.
 
 ## Milestone 14: Emacs Fidelity Expansion
 
@@ -1305,9 +1310,9 @@ clipboard-unavailable, and keyboard quit. Runner evidence is recorded in
 `logs/browser-runner-smoke.txt` and checked by the browser editing evidence
 validator. The runner now starts the app server on demand. Continue by either
 retiring the older static browser smoke logs or keeping them as historical
-fixtures, then grow the minibuffer echo slice toward real Emacs minibuffer
-state only after the command-loop/window state boundary is designed. Keep
-process and pty unavailable.
+fixtures, then implement a read-only minibuffer state reporting probe from the
+new `docs/minibuffer-command-loop-plan.md` before enabling real
+`read-from-minibuffer` input. Keep process and pty unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior

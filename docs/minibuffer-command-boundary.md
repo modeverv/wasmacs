@@ -46,3 +46,6 @@ That split is deliberate: the line is a display surface for Emacs-facing
 state, while real minibuffer behavior remains blocked on a persistent Emacs
 command loop, selected-window state, minibuffer buffer/window state, and a
 completion UI bridge.
+
+The follow-on contract for that bridge is in
+`docs/minibuffer-command-loop-plan.md`.

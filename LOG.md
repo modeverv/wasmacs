@@ -709,3 +709,7 @@
 - `scripts/run-browser-smoke.mjs` now starts `scripts/serve-app.mjs`
   automatically when the target app server is not already running. Verified
   with `WASMACS_BROWSER_URL=http://127.0.0.1:5184/... npm run browser:smoke`.
+- Added `docs/minibuffer-command-loop-plan.md` and
+  `scripts/validate-minibuffer-command-loop-plan.sh`. The plan fixes the next
+  real-minibuffer boundary as an Emacs-owned `host.gui.minibuffer-state` /
+  `host.gui.minibuffer-input` protocol, not browser-side reader semantics.

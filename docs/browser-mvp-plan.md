@@ -308,6 +308,9 @@ command loop, minibuffer window state, and completion UI. The design note is
 `logs/minibuffer-command-boundary.txt`. The browser now has a narrow
 `#minibuffer` echo line for prefixes and explicit unavailable messages, but it
 does not own minibuffer input, completion, or history.
+`docs/minibuffer-command-loop-plan.md` defines the next real-minibuffer
+boundary as Emacs-owned `host.gui.minibuffer-state` /
+`host.gui.minibuffer-input` messages.
 `npm run browser:smoke` provides the first repo-local headless Chrome/CDP
 runner for this surface; it sends `C-x C-f` through the smoke hook and checks
 the explicit minibuffer-unavailable echo. `npm run browser:smoke:editing`
