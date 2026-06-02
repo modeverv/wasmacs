@@ -688,3 +688,7 @@
   unavailable messages for minibuffer/clipboard/process boundaries, while
   keeping real `find-file` / `switch-buffer` minibuffer semantics unavailable
   until the Emacs command-loop and minibuffer window state are bridged.
+- Added `scripts/run-browser-smoke.mjs` and `npm run browser:smoke`. The runner
+  launches system Chrome headless with CDP, opens the local app, sends
+  `C-x C-f` through the repo-local smoke hook, and verifies that the minibuffer
+  echo line reports the explicit unavailable boundary.

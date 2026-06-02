@@ -14,6 +14,7 @@ test -f "${repo_root}/app/src/redisplay-protocol.js"
 test -f "${repo_root}/app/src/user-file-list.js"
 test -f "${repo_root}/app/src/user-path.js"
 test -f "${repo_root}/app/src/styles.css"
+test -f "${repo_root}/scripts/run-browser-smoke.mjs"
 test -f "${repo_root}/scripts/serve-app.mjs"
 
 rg 'new Worker\("/app/src/wasm-worker\.js", \{ type: "classic" \}\)' "${repo_root}/app/src/main.js" >/dev/null
@@ -102,6 +103,7 @@ rg 'command\?\.path' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg '/artifacts/emacs-browser-persistent-spike/' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'importScripts\("/artifacts/emacs-browser-persistent-spike/temacs"\)' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'basename\(filePath\) === "temacs"' "${repo_root}/scripts/serve-app.mjs" >/dev/null
+rg 'run-browser-smoke\.mjs' "${repo_root}/package.json" >/dev/null
 rg '"dev": "node scripts/serve-app\.mjs"' "${repo_root}/package.json" >/dev/null
 
 echo "browser worker app validation passed"

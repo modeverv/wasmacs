@@ -1114,6 +1114,10 @@ Validation notes:
   `app/src/minibuffer-view.js`. It displays `C-x` prefixes and explicit
   unavailable messages for minibuffer/clipboard/process boundaries without
   pretending to implement real minibuffer input, completion, or history.
+- 2026-06-02: added `scripts/run-browser-smoke.mjs` and `npm run
+  browser:smoke`. It launches system Chrome headless with CDP, opens the local
+  app, sends the `C-x C-f` sequence through `window.__wasmacsSmoke`, and
+  verifies the minibuffer echo line reports the explicit unavailable boundary.
 
 ## Milestone 14: Emacs Fidelity Expansion
 
@@ -1273,11 +1277,11 @@ worker-shaped coverage in `logs/wasm-browser-worker-point-undo-redo.txt`:
 against the same live file-visiting buffer. File switching now has
 worker-shaped coverage in `logs/wasm-browser-worker-file-switch-undo.txt`: two
 live file-visiting buffers retain separate undo/redo state across `find-file`
-switches. Continue by turning these worker-shaped cases into repeatable browser
-automation once the repo-local browser runner exists, and by growing the
-minibuffer echo slice toward real Emacs minibuffer state only after the
-command-loop/window-state boundary is designed. Keep process and pty
-unavailable.
+switches. The repo-local browser runner now exists as
+`npm run browser:smoke`; continue by expanding it from the minibuffer echo case
+to the existing real undo/redo UI smoke paths, then grow the minibuffer echo
+slice toward real Emacs minibuffer state only after the command-loop/window
+state boundary is designed. Keep process and pty unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior
