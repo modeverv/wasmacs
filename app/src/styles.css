@@ -122,7 +122,7 @@ h1 {
 }
 
 .editor-pane {
-  grid-template-rows: auto auto minmax(220px, 1fr) minmax(160px, 0.75fr);
+  grid-template-rows: auto auto minmax(220px, 1fr) auto minmax(160px, 0.75fr);
   min-height: 520px;
 }
 
@@ -231,6 +231,20 @@ h1 {
 .frame-cursor {
   background: #bfdbfe;
   color: #08111f;
+}
+
+.minibuffer {
+  background: #0b1220;
+  border-top: 1px solid #334155;
+  color: #f8fafc;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  line-height: 1.45;
+  min-height: 32px;
+  overflow: hidden;
+  padding: 6px 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .output {

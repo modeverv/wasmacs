@@ -1110,6 +1110,10 @@ Validation notes:
   cases call `process.exit(0)` after emitting successful evidence. Without
   that explicit exit, successful Emscripten runtime children could stay alive
   because `keepRuntimeAlive()` was set, making the full test path appear hung.
+- 2026-06-02: added a narrow browser `#minibuffer` echo line plus
+  `app/src/minibuffer-view.js`. It displays `C-x` prefixes and explicit
+  unavailable messages for minibuffer/clipboard/process boundaries without
+  pretending to implement real minibuffer input, completion, or history.
 
 ## Milestone 14: Emacs Fidelity Expansion
 
@@ -1270,8 +1274,10 @@ against the same live file-visiting buffer. File switching now has
 worker-shaped coverage in `logs/wasm-browser-worker-file-switch-undo.txt`: two
 live file-visiting buffers retain separate undo/redo state across `find-file`
 switches. Continue by turning these worker-shaped cases into repeatable browser
-automation once the repo-local browser runner exists, and by designing the next
-minibuffer UI slice. Keep process and pty unavailable.
+automation once the repo-local browser runner exists, and by growing the
+minibuffer echo slice toward real Emacs minibuffer state only after the
+command-loop/window-state boundary is designed. Keep process and pty
+unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior

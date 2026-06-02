@@ -305,7 +305,9 @@ Minibuffer-oriented command sequences are now recognized without being faked.
 report `minibuffer unavailable` until the browser host has a persistent Emacs
 command loop, minibuffer window state, and completion UI. The design note is
 `docs/minibuffer-command-boundary.md`; deterministic probe evidence is in
-`logs/minibuffer-command-boundary.txt`.
+`logs/minibuffer-command-boundary.txt`. The browser now has a narrow
+`#minibuffer` echo line for prefixes and explicit unavailable messages, but it
+does not own minibuffer input, completion, or history.
 
 The next shared dependency for undo, kill-ring, and minibuffer fidelity is a
 stable persistent Emacs buffer path.

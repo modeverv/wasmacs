@@ -9,6 +9,7 @@ test -f "${repo_root}/app/src/wasm-worker.js"
 test -f "${repo_root}/app/src/command-queue.js"
 test -f "${repo_root}/app/src/buffer-dirty.js"
 test -f "${repo_root}/app/src/input-protocol.js"
+test -f "${repo_root}/app/src/minibuffer-view.js"
 test -f "${repo_root}/app/src/redisplay-protocol.js"
 test -f "${repo_root}/app/src/user-file-list.js"
 test -f "${repo_root}/app/src/user-path.js"
@@ -38,6 +39,7 @@ rg 'createUserWasifs' "${repo_root}/app/src/browser-wasifs.js" >/dev/null
 rg 'parseUserWasifs' "${repo_root}/app/src/browser-wasifs.js" >/dev/null
 rg 'id="editor"' "${repo_root}/app/index.html" >/dev/null
 rg 'id="frame-grid"' "${repo_root}/app/index.html" >/dev/null
+rg 'id="minibuffer"' "${repo_root}/app/index.html" >/dev/null
 rg 'id="file-list"' "${repo_root}/app/index.html" >/dev/null
 rg 'id="file-path"' "${repo_root}/app/index.html" >/dev/null
 rg 'id="open-file"' "${repo_root}/app/index.html" >/dev/null
@@ -52,6 +54,7 @@ rg 'runNextBufferCommand' "${repo_root}/app/src/main.js" >/dev/null
 rg 'coalesceBufferCommand' "${repo_root}/app/src/main.js" >/dev/null
 rg 'coalesceBufferCommand' "${repo_root}/app/src/command-queue.js" >/dev/null
 rg 'keyEventToBufferCommand' "${repo_root}/app/src/main.js" >/dev/null
+rg 'minibufferTextForWorkerError' "${repo_root}/app/src/main.js" >/dev/null
 rg 'nextPointIndexForCommand' "${repo_root}/app/src/main.js" >/dev/null
 rg 'validateBufferCommand' "${repo_root}/app/src/input-protocol.js" >/dev/null
 rg 'insert-text' "${repo_root}/app/src/input-protocol.js" >/dev/null
@@ -76,6 +79,7 @@ rg 'text-grid-draw' "${repo_root}/app/src/redisplay-protocol.js" >/dev/null
 rg 'validateTextGridDrawMessage' "${repo_root}/app/src/redisplay-protocol.js" >/dev/null
 rg '\.frame-grid' "${repo_root}/app/src/styles.css" >/dev/null
 rg '\.frame-cursor' "${repo_root}/app/src/styles.css" >/dev/null
+rg '\.minibuffer' "${repo_root}/app/src/styles.css" >/dev/null
 rg '\.file-list' "${repo_root}/app/src/styles.css" >/dev/null
 rg 'materializeUserImage' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'FS_createDataFile' "${repo_root}/app/src/wasm-worker.js" >/dev/null

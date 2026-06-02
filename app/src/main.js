@@ -2,6 +2,7 @@ import { BrowserUserImage } from "./browser-wasifs.js";
 import { isEditorModified } from "./buffer-dirty.js";
 import { coalesceBufferCommand } from "./command-queue.js";
 import { keyEventToBufferCommand, nextPointIndexForCommand, validateBufferCommand } from "./input-protocol.js";
+import { minibufferTextForPrefix, minibufferTextForWorkerError } from "./minibuffer-view.js";
 import { textToGridDrawMessage, validateTextGridDrawMessage } from "./redisplay-protocol.js";
 import { userFileLabel, visibleUserFilePaths } from "./user-file-list.js";
 import { normalizeUserPath } from "./user-path.js";
@@ -21,6 +22,7 @@ const bufferPathLabel = document.querySelector("#buffer-path");
 const bufferState = document.querySelector("#buffer-state");
 const fileList = document.querySelector("#file-list");
 const frameGrid = document.querySelector("#frame-grid");
+const minibuffer = document.querySelector("#minibuffer");
 
 const defaultBufferPath = "/home/user/notes.txt";
 const storageKey = "wasmacs:user-filesystem.wasifs:v1";
@@ -103,6 +105,7 @@ async function loadBuffer(path = bufferPath) {
   pointIndex = savedText.length;
   renderTextGrid(textToGridDrawMessage({ path: bufferPath, pointIndex, text: savedText }));
   renderUserFileList();
+  setMinibuffer("");
   setBufferState("loaded");
 }
 
@@ -170,6 +173,10 @@ function setStatus(text) {
   status.textContent = text;
 }
 
+function setMinibuffer(text = "") {
+  minibuffer.textContent = text;
+}
+
 function notifyIdleWaiters() {
   if (commandInFlight || commandQueue.length > 0) return;
   while (idleWaiters.length > 0) {
@@ -227,6 +234,7 @@ function enqueueBufferCommand(command = { type: "ensure-marker", path: bufferPat
   if (command.type === "key-prefix") {
     keyPrefix = command.prefix;
     setStatus(command.prefix);
+    setMinibuffer(minibufferTextForPrefix(command.prefix));
     setBufferState(`prefix ${command.prefix}`);
     return;
   }
@@ -236,6 +244,7 @@ function enqueueBufferCommand(command = { type: "ensure-marker", path: bufferPat
   keyPrefix = undefined;
   if (command.type === "keyboard-quit") {
     commandQueue = [];
+    setMinibuffer("Quit");
     setStatus("keyboard quit");
     setBufferState(commandInFlight ? "keyboard quit (after current command)" : "keyboard quit");
     runButton.disabled = commandInFlight;
@@ -254,6 +263,7 @@ function runNextBufferCommand() {
 
 function runWorkerCommand(command) {
   output.textContent = "";
+  if (command.type !== "key-prefix") setMinibuffer("");
   setStatus("running emacs command");
   setBufferState(commandQueue.length > 0 ? `running command (${commandQueue.length} queued)` : "running command");
   runButton.disabled = true;
@@ -300,6 +310,7 @@ function handleWorkerMessage(event) {
     const clipboardUnavailable = message.text.includes("clipboard/kill-ring requires GUI clipboard protocol");
     const minibufferUnavailable = message.text.includes("minibuffer requires persistent Emacs command loop");
     const processUnavailable = message.text.includes("host.process");
+    setMinibuffer(minibufferTextForWorkerError(message.text));
     setStatus(undoUnavailable ? "undo unavailable" : clipboardUnavailable ? "clipboard unavailable" : minibufferUnavailable ? "minibuffer unavailable" : processUnavailable ? "process unavailable" : "worker error");
     setBufferState(undoUnavailable ? "undo unavailable" : clipboardUnavailable ? "clipboard unavailable" : minibufferUnavailable ? "minibuffer unavailable" : processUnavailable ? "process unavailable" : "worker error");
     appendLine(message.text);
@@ -500,6 +511,7 @@ window.__wasmacsSmoke = {
     return {
       path: bufferPath,
       pointIndex,
+      minibuffer: minibuffer.textContent,
       state: bufferState.textContent,
       status: status.textContent,
       text: editor.value,

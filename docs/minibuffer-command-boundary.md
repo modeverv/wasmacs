@@ -34,3 +34,15 @@ This keeps `find-file` and `switch-buffer` in the Emacs command/minibuffer
 world. The browser path can expose a temporary path field and file list for
 M13 editing, but it must not become the semantic owner of Emacs minibuffer
 behavior.
+
+## Browser Echo Slice
+
+The browser now includes a narrow `#minibuffer` echo line below the frame grid.
+It displays command prefixes such as `C-x` and explicit unavailable messages
+from the worker, but it does not read input, complete paths, keep minibuffer
+history, or own `find-file` / `switch-buffer` semantics.
+
+That split is deliberate: the line is a display surface for Emacs-facing
+state, while real minibuffer behavior remains blocked on a persistent Emacs
+command loop, selected-window state, minibuffer buffer/window state, and a
+completion UI bridge.

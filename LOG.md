@@ -683,3 +683,8 @@
   runtime can otherwise remain alive under Emscripten `keepRuntimeAlive()`,
   which made full-suite validation look hung even after a child case had
   finished successfully.
+- Added a narrow browser `#minibuffer` echo line and
+  `app/src/minibuffer-view.js`. It renders `C-x` prefixes and explicit
+  unavailable messages for minibuffer/clipboard/process boundaries, while
+  keeping real `find-file` / `switch-buffer` minibuffer semantics unavailable
+  until the Emacs command-loop and minibuffer window state are bridged.
