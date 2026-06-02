@@ -701,3 +701,6 @@
   open/reload, file switching, textarea autosave, process-unavailable recovery,
   clipboard-unavailable, and keyboard quit through the repo-local headless
   Chrome/CDP runner.
+- `npm run browser:smoke:all` now writes `logs/browser-runner-smoke.txt`, and
+  `scripts/validate-browser-editing-smoke-evidence.sh` requires that fresh
+  runner evidence alongside the older browser smoke logs.

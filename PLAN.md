@@ -1127,6 +1127,10 @@ Validation notes:
   file switching, textarea autosave before file switch, process-unavailable
   recovery, clipboard-unavailable, and keyboard quit through the repo-local
   headless Chrome/CDP runner.
+- 2026-06-02: `npm run browser:smoke:all` now writes
+  `logs/browser-runner-smoke.txt`, and
+  `scripts/validate-browser-editing-smoke-evidence.sh` requires that runner
+  evidence alongside the older browser smoke logs.
 
 ## Milestone 14: Emacs Fidelity Expansion
 
@@ -1290,11 +1294,12 @@ switches. The repo-local browser runner now exists as
 `npm run browser:smoke`, and `npm run browser:smoke:all` now covers the
 minibuffer echo check, real undo/repeated undo/redo UI smoke hooks, project
 open/reload, file switching, textarea autosave, process-unavailable recovery,
-clipboard-unavailable, and keyboard quit. Continue by deciding whether to
-replace the older static browser smoke logs with runner-generated logs, then
-grow the minibuffer echo slice toward real Emacs minibuffer state only after
-the command-loop/window state boundary is designed. Keep process and pty
-unavailable.
+clipboard-unavailable, and keyboard quit. Runner evidence is recorded in
+`logs/browser-runner-smoke.txt` and checked by the browser editing evidence
+validator. Continue by either retiring the older static browser smoke logs or
+keeping them as historical fixtures, then grow the minibuffer echo slice toward
+real Emacs minibuffer state only after the command-loop/window state boundary
+is designed. Keep process and pty unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior

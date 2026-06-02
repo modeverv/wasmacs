@@ -314,7 +314,9 @@ the explicit minibuffer-unavailable echo. `npm run browser:smoke:editing`
 extends that runner to the real undo, repeated undo, and redo UI smoke hooks.
 `npm run browser:smoke:all` extends it again to project open/reload, file
 switching, textarea autosave, process-unavailable recovery,
-clipboard-unavailable, and keyboard quit.
+clipboard-unavailable, and keyboard quit. The runner writes
+`logs/browser-runner-smoke.txt`, which is now checked by
+`scripts/validate-browser-editing-smoke-evidence.sh`.
 
 The next shared dependency for undo, kill-ring, and minibuffer fidelity is a
 stable persistent Emacs buffer path.

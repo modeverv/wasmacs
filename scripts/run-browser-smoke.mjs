@@ -1,12 +1,15 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const appUrl = process.env.WASMACS_BROWSER_URL || "http://127.0.0.1:5173/?clear-storage=1&browser-smoke=minibuffer";
+const repoRoot = new URL("..", import.meta.url).pathname;
+const logPath = process.env.WASMACS_BROWSER_SMOKE_LOG || `${repoRoot}/logs/browser-runner-smoke.txt`;
 const scenarios = process.argv.slice(2);
 if (scenarios.length === 0) scenarios.push("minibuffer");
+const evidence = [];
 
 class CdpClient {
   constructor(url) {
@@ -136,6 +139,7 @@ try {
     if (!unavailableState.minibuffer.includes("minibuffer unavailable")) {
       throw new Error(`expected minibuffer unavailable echo, got ${JSON.stringify(unavailableState)}`);
     }
+    evidence.push("PASS minibuffer echo boundary");
     console.log("browser smoke scenario passed: minibuffer");
   }
 
@@ -152,6 +156,7 @@ try {
       "redoSmoke",
       await evaluate(client, sessionId, "window.__wasmacsSmoke.redoSmoke()", 300_000),
     );
+    evidence.push("PASS real undo repeated undo redo browser hooks");
     console.log("browser smoke scenario passed: editing");
   }
 
@@ -183,6 +188,7 @@ try {
     if (afterReturn.text !== "TEXTAREA-DRAFT") {
       throw new Error(`expected textarea draft to survive file switch, got ${JSON.stringify(afterReturn)}`);
     }
+    evidence.push("PASS project reload file switching textarea autosave");
     console.log("browser smoke scenario passed: files");
   }
 
@@ -211,10 +217,17 @@ try {
     if (quitState.status !== "keyboard quit") {
       throw new Error(`expected keyboard quit, got ${JSON.stringify(quitState)}`);
     }
+    evidence.push("PASS process clipboard keyboard quit boundaries");
     console.log("browser smoke scenario passed: boundaries");
   }
 
   console.log(`browser smoke passed: ${scenarios.join(",")} ${appUrl}`);
+  await writeFile(logPath, [
+    `URL:${appUrl}`,
+    `SCENARIOS:${scenarios.join(",")}`,
+    ...evidence,
+    "",
+  ].join("\n"));
 } finally {
   if (client) client.close();
   chrome.kill("SIGTERM");

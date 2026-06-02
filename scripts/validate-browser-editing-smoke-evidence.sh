@@ -15,6 +15,7 @@ real_undo_ui_log="${repo_root}/logs/browser-real-undo-ui-smoke.txt"
 repeated_undo_ui_log="${repo_root}/logs/browser-repeated-undo-ui-smoke.txt"
 redo_ui_log="${repo_root}/logs/browser-redo-ui-smoke.txt"
 clipboard_log="${repo_root}/logs/browser-clipboard-boundary-smoke.txt"
+runner_log="${repo_root}/logs/browser-runner-smoke.txt"
 session_log="${repo_root}/logs/browser-editing-session-smoke.txt"
 
 test -f "${project_log}"
@@ -29,6 +30,7 @@ test -f "${real_undo_ui_log}"
 test -f "${repeated_undo_ui_log}"
 test -f "${redo_ui_log}"
 test -f "${clipboard_log}"
+test -f "${runner_log}"
 test -f "${session_log}"
 
 rg '"/home/user/projects/demo\.txt"' "${project_log}" >/dev/null
@@ -90,6 +92,11 @@ rg '"editor": "CLIP"' "${clipboard_log}" >/dev/null
 rg '"status": "clipboard unavailable"' "${clipboard_log}" >/dev/null
 rg '"state": "clipboard unavailable"' "${clipboard_log}" >/dev/null
 rg 'clipboard/kill-ring requires GUI clipboard protocol' "${clipboard_log}" >/dev/null
+rg 'SCENARIOS:minibuffer,editing,files,boundaries' "${runner_log}" >/dev/null
+rg 'PASS minibuffer echo boundary' "${runner_log}" >/dev/null
+rg 'PASS real undo repeated undo redo browser hooks' "${runner_log}" >/dev/null
+rg 'PASS project reload file switching textarea autosave' "${runner_log}" >/dev/null
+rg 'PASS process clipboard keyboard quit boundaries' "${runner_log}" >/dev/null
 
 rg 'PASS project file open/edit/save/reload /home/user/projects/demo\.txt' "${session_log}" >/dev/null
 rg 'PASS command dispatch and process boundary /home/user/projects/commands\.txt' "${session_log}" >/dev/null
