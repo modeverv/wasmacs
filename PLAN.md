@@ -1143,6 +1143,10 @@ Validation notes:
   minibuffer support in `files.el`, `window.el`, `simple.el`, `minibuffer.el`,
   `minibuf.c`, `keyboard.c`, and `window.c`, and defines the first
   `host.gui.minibuffer-state` / `host.gui.minibuffer-input` protocol boundary.
+- 2026-06-02: added `scripts/probe-browser-minibuffer-state.mjs` and wired it
+  into `npm test`. It reads inactive Emacs minibuffer state through
+  `wasmacs_eval_string` without entering `read_minibuf`; evidence is in
+  `logs/wasm-browser-minibuffer-state.txt`.
 
 ## Milestone 14: Emacs Fidelity Expansion
 
@@ -1310,9 +1314,9 @@ clipboard-unavailable, and keyboard quit. Runner evidence is recorded in
 `logs/browser-runner-smoke.txt` and checked by the browser editing evidence
 validator. The runner now starts the app server on demand. Continue by either
 retiring the older static browser smoke logs or keeping them as historical
-fixtures, then implement a read-only minibuffer state reporting probe from the
-new `docs/minibuffer-command-loop-plan.md` before enabling real
-`read-from-minibuffer` input. Keep process and pty unavailable.
+fixtures, then design the suspended `read_minibuf` host entrypoint needed to
+enter, pause, resume, and quit a real Emacs minibuffer read. Keep process and
+pty unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior

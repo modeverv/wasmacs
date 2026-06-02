@@ -713,3 +713,7 @@
   `scripts/validate-minibuffer-command-loop-plan.sh`. The plan fixes the next
   real-minibuffer boundary as an Emacs-owned `host.gui.minibuffer-state` /
   `host.gui.minibuffer-input` protocol, not browser-side reader semantics.
+- Added `scripts/probe-browser-minibuffer-state.mjs` and wired it into
+  `npm test`. It reads inactive Emacs minibuffer state through
+  `wasmacs_eval_string` without entering `read_minibuf`; evidence is in
+  `logs/wasm-browser-minibuffer-state.txt`.

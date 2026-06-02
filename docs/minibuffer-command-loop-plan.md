@@ -87,3 +87,21 @@ results outside Emacs.
 
 Until those are addressed, minibuffer-facing commands remain explicit
 unavailable boundaries.
+
+## Current Evidence
+
+`scripts/probe-browser-minibuffer-state.mjs` records the first read-only
+minibuffer state baseline from the browser persistent wasm artifact without
+entering `read_minibuf`:
+
+```text
+active:false
+depth:0
+current-minibuffer:false
+prompt-end:1
+```
+
+Evidence is in `logs/wasm-browser-minibuffer-state.txt`. This proves the
+browser host can read inactive Emacs minibuffer state through
+`wasmacs_eval_string`; it does not yet prove that the host can enter,
+suspend, resume, or complete an active minibuffer read.

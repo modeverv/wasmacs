@@ -3,8 +3,12 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 doc="${repo_root}/docs/minibuffer-command-loop-plan.md"
+probe="${repo_root}/scripts/probe-browser-minibuffer-state.mjs"
+log="${repo_root}/logs/wasm-browser-minibuffer-state.txt"
 
 test -f "${doc}"
+test -f "${probe}"
+test -f "${log}"
 
 rg 'vendor/emacs/lisp/files\.el' "${doc}" >/dev/null
 rg 'vendor/emacs/lisp/window\.el' "${doc}" >/dev/null
@@ -20,6 +24,16 @@ rg 'host\.gui\.minibuffer-state' "${doc}" >/dev/null
 rg 'host\.gui\.minibuffer-input' "${doc}" >/dev/null
 rg 'file candidates' "${doc}" >/dev/null
 rg 'unavailable boundaries' "${doc}" >/dev/null
+rg 'probe-browser-minibuffer-state\.mjs' "${doc}" >/dev/null
+rg 'wasm-browser-minibuffer-state\.txt' "${doc}" >/dev/null
+
+rg 'active-minibuffer-window' "${probe}" >/dev/null
+rg 'minibuffer-depth' "${probe}" >/dev/null
+rg 'minibufferp' "${probe}" >/dev/null
+rg 'minibuffer-prompt-end' "${probe}" >/dev/null
+rg 'active:false' "${log}" >/dev/null
+rg 'depth:0' "${log}" >/dev/null
+rg 'current-minibuffer:false' "${log}" >/dev/null
 
 rg -n 'DEFUN \("active-minibuffer-window"|DEFUN \("minibufferp"|read_minibuf|Vminibuffer_list|minibuf_level' \
   "${repo_root}/vendor/emacs/src/minibuf.c" >/dev/null

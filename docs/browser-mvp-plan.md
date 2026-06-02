@@ -310,7 +310,9 @@ command loop, minibuffer window state, and completion UI. The design note is
 does not own minibuffer input, completion, or history.
 `docs/minibuffer-command-loop-plan.md` defines the next real-minibuffer
 boundary as Emacs-owned `host.gui.minibuffer-state` /
-`host.gui.minibuffer-input` messages.
+`host.gui.minibuffer-input` messages. `scripts/probe-browser-minibuffer-state.mjs`
+now records the inactive Emacs minibuffer baseline in
+`logs/wasm-browser-minibuffer-state.txt`.
 `npm run browser:smoke` provides the first repo-local headless Chrome/CDP
 runner for this surface; it sends `C-x C-f` through the smoke hook and checks
 the explicit minibuffer-unavailable echo. `npm run browser:smoke:editing`
