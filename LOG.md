@@ -704,3 +704,5 @@
 - `npm run browser:smoke:all` now writes `logs/browser-runner-smoke.txt`, and
   `scripts/validate-browser-editing-smoke-evidence.sh` requires that fresh
   runner evidence alongside the older browser smoke logs.
+- `scripts/summarize-browser-editing-session.mjs` now includes the repo-local
+  browser runner all-smoke evidence in `logs/browser-editing-session-smoke.txt`.

@@ -27,6 +27,7 @@ const realUndoUi = await readJson("browser-real-undo-ui-smoke.txt");
 const repeatedUndoUi = await readJson("browser-repeated-undo-ui-smoke.txt");
 const redoUi = await readJson("browser-redo-ui-smoke.txt");
 const clipboard = await readJson("browser-clipboard-boundary-smoke.txt");
+const runner = await readText("browser-runner-smoke.txt");
 
 const session = {
   url: project.url,
@@ -132,6 +133,15 @@ const session = {
         clipboard.afterYankUnavailable.state === "clipboard unavailable" &&
         clipboard.afterYankUnavailable.editor === "CLIP" &&
         clipboard.afterYankUnavailable.output.includes("clipboard/kill-ring requires GUI clipboard protocol"),
+    },
+    {
+      name: "repo-local browser runner all smoke",
+      path: "logs/browser-runner-smoke.txt",
+      ok: runner.includes("SCENARIOS:minibuffer,editing,files,boundaries") &&
+        runner.includes("PASS minibuffer echo boundary") &&
+        runner.includes("PASS real undo repeated undo redo browser hooks") &&
+        runner.includes("PASS project reload file switching textarea autosave") &&
+        runner.includes("PASS process clipboard keyboard quit boundaries"),
     },
   ],
 };

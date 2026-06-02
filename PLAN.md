@@ -1131,6 +1131,9 @@ Validation notes:
   `logs/browser-runner-smoke.txt`, and
   `scripts/validate-browser-editing-smoke-evidence.sh` requires that runner
   evidence alongside the older browser smoke logs.
+- 2026-06-02: `scripts/summarize-browser-editing-session.mjs` now includes
+  the repo-local browser runner all-smoke evidence in
+  `logs/browser-editing-session-smoke.txt`.
 
 ## Milestone 14: Emacs Fidelity Expansion
 

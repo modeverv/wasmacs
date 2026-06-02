@@ -10,3 +10,4 @@ PASS real Emacs undo via browser UI /home/user/projects/real-undo-ui-17803536808
 PASS repeated real Emacs undo via browser UI /home/user/projects/repeated-undo-ui-1780354061526.txt
 PASS real Emacs redo via browser UI /home/user/projects/redo-ui-1780354466973.txt
 PASS clipboard and kill-ring boundary visibility /home/user/projects/clipboard-boundary.txt
+PASS repo-local browser runner all smoke logs/browser-runner-smoke.txt
