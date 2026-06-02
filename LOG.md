@@ -118,6 +118,36 @@
     external ncurses/terminfo assumptions for the fallback host
   - links with `NODERAWFS` for Node smoke access to source-tree files
 - Built `artifacts/emacs-core-spike.wasm` and `artifacts/emacs-core-spike.js`.
+
+## 2026-06-02
+
+### Milestone 14: Minibuffer Suspended Entrypoint
+
+- Added `docs/minibuffer-asyncify-entrypoint-plan.md` to make the next real
+  minibuffer route concrete: a separate Asyncify artifact lane first, then an
+  explicit Emacs input-wait import rather than a browser-side reader.
+- Added `scripts/build-emacs-browser-asyncify-spike.sh`, which builds
+  `artifacts/emacs-browser-asyncify-spike` with `-sASYNCIFY=1` and the same
+  host exports as the persistent browser profile.
+- Added `scripts/validate-minibuffer-asyncify-entrypoint-plan.sh` and wired it
+  into `npm test`.
+- Made `scripts/probe-browser-minibuffer-active-read-boundary.mjs`
+  artifact/log configurable so the same boundary probe can compare persistent
+  and Asyncify profiles.
+- Evidence: the first full Asyncify profile overflows Node's default JS stack
+  during Emacs loadup, but boots with `node --stack-size=65500`. It still
+  preserves the current minibuffer boundary:
+  `BEGIN_READBACK:unavailable:noninteractive-batch`.
+- While running the full regression suite, the matrix probe showed that the
+  `find-file-*` matrix family needs configurable known-blocker timeout
+  treatment. The default is 10s for routine regression, with
+  `WASMACS_MATRIX_KNOWN_BLOCKER_TIMEOUT_MS` available for longer
+  investigation. Passing cases still pass, while crash/hang cases are recorded
+  as `KNOWN_BLOCKER` instead of stopping the suite indefinitely.
+- Added the same configurable known-blocker timeout shape to
+  `scripts/probe-browser-persistent-buffer-cross-eval.mjs` for the
+  file-visiting cross-eval cases, using
+  `WASMACS_CROSS_EVAL_KNOWN_BLOCKER_TIMEOUT_MS` for longer investigation.
 - Node smoke with source-tree `EMACSDATA` and `EMACSLOADPATH` starts `temacs`
   and begins loading `loadup.el`, then fails in standard Lisp loadup with
   `invalid-function ("")` and `Wrong type argument: listp, 11185520`.

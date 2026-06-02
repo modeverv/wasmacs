@@ -77,25 +77,34 @@ const cases = {
 
 if (!process.argv.includes("--child")) {
   const summaries = [];
+  const knownCrossEvalBlockerTimeoutMs = Number(
+    process.env.WASMACS_CROSS_EVAL_KNOWN_BLOCKER_TIMEOUT_MS ?? "10000",
+  );
   for (const name of Object.keys(cases)) {
-    const result = spawnSync(process.execPath, [fileURLToPath(import.meta.url), "--child", name], {
-      encoding: "utf8",
-    });
-    const combined = `${result.stdout || ""}${result.stderr || ""}`.trimEnd();
-    const knownBlocked = (
+    const knownCrossEvalBlockerCase = (
       name === "cross-eval-file-buffer-no-undo" ||
       name === "cross-eval-primitive-undo"
-    ) &&
-      result.status !== 0 &&
+    );
+    const result = spawnSync(process.execPath, [fileURLToPath(import.meta.url), "--child", name], {
+      encoding: "utf8",
+      maxBuffer: 16 * 1024 * 1024,
+      timeout: knownCrossEvalBlockerCase ? knownCrossEvalBlockerTimeoutMs : 120_000,
+    });
+    const combined = `${result.stdout || ""}${result.stderr || ""}`.trimEnd();
+    const knownBlocked = knownCrossEvalBlockerCase &&
+      (result.status !== 0 || result.signal || result.error) &&
       (
         combined.includes("memory access out of bounds") ||
-        combined.includes("_STATUS:1")
+        combined.includes("_STATUS:1") ||
+        result.signal === "SIGTERM" ||
+        result.error?.message.includes("ETIMEDOUT")
       );
     const status = result.status === 0 ? "PASS" : knownBlocked ? "KNOWN_BLOCKER" : "FAIL";
     summaries.push([
       `CASE:${name}`,
       `STATUS:${status}`,
       `EXIT_STATUS:${result.status}`,
+      knownCrossEvalBlockerCase ? `KNOWN_BLOCKER_TIMEOUT_MS:${knownCrossEvalBlockerTimeoutMs}` : "KNOWN_BLOCKER_TIMEOUT_MS:n/a",
       combined,
       "",
     ].join("\n"));

@@ -1157,10 +1157,11 @@ Validation notes:
   `scripts/probe-browser-minibuffer-state-export.mjs`. Evidence in
   `logs/wasm-browser-minibuffer-state-export.txt` proves inactive minibuffer
   state can be read from C without `wasmacs_eval_string`.
-- 2026-06-02: shortened only the high-level known-blocker cases in
-  `scripts/probe-browser-persistent-buffer-matrix.mjs` to a 30s timeout and
-  records timeout as `KNOWN_BLOCKER`. This keeps the full `npm test` loop
-  usable while preserving the blocker signal.
+- 2026-06-02: shortened the `find-file-*` matrix known-blocker family in
+  `scripts/probe-browser-persistent-buffer-matrix.mjs` to a configurable
+  timeout, defaulting to 10s, and records timeout as `KNOWN_BLOCKER`. This
+  keeps the full `npm test` loop usable while preserving the blocker signal;
+  set `WASMACS_MATRIX_KNOWN_BLOCKER_TIMEOUT_MS` for longer investigation.
 - 2026-06-02: full `npm test` passed after the minibuffer state export and
   matrix timeout changes.
 - 2026-06-02: added copied-source `wasmacs_command_state` and
@@ -1169,6 +1170,18 @@ Validation notes:
   `unavailable:noninteractive-batch`, proving the current `--batch` profile
   cannot enter active `read_minibuf` and must move to an interactive/suspended
   command entrypoint.
+- 2026-06-02: added `docs/minibuffer-asyncify-entrypoint-plan.md`,
+  `scripts/build-emacs-browser-asyncify-spike.sh`, and
+  `scripts/validate-minibuffer-asyncify-entrypoint-plan.sh`. The separate
+  `artifacts/emacs-browser-asyncify-spike` lane builds with `-sASYNCIFY=1`
+  without replacing the persistent baseline. Evidence shows the untrimmed
+  Asyncify profile needs `node --stack-size=65500` for batch loadup, then
+  boots and preserves the current active-read boundary:
+  `unavailable:noninteractive-batch`.
+- 2026-06-02: added configurable 10s known-blocker timeout handling to
+  `scripts/probe-browser-persistent-buffer-cross-eval.mjs` for the
+  file-visiting cross-eval cases, matching the matrix probe's routine
+  regression behavior while keeping the blocker visible in logs.
 
 ## Milestone 14: Emacs Fidelity Expansion
 
@@ -1337,10 +1350,13 @@ clipboard-unavailable, and keyboard quit. Runner evidence is recorded in
 validator. The runner now starts the app server on demand. Continue by either
 retiring the older static browser smoke logs or keeping them as historical
 fixtures, then implement the interactive/suspended command entrypoint described
-in `docs/minibuffer-suspended-read-plan.md`: move beyond the current
-`unavailable:noninteractive-batch` probe, start a real `read-from-minibuffer`,
-observe `active:true` / `depth:1`, reject reentrant eval as
-`unavailable:busy`, and keep process and pty unavailable.
+in `docs/minibuffer-suspended-read-plan.md` and
+`docs/minibuffer-asyncify-entrypoint-plan.md`: add the first explicit
+`wasmacs_host_wait_for_input` import near the Emacs input wait path, narrow
+Asyncify instrumentation around that waitpoint, move beyond the current
+`unavailable:noninteractive-batch` probe, start a real
+`read-from-minibuffer`, observe `active:true` / `depth:1`, reject reentrant
+eval as `unavailable:busy`, and keep process and pty unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior

@@ -4,8 +4,8 @@ import { performance } from "node:perf_hooks";
 import vm from "node:vm";
 
 const repoRoot = new URL("..", import.meta.url).pathname;
-const artifactDir = `${repoRoot}/artifacts/emacs-browser-persistent-spike`;
-const logPath = `${repoRoot}/logs/wasm-browser-minibuffer-active-read-boundary.txt`;
+const artifactDir = process.env.WASMACS_ARTIFACT_DIR ?? `${repoRoot}/artifacts/emacs-browser-persistent-spike`;
+const logPath = process.env.WASMACS_LOG_PATH ?? `${repoRoot}/logs/wasm-browser-minibuffer-active-read-boundary.txt`;
 const require = createRequire(import.meta.url);
 
 const code = await readFile(`${artifactDir}/temacs`, "utf8");

@@ -1,8 +1,3 @@
-CASE:temp-buffer-write
-STATUS:PASS
-EXIT_STATUS:0
-KNOWN_BLOCKER_TIMEOUT_MS:n/a
-SPAWN_ERROR:absent
 READY
 ERR:warning: unsupported syscall: __syscall_prlimit64
 ERR:Warning: arch-dependent data dir '/usr/local/libexec/emacs/30.2/wasm32-unknown-linux-gnu/': No such file or directory
@@ -127,70 +122,21 @@ ERR:Making lexical-binding buffer-local while locally let-bound!
 OUT:boot
 ERR:program exited (with status: 0), but keepRuntimeAlive() is set (counter=0) due to an async operation, so halting execution but not exiting the runtime or preventing further async execution (you can use emscripten_force_exit, if you want to force a true shutdown)
 BOOT_EXIT:0
-EVAL_STATUS:0
-READBACK:/home/user/matrix-temp.txt
-temp
+INITIAL_COMMAND_STATE:idle
+INITIAL_MINIBUFFER_STATE:active:false
+depth:0
+prompt:
+input:
+point:148
+current-minibuffer:false
 
-CASE:find-file-write-undo-disabled
-STATUS:KNOWN_BLOCKER
-EXIT_STATUS:null
-KNOWN_BLOCKER_TIMEOUT_MS:10000
-SPAWN_ERROR:spawnSync /Users/seijiro/.local/share/mise/installs/node/24.15.0/bin/node ETIMEDOUT
-
-
-CASE:find-file-record-undo-no-undo
-STATUS:KNOWN_BLOCKER
-EXIT_STATUS:null
-KNOWN_BLOCKER_TIMEOUT_MS:10000
-SPAWN_ERROR:spawnSync /Users/seijiro/.local/share/mise/installs/node/24.15.0/bin/node ETIMEDOUT
-
-
-CASE:find-file-record-undo-no-intervals
-STATUS:KNOWN_BLOCKER
-EXIT_STATUS:null
-KNOWN_BLOCKER_TIMEOUT_MS:10000
-SPAWN_ERROR:spawnSync /Users/seijiro/.local/share/mise/installs/node/24.15.0/bin/node ETIMEDOUT
-
-
-CASE:find-file-record-undo-and-undo
-STATUS:KNOWN_BLOCKER
-EXIT_STATUS:null
-KNOWN_BLOCKER_TIMEOUT_MS:10000
-SPAWN_ERROR:spawnSync /Users/seijiro/.local/share/mise/installs/node/24.15.0/bin/node ETIMEDOUT
-
-
-CASE:find-file-record-undo-and-undo-gc-high
-STATUS:KNOWN_BLOCKER
-EXIT_STATUS:null
-KNOWN_BLOCKER_TIMEOUT_MS:10000
-SPAWN_ERROR:spawnSync /Users/seijiro/.local/share/mise/installs/node/24.15.0/bin/node ETIMEDOUT
-
-
-CASE:find-file-record-undo-and-primitive-undo
-STATUS:KNOWN_BLOCKER
-EXIT_STATUS:null
-KNOWN_BLOCKER_TIMEOUT_MS:10000
-SPAWN_ERROR:spawnSync /Users/seijiro/.local/share/mise/installs/node/24.15.0/bin/node ETIMEDOUT
-
-
-CASE:find-file-record-undo-start-undo-more
-STATUS:KNOWN_BLOCKER
-EXIT_STATUS:null
-KNOWN_BLOCKER_TIMEOUT_MS:10000
-SPAWN_ERROR:spawnSync /Users/seijiro/.local/share/mise/installs/node/24.15.0/bin/node ETIMEDOUT
-
-
-CASE:find-file-record-undo-with-inhibit-message
-STATUS:KNOWN_BLOCKER
-EXIT_STATUS:null
-KNOWN_BLOCKER_TIMEOUT_MS:10000
-SPAWN_ERROR:spawnSync /Users/seijiro/.local/share/mise/installs/node/24.15.0/bin/node ETIMEDOUT
-
-
-CASE:find-file-record-undo-and-undo-no-intervals
-STATUS:KNOWN_BLOCKER
-EXIT_STATUS:null
-KNOWN_BLOCKER_TIMEOUT_MS:10000
-SPAWN_ERROR:spawnSync /Users/seijiro/.local/share/mise/installs/node/24.15.0/bin/node ETIMEDOUT
-
+BEGIN_STATUS:3
+BEGIN_READBACK:unavailable:noninteractive-batch
+AFTER_COMMAND_STATE:idle
+AFTER_MINIBUFFER_STATE:active:false
+depth:0
+prompt:
+input:
+point:148
+current-minibuffer:false
 

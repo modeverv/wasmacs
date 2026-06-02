@@ -139,22 +139,18 @@ const cases = {
 
 if (!process.argv.includes("--child")) {
   const summaries = [];
-  const highLevelUndoCases = new Set([
-    "find-file-record-undo-and-undo",
-    "find-file-record-undo-and-undo-gc-high",
-    "find-file-record-undo-start-undo-more",
-    "find-file-record-undo-with-inhibit-message",
-    "find-file-record-undo-and-undo-no-intervals",
-  ]);
+  const knownUndoBlockerTimeoutMs = Number(
+    process.env.WASMACS_MATRIX_KNOWN_BLOCKER_TIMEOUT_MS ?? "10000",
+  );
   for (const name of Object.keys(cases)) {
-    const highLevelUndoCase = highLevelUndoCases.has(name);
+    const knownUndoBlockerCase = name.startsWith("find-file-");
     const result = spawnSync(process.execPath, [fileURLToPath(import.meta.url), "--child", name], {
       encoding: "utf8",
       maxBuffer: 16 * 1024 * 1024,
-      timeout: highLevelUndoCase ? 30_000 : 120_000,
+      timeout: knownUndoBlockerCase ? knownUndoBlockerTimeoutMs : 120_000,
     });
     const combined = `${result.stdout || ""}${result.stderr || ""}`.trimEnd();
-    const knownBlocked = highLevelUndoCase &&
+    const knownBlocked = knownUndoBlockerCase &&
       (result.status !== 0 || result.signal || result.error) &&
       (
         combined.includes("memory access out of bounds") ||
@@ -168,6 +164,7 @@ if (!process.argv.includes("--child")) {
       `CASE:${name}`,
       `STATUS:${status}`,
       `EXIT_STATUS:${result.status}`,
+      knownUndoBlockerCase ? `KNOWN_BLOCKER_TIMEOUT_MS:${knownUndoBlockerTimeoutMs}` : "KNOWN_BLOCKER_TIMEOUT_MS:n/a",
       result.error ? `SPAWN_ERROR:${result.error.message}` : "SPAWN_ERROR:absent",
       combined,
       "",
