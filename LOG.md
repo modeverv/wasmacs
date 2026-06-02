@@ -695,3 +695,9 @@
 - Expanded the runner with `npm run browser:smoke:editing`, which runs the
   minibuffer echo check plus the existing real undo, repeated undo, and redo UI
   smoke hooks through the same headless Chrome/CDP path.
+- Expanded `scripts/run-browser-smoke.mjs` with `files` and `boundaries`
+  scenarios and added `npm run browser:smoke:all`. The all smoke passed and
+  now covers minibuffer echo, real undo/repeated undo/redo, project
+  open/reload, file switching, textarea autosave, process-unavailable recovery,
+  clipboard-unavailable, and keyboard quit through the repo-local headless
+  Chrome/CDP runner.

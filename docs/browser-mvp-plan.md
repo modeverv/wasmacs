@@ -312,6 +312,9 @@ does not own minibuffer input, completion, or history.
 runner for this surface; it sends `C-x C-f` through the smoke hook and checks
 the explicit minibuffer-unavailable echo. `npm run browser:smoke:editing`
 extends that runner to the real undo, repeated undo, and redo UI smoke hooks.
+`npm run browser:smoke:all` extends it again to project open/reload, file
+switching, textarea autosave, process-unavailable recovery,
+clipboard-unavailable, and keyboard quit.
 
 The next shared dependency for undo, kill-ring, and minibuffer fidelity is a
 stable persistent Emacs buffer path.

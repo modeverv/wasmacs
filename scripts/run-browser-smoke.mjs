@@ -91,6 +91,16 @@ function assertPassed(name, result) {
   }
 }
 
+function assertIncludes(name, value, needle) {
+  if (!String(value).includes(needle)) {
+    throw new Error(`${name} expected ${JSON.stringify(value)} to include ${JSON.stringify(needle)}`);
+  }
+}
+
+async function smokeState(client, sessionId) {
+  return evaluate(client, sessionId, "window.__wasmacsSmoke.state()");
+}
+
 const userDataDir = await mkdtemp(join(tmpdir(), "wasmacs-browser-smoke-"));
 const chrome = spawn(chromePath, [
   "--headless=new",
@@ -143,6 +153,65 @@ try {
       await evaluate(client, sessionId, "window.__wasmacsSmoke.redoSmoke()", 300_000),
     );
     console.log("browser smoke scenario passed: editing");
+  }
+
+  if (scenarios.includes("files")) {
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.open('/home/user/projects/demo.txt')", 300_000);
+    const project = await evaluate(client, sessionId, "window.__wasmacsSmoke.ensureMarker()", 300_000);
+    assertIncludes("project file marker", project.text, "Saved by Emacs core.");
+    const reloaded = await evaluate(client, sessionId, "window.__wasmacsSmoke.reload()", 300_000);
+    assertIncludes("project file reload", reloaded.text, "Saved by Emacs core.");
+
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.resetFile('/home/user/projects/switch-a.txt', '')", 300_000);
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ key: 'A' }); true");
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.waitForIdle()", 300_000);
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.open('/home/user/projects/switch-b.txt')", 300_000);
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ key: 'B' }); true");
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.waitForIdle()", 300_000);
+    const switchedBack = await evaluate(client, sessionId, "window.__wasmacsSmoke.switchBuffer('/home/user/projects/switch-a.txt')", 300_000);
+    const files = await evaluate(client, sessionId, "window.__wasmacsSmoke.files()", 30_000);
+    assertIncludes("file switch text", switchedBack.text, "A");
+    if (!files.some((entry) => entry.text === "~/projects/switch-a.txt" && entry.current)) {
+      throw new Error(`expected switch-a current file entry, got ${JSON.stringify(files)}`);
+    }
+
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.resetFile('/home/user/projects/autosave-a.txt', '')", 300_000);
+    const draft = await evaluate(client, sessionId, "window.__wasmacsSmoke.setTextarea('TEXTAREA-DRAFT')", 30_000);
+    if (draft.state !== "modified") throw new Error(`expected textarea modified state, got ${JSON.stringify(draft)}`);
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.open('/home/user/projects/autosave-b.txt')", 300_000);
+    const afterReturn = await evaluate(client, sessionId, "window.__wasmacsSmoke.open('/home/user/projects/autosave-a.txt')", 300_000);
+    if (afterReturn.text !== "TEXTAREA-DRAFT") {
+      throw new Error(`expected textarea draft to survive file switch, got ${JSON.stringify(afterReturn)}`);
+    }
+    console.log("browser smoke scenario passed: files");
+  }
+
+  if (scenarios.includes("boundaries")) {
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.resetFile('/home/user/projects/process-boundary.txt', '')", 300_000);
+    const processState = await evaluate(client, sessionId, "window.__wasmacsSmoke.processProbe()", 300_000);
+    if (processState.status !== "process unavailable" || processState.state !== "process unavailable") {
+      throw new Error(`expected process unavailable, got ${JSON.stringify(processState)}`);
+    }
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ key: 'R' }); true");
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.waitForIdle()", 300_000);
+    assertIncludes("worker recovery after process unavailable", (await smokeState(client, sessionId)).text, "R");
+
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.resetFile('/home/user/projects/clipboard-boundary.txt', '')", 300_000);
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ key: 'C' }); true");
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.waitForIdle()", 300_000);
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ ctrlKey: true, key: 'y' }); true");
+    await waitFor(client, sessionId, "window.__wasmacsSmoke.state().status === 'clipboard unavailable'", 300_000);
+    const clipboardState = await smokeState(client, sessionId);
+    if (clipboardState.state !== "clipboard unavailable" || (clipboardState.text !== "C" && clipboardState.text !== "C\n")) {
+      throw new Error(`expected clipboard unavailable without text loss, got ${JSON.stringify(clipboardState)}`);
+    }
+
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ ctrlKey: true, key: 'g' }); true");
+    const quitState = await smokeState(client, sessionId);
+    if (quitState.status !== "keyboard quit") {
+      throw new Error(`expected keyboard quit, got ${JSON.stringify(quitState)}`);
+    }
+    console.log("browser smoke scenario passed: boundaries");
   }
 
   console.log(`browser smoke passed: ${scenarios.join(",")} ${appUrl}`);

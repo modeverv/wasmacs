@@ -105,6 +105,7 @@ rg 'importScripts\("/artifacts/emacs-browser-persistent-spike/temacs"\)' "${repo
 rg 'basename\(filePath\) === "temacs"' "${repo_root}/scripts/serve-app.mjs" >/dev/null
 rg 'run-browser-smoke\.mjs' "${repo_root}/package.json" >/dev/null
 rg 'browser:smoke:editing' "${repo_root}/package.json" >/dev/null
+rg 'browser:smoke:all' "${repo_root}/package.json" >/dev/null
 rg '"dev": "node scripts/serve-app\.mjs"' "${repo_root}/package.json" >/dev/null
 
 echo "browser worker app validation passed"

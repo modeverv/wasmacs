@@ -1121,6 +1121,12 @@ Validation notes:
 - 2026-06-02: expanded the runner with `npm run browser:smoke:editing`, which
   runs the minibuffer echo check plus the existing real undo, repeated undo,
   and redo browser smoke hooks through the same headless Chrome/CDP path.
+- 2026-06-02: expanded `scripts/run-browser-smoke.mjs` with `files` and
+  `boundaries` scenarios and added `npm run browser:smoke:all`. The all smoke
+  now covers minibuffer echo, real undo/repeated undo/redo, project open/reload,
+  file switching, textarea autosave before file switch, process-unavailable
+  recovery, clipboard-unavailable, and keyboard quit through the repo-local
+  headless Chrome/CDP runner.
 
 ## Milestone 14: Emacs Fidelity Expansion
 
@@ -1281,12 +1287,14 @@ against the same live file-visiting buffer. File switching now has
 worker-shaped coverage in `logs/wasm-browser-worker-file-switch-undo.txt`: two
 live file-visiting buffers retain separate undo/redo state across `find-file`
 switches. The repo-local browser runner now exists as
-`npm run browser:smoke`, and `npm run browser:smoke:editing` now covers the
-minibuffer echo check plus real undo, repeated undo, and redo UI smoke hooks.
-Continue by moving the remaining older browser smoke evidence flows onto this
-runner, then grow the minibuffer echo slice toward real Emacs minibuffer state
-only after the command-loop/window state boundary is designed. Keep process and
-pty unavailable.
+`npm run browser:smoke`, and `npm run browser:smoke:all` now covers the
+minibuffer echo check, real undo/repeated undo/redo UI smoke hooks, project
+open/reload, file switching, textarea autosave, process-unavailable recovery,
+clipboard-unavailable, and keyboard quit. Continue by deciding whether to
+replace the older static browser smoke logs with runner-generated logs, then
+grow the minibuffer echo slice toward real Emacs minibuffer state only after
+the command-loop/window state boundary is designed. Keep process and pty
+unavailable.
 
 Do not fake Emacs-owned editor semantics in the browser UI. In particular,
 real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior

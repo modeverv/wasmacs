@@ -406,6 +406,41 @@ window.__wasmacsSmoke = {
     renderUserFileList();
     return this.state();
   },
+  async switchBuffer(path) {
+    await switchBuffer(path);
+    return this.state();
+  },
+  setTextarea(text) {
+    editor.value = text;
+    setBufferState(editor.value === savedText ? "saved" : "modified");
+    return this.state();
+  },
+  save() {
+    saveBuffer();
+    return this.state();
+  },
+  async reload() {
+    userImage = await loadUserImage();
+    await loadBuffer(bufferPath);
+    return this.state();
+  },
+  async ensureMarker() {
+    enqueueBufferCommand();
+    await this.waitForIdle();
+    return this.state();
+  },
+  async processProbe() {
+    enqueueBufferCommand({ type: "process-probe", path: bufferPath, pointIndex });
+    await this.waitForIdle();
+    return this.state();
+  },
+  files() {
+    return Array.from(fileList.querySelectorAll("button")).map((button) => ({
+      current: button.getAttribute("aria-current") === "true",
+      path: button.dataset.path,
+      text: button.textContent,
+    }));
+  },
   keydown(event) {
     handleFrameKey({
       altKey: Boolean(event?.altKey),
