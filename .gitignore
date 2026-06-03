@@ -93,3 +93,6 @@ loaddefs.el
 # Do not ignore the Emacs source submodule itself.
 !vendor/
 !vendor/emacs/
+
+.claude
+
