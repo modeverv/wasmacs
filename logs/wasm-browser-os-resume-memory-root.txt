@@ -1,0 +1,56 @@
+CASE:os-resume-memory-root
+BOOT_EXIT:0
+READY
+ERR:warning: unsupported syscall: __syscall_prlimit64
+ERR:warning: unsupported syscall: __syscall_prlimit64
+ERR:warning: unsupported syscall: __syscall_prlimit64
+ERR:program exited (with status: 0), but keepRuntimeAlive() is set (counter=0) due to an async operation, so halting execution but not exiting the runtime or preventing further async execution (you can use emscripten_force_exit, if you want to force a true shutdown)
+CHECKPOINT:after-boot
+CHECKPOINT:before-asyncify-wait
+CHECKPOINT:pending-input
+CHECKPOINT:before-input-injection
+CHECKPOINT:after-input-injection-before-resume
+CHECKPOINT:after-resume
+CHECKPOINT:after-command-complete
+CHECKPOINT:after-explicit-gc
+EXIT_STATUS:0
+SIGNAL:null
+TIMEOUT:false
+STDOUT_BEGIN
+BOOT_EXIT:0
+READY
+ERR:warning: unsupported syscall: __syscall_prlimit64
+ERR:warning: unsupported syscall: __syscall_prlimit64
+ERR:warning: unsupported syscall: __syscall_prlimit64
+ERR:program exited (with status: 0), but keepRuntimeAlive() is set (counter=0) due to an async operation, so halting execution but not exiting the runtime or preventing further async execution (you can use emscripten_force_exit, if you want to force a true shutdown)
+CHECKPOINT:after-boot
+CHECKPOINT:before-asyncify-wait
+CHECKPOINT:pending-input
+CHECKPOINT:before-input-injection
+CHECKPOINT:after-input-injection-before-resume
+CHECKPOINT:after-resume
+CHECKPOINT:after-command-complete
+CHECKPOINT:after-explicit-gc
+STDOUT_END
+STDERR_BEGIN
+
+STDERR_END
+SUMMARY_BEGIN
+{
+  "status": "PASS",
+  "exitStatus": 0,
+  "signal": null,
+  "checkpoints": [
+    "after-boot",
+    "before-asyncify-wait",
+    "pending-input",
+    "before-input-injection",
+    "after-input-injection-before-resume",
+    "after-resume",
+    "after-command-complete",
+    "after-explicit-gc"
+  ],
+  "snapshotCount": 8,
+  "lastCheckpoint": "after-explicit-gc"
+}
+SUMMARY_END

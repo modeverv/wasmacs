@@ -23,19 +23,299 @@ mergeInto(LibraryManager.library, {
   ].join("\n"),
   $wasmacs_asyncify_env: {},
 
-  wasmacs_host_wait_for_input__deps: ["$wasmacs_asyncify_env"],
-  wasmacs_host_wait_for_input: async function () {
+  $wasmacs_terminal__deps: ["$TTY", "$FS", "$wasmacs_asyncify_env"],
+  $wasmacs_terminal__postset: [
+    "globalThis.__wasmacsTerminalInputBytes = globalThis.__wasmacsTerminalInputBytes || [];",
+    "globalThis.__wasmacsTerminalOutputBytes = globalThis.__wasmacsTerminalOutputBytes || [];",
+    "globalThis.__wasmacsSchedulerEvents = globalThis.__wasmacsSchedulerEvents || [];",
+    "globalThis.__wasmacsSchedulerEventSeq = globalThis.__wasmacsSchedulerEventSeq || 0;",
+    "globalThis.__wasmacsPromiseSeq = globalThis.__wasmacsPromiseSeq || 0;",
+    "globalThis.__wasmacsWaitPromiseState = globalThis.__wasmacsWaitPromiseState || {};",
+    "globalThis.__wasmacsWaitImportMode = globalThis.__wasmacsWaitImportMode || (typeof process !== 'undefined' && process.env && process.env.WASMACS_WAIT_IMPORT_MODE) || 'async-wrapper';",
+    "globalThis.__wasmacsTerminalRows = globalThis.__wasmacsTerminalRows || 24;",
+    "globalThis.__wasmacsTerminalCols = globalThis.__wasmacsTerminalCols || 80;",
+    "globalThis.__wasmacsQueueTerminalInput = function (bytes) {",
+    "  var queue = globalThis.__wasmacsTerminalInputBytes;",
+    "  if (typeof bytes === 'string') {",
+    "    for (var i = 0; i < bytes.length; i++) queue.push(bytes.charCodeAt(i) & 255);",
+    "    return;",
+    "  }",
+    "  if (bytes && typeof bytes.length === 'number') {",
+    "    for (var j = 0; j < bytes.length; j++) queue.push(bytes[j] & 255);",
+    "  }",
+    "};",
+    "globalThis.__wasmacsRecordSchedulerCheckpoint = function (code, details) {",
+    "  var labels = {",
+    "    1: 'js-import-wait-enter',",
+    "    2: 'js-import-resolver-called',",
+    "    3: 'js-import-resolve-after',",
+    "    4: 'js-import-promise-then',",
+    "    5: 'js-import-promise-created',",
+    "    6: 'js-import-promise-return-expression',",
+    "    7: 'js-import-resolver-bound',",
+    "    8: 'js-import-handleasync-enter',",
+    "    9: 'js-import-handleasync-promise-created',",
+    "    13: 'js-import-handleasync-returning',",
+    "    10: 'js-terminal-read-byte-enter',",
+    "    11: 'js-terminal-read-byte-dequeue',",
+    "    12: 'js-terminal-read-byte-empty',",
+    "    100: 'c-sysdep-before-wait',",
+    "    101: 'c-sysdep-after-wait-return',",
+    "    102: 'c-sysdep-byte-dequeued',",
+    "    200: 'c-keyboard-read-char-reached',",
+    "    201: 'c-keyboard-before-wait-import',",
+    "    202: 'c-keyboard-after-wait-return',",
+    "  };",
+    "  var event = {",
+    "    seq: ++globalThis.__wasmacsSchedulerEventSeq,",
+    "    code: code,",
+    "    label: labels[code] || ('checkpoint-' + code),",
+    "    waitActive: !!globalThis.__wasmacsHostWaitForInputPending,",
+    "    waitCount: globalThis.__wasmacsHostWaitForInputCount || 0,",
+    "    resolverPresent: typeof globalThis.__wasmacsResolveHostInputWait === 'function',",
+    "    queuedBytes: (globalThis.__wasmacsTerminalInputBytes || []).length,",
+    "    queuedPreview: (globalThis.__wasmacsTerminalInputBytes || []).slice(0, 16),",
+    "    outputByteCount: (globalThis.__wasmacsTerminalOutputBytes || []).length,",
+    "    details: details || {},",
+    "  };",
+    "  globalThis.__wasmacsSchedulerEvents.push(event);",
+    "  if (globalThis.__wasmacsSchedulerEvents.length > 400) {",
+    "    globalThis.__wasmacsSchedulerEvents = globalThis.__wasmacsSchedulerEvents.slice(-400);",
+    "  }",
+    "};",
+    "TTY.default_tty_ops.get_char = function () {",
+    "  var queue = globalThis.__wasmacsTerminalInputBytes || [];",
+    "  return queue.length ? queue.shift() : undefined;",
+    "};",
+    "TTY.default_tty_ops.put_char = function (tty, val) {",
+    "  if (val === null) return;",
+    "  val = val & 255;",
+    "  globalThis.__wasmacsTerminalOutputBytes.push(val);",
+    "  if (typeof self !== 'undefined' && typeof self.postMessage === 'function') {",
+    "    self.postMessage({ type: 'terminal-output', fd: 1, bytes: [val] });",
+    "  }",
+    "};",
+    "TTY.default_tty_ops.fsync = function () {};",
+    "TTY.default_tty_ops.ioctl_tcgets = function () {",
+    "  return globalThis.__wasmacsTerminalTermios || {",
+    "    c_iflag: 0,",
+    "    c_oflag: 0,",
+    "    c_cflag: 2237,",
+    "    c_lflag: 0,",
+    "    c_cc: [3, 28, 127, 21, 4, 0, 1, 0, 17, 19, 26, 0, 18, 15, 23, 22, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],",
+    "  };",
+    "};",
+    "TTY.default_tty_ops.ioctl_tcsets = function (tty, optional_actions, data) {",
+    "  globalThis.__wasmacsTerminalTermios = data;",
+    "  return 0;",
+    "};",
+    "TTY.default_tty_ops.ioctl_tiocgwinsz = function () {",
+    "  return [globalThis.__wasmacsTerminalRows || 24, globalThis.__wasmacsTerminalCols || 80];",
+    "};",
+    "TTY.default_tty1_ops.put_char = function (tty, val) {",
+    "  if (val === null) return;",
+    "  val = val & 255;",
+    "  globalThis.__wasmacsTerminalOutputBytes.push(val);",
+    "  if (typeof self !== 'undefined' && typeof self.postMessage === 'function') {",
+    "    self.postMessage({ type: 'terminal-output', fd: 2, bytes: [val] });",
+    "  }",
+    "};",
+    "TTY.default_tty1_ops.fsync = function () {};",
+    "TTY.stream_ops.ioctl = function (stream, op, argp) {",
+    "  if (op === {{{ cDefs.FIONREAD }}}) {",
+    "    {{{ makeSetValue('argp', 0, '(globalThis.__wasmacsTerminalInputBytes || []).length', 'i32') }}};",
+    "    return 0;",
+    "  }",
+    "  return 0;",
+    "};",
+  ].join("\n"),
+  $wasmacs_terminal: {},
+
+  wasmacs_host_terminal_input_available__deps: ["$wasmacs_terminal"],
+  wasmacs_host_terminal_input_available: function () {
+    return (globalThis.__wasmacsTerminalInputBytes || []).length;
+  },
+
+  wasmacs_host_terminal_read_byte__deps: ["$wasmacs_terminal"],
+  wasmacs_host_terminal_read_byte: function () {
+    globalThis.__wasmacsRecordSchedulerCheckpoint &&
+      globalThis.__wasmacsRecordSchedulerCheckpoint(10);
+    var queue = globalThis.__wasmacsTerminalInputBytes || [];
+    if (queue.length) {
+      var byte = queue.shift();
+      globalThis.__wasmacsRecordSchedulerCheckpoint &&
+        globalThis.__wasmacsRecordSchedulerCheckpoint(11, { byte: byte });
+      return byte;
+    }
+    globalThis.__wasmacsRecordSchedulerCheckpoint &&
+      globalThis.__wasmacsRecordSchedulerCheckpoint(12);
+    return -1;
+  },
+
+  wasmacs_host_is_tty_fd__deps: ["$FS", "$wasmacs_terminal"],
+  wasmacs_host_is_tty_fd: function (fd) {
+    try {
+      var stream = FS.getStream(fd);
+      return stream && stream.tty ? 1 : 0;
+    } catch (e) {
+      return 0;
+    }
+  },
+
+  wasmacs_host_wait_for_input__deps: ["$wasmacs_asyncify_env", "$wasmacs_terminal"],
+  wasmacs_host_wait_for_input: function () {
+    var mode =
+      globalThis.__wasmacsWaitImportMode ||
+      (typeof process !== "undefined" && process.env && process.env.WASMACS_WAIT_IMPORT_MODE) ||
+      "async-wrapper";
     globalThis.__wasmacsHostWaitForInputCount =
       (globalThis.__wasmacsHostWaitForInputCount || 0) + 1;
+    var waitId = globalThis.__wasmacsHostWaitForInputCount;
     globalThis.__wasmacsHostWaitForInputPending = true;
+    globalThis.__wasmacsRecordSchedulerCheckpoint &&
+      globalThis.__wasmacsRecordSchedulerCheckpoint(1, { waitId: waitId, mode: mode });
 
-    return new Promise((resolve) => {
+    if (mode === "handleAsync") {
+      return Asyncify.handleAsync(function () {
+        globalThis.__wasmacsRecordSchedulerCheckpoint &&
+          globalThis.__wasmacsRecordSchedulerCheckpoint(8, { waitId: waitId, mode: mode });
+
+        var createdPromiseId = ++globalThis.__wasmacsPromiseSeq;
+        globalThis.__wasmacsWaitPromiseState[waitId] = {
+          waitId: waitId,
+          mode: mode,
+          createdPromiseId: createdPromiseId,
+          resolverPromiseId: createdPromiseId,
+          resolverCalled: false,
+          resolveAfter: false,
+          thenReached: false,
+          asyncifyHandleAsyncOwnsSuspend: true,
+          actualReturnedPromiseId: "asyncify-handleAsync",
+        };
+        globalThis.__wasmacsRecordSchedulerCheckpoint &&
+          globalThis.__wasmacsRecordSchedulerCheckpoint(9, {
+            waitId: waitId,
+            mode: mode,
+            createdPromiseId: createdPromiseId,
+          });
+
+        var promise = new Promise((resolve) => {
+          // Expose the resolver so the worker/probe can call it when a key is ready.
+          globalThis.__wasmacsResolveHostInputWait = function () {
+            globalThis.__wasmacsWaitPromiseState[waitId].resolverCalled = true;
+            globalThis.__wasmacsRecordSchedulerCheckpoint &&
+              globalThis.__wasmacsRecordSchedulerCheckpoint(2, {
+                waitId: waitId,
+                mode: mode,
+                createdPromiseId: createdPromiseId,
+                resolverPromiseId: createdPromiseId,
+              });
+            globalThis.__wasmacsHostWaitForInputPending = false;
+            globalThis.__wasmacsResolveHostInputWait    = undefined;
+            resolve(0);
+            globalThis.__wasmacsWaitPromiseState[waitId].resolveAfter = true;
+            globalThis.__wasmacsRecordSchedulerCheckpoint &&
+              globalThis.__wasmacsRecordSchedulerCheckpoint(3, {
+                waitId: waitId,
+                mode: mode,
+                createdPromiseId: createdPromiseId,
+              });
+          };
+          globalThis.__wasmacsRecordSchedulerCheckpoint &&
+            globalThis.__wasmacsRecordSchedulerCheckpoint(7, {
+              waitId: waitId,
+              mode: mode,
+              createdPromiseId: createdPromiseId,
+              resolverPromiseId: createdPromiseId,
+            });
+
+          if (typeof self !== "undefined" &&
+              typeof self.postMessage === "function" &&
+              typeof WorkerGlobalScope !== "undefined" &&
+              self instanceof WorkerGlobalScope) {
+            self.postMessage({ type: "emacs-waiting" });
+          }
+        });
+        var thenPromiseId = ++globalThis.__wasmacsPromiseSeq;
+        globalThis.__wasmacsWaitPromiseState[waitId].thenPromiseId = thenPromiseId;
+        globalThis.__wasmacsWaitPromiseState[waitId].returnedExpressionPromiseId = thenPromiseId;
+        var returnedExpression = promise.then(function (value) {
+          globalThis.__wasmacsWaitPromiseState[waitId].thenReached = true;
+          globalThis.__wasmacsRecordSchedulerCheckpoint &&
+            globalThis.__wasmacsRecordSchedulerCheckpoint(4, {
+              waitId: waitId,
+              mode: mode,
+              createdPromiseId: createdPromiseId,
+              thenPromiseId: thenPromiseId,
+              value: value,
+            });
+          return value;
+        });
+        returnedExpression.__wasmacsPromiseId = thenPromiseId;
+        globalThis.__wasmacsRecordSchedulerCheckpoint &&
+          globalThis.__wasmacsRecordSchedulerCheckpoint(13, {
+            waitId: waitId,
+            mode: mode,
+            createdPromiseId: createdPromiseId,
+            resolverPromiseId: createdPromiseId,
+            thenPromiseId: thenPromiseId,
+            returnedExpressionPromiseId: thenPromiseId,
+            actualReturnedPromiseId: "asyncify-handleAsync",
+            asyncifyHandleAsyncOwnsSuspend: true,
+          });
+        return returnedExpression;
+      });
+    }
+
+    return (async function () {
+    var createdPromiseId = ++globalThis.__wasmacsPromiseSeq;
+    globalThis.__wasmacsWaitPromiseState[waitId] = {
+      waitId: waitId,
+      mode: mode,
+      createdPromiseId: createdPromiseId,
+      resolverPromiseId: createdPromiseId,
+      resolverCalled: false,
+      resolveAfter: false,
+      thenReached: false,
+      asyncFunctionWrapsReturnExpression: true,
+      actualReturnedPromiseId: "unobservable-async-function-wrapper",
+    };
+    globalThis.__wasmacsRecordSchedulerCheckpoint &&
+      globalThis.__wasmacsRecordSchedulerCheckpoint(5, {
+        waitId: waitId,
+        mode: mode,
+        createdPromiseId: createdPromiseId,
+      });
+
+    var promise = new Promise((resolve) => {
       // Expose the resolver so the worker/probe can call it when a key is ready.
       globalThis.__wasmacsResolveHostInputWait = function () {
+        globalThis.__wasmacsWaitPromiseState[waitId].resolverCalled = true;
+        globalThis.__wasmacsRecordSchedulerCheckpoint &&
+          globalThis.__wasmacsRecordSchedulerCheckpoint(2, {
+            waitId: waitId,
+            mode: mode,
+            createdPromiseId: createdPromiseId,
+            resolverPromiseId: createdPromiseId,
+          });
         globalThis.__wasmacsHostWaitForInputPending = false;
         globalThis.__wasmacsResolveHostInputWait    = undefined;
         resolve(0);
+        globalThis.__wasmacsWaitPromiseState[waitId].resolveAfter = true;
+        globalThis.__wasmacsRecordSchedulerCheckpoint &&
+          globalThis.__wasmacsRecordSchedulerCheckpoint(3, {
+            waitId: waitId,
+            mode: mode,
+            createdPromiseId: createdPromiseId,
+          });
       };
+      globalThis.__wasmacsRecordSchedulerCheckpoint &&
+        globalThis.__wasmacsRecordSchedulerCheckpoint(7, {
+          waitId: waitId,
+          mode: mode,
+          createdPromiseId: createdPromiseId,
+          resolverPromiseId: createdPromiseId,
+        });
 
       // In a browser Web Worker, notify the main thread that Emacs is waiting.
       // The main thread forwards the next key event back as { type: "inject-key" }.
@@ -46,5 +326,41 @@ mergeInto(LibraryManager.library, {
         self.postMessage({ type: "emacs-waiting" });
       }
     });
+    var thenPromiseId = ++globalThis.__wasmacsPromiseSeq;
+    globalThis.__wasmacsWaitPromiseState[waitId].thenPromiseId = thenPromiseId;
+    globalThis.__wasmacsWaitPromiseState[waitId].returnedExpressionPromiseId = thenPromiseId;
+    var returnedExpression = promise.then(function (value) {
+      globalThis.__wasmacsWaitPromiseState[waitId].thenReached = true;
+      globalThis.__wasmacsRecordSchedulerCheckpoint &&
+        globalThis.__wasmacsRecordSchedulerCheckpoint(4, {
+          waitId: waitId,
+          mode: mode,
+          createdPromiseId: createdPromiseId,
+          thenPromiseId: thenPromiseId,
+          value: value,
+        });
+      return value;
+    });
+    returnedExpression.__wasmacsPromiseId = thenPromiseId;
+    globalThis.__wasmacsRecordSchedulerCheckpoint &&
+      globalThis.__wasmacsRecordSchedulerCheckpoint(6, {
+        waitId: waitId,
+        mode: mode,
+        createdPromiseId: createdPromiseId,
+        resolverPromiseId: createdPromiseId,
+        thenPromiseId: thenPromiseId,
+        returnedExpressionPromiseId: thenPromiseId,
+        actualReturnedPromiseId: "unobservable-async-function-wrapper",
+        asyncFunctionWrapsReturnExpression: true,
+      });
+    return returnedExpression;
+    })();
+  },
+
+  wasmacs_host_scheduler_checkpoint__deps: ["$wasmacs_terminal"],
+  wasmacs_host_scheduler_checkpoint: function (code) {
+    globalThis.__wasmacsRecordSchedulerCheckpoint &&
+      globalThis.__wasmacsRecordSchedulerCheckpoint(code);
+    return 0;
   },
 });

@@ -6,9 +6,11 @@ spike_src="${WASMACS_SPIKE_SRC:-${repo_root}/build/emacs-core-spike/src}"
 source_file="${spike_src}/src/emacs.c"
 keyboard_file="${spike_src}/src/keyboard.c"
 minibuf_file="${spike_src}/src/minibuf.c"
+sysdep_file="${spike_src}/src/sysdep.c"
 waitpoint_mode="${WASMACS_ASYNCIFY_WAITPOINT_MODE:-read-char}"
+terminal_tty_enabled="${WASMACS_ENABLE_ASYNCIFY_WAITPOINT:-0}"
 
-if [ ! -f "${source_file}" ] || [ ! -f "${keyboard_file}" ] || [ ! -f "${minibuf_file}" ]; then
+if [ ! -f "${source_file}" ] || [ ! -f "${keyboard_file}" ] || [ ! -f "${minibuf_file}" ] || [ ! -f "${sysdep_file}" ]; then
   if [ "${spike_src}" = "${repo_root}/build/emacs-core-spike/src" ]; then
     "${repo_root}/scripts/build-emacs-core-spike.sh"
   else
@@ -16,10 +18,26 @@ if [ ! -f "${source_file}" ] || [ ! -f "${keyboard_file}" ] || [ ! -f "${minibuf
   fi
 fi
 
+if rg 'wasmacs terminal tty service spike' "${sysdep_file}" >/dev/null; then
+  perl -0pi -e 's#\n/\* wasmacs terminal tty service spike\. \*/\nextern int wasmacs_host_wait_for_input \(void\);\nextern int wasmacs_host_terminal_input_available \(void\);\nextern int wasmacs_host_terminal_read_byte \(void\);\nextern int wasmacs_host_is_tty_fd \(int fd\);\nextern int wasmacs_host_scheduler_checkpoint \(int code\);\n##' "${sysdep_file}"
+  perl -0pi -e 's~\n#ifdef __EMSCRIPTEN__\n  if \(wasmacs_host_is_tty_fd \(fd\)\)\n    \{\n      unsigned char \*tty_buf = buf;\n      ptrdiff_t bytes_read = 0;\n\n      while \(bytes_read == 0\)\n        \{\n          while \(bytes_read < nbyte\)\n            \{\n              int byte = wasmacs_host_terminal_read_byte \(\);\n              if \(byte < 0\)\n                break;\n              tty_buf\[bytes_read\+\+\] = \(unsigned char\) byte;\n            \}\n\n          if \(bytes_read > 0\)\n            return bytes_read;\n\n          if \(interruptible\)\n            maybe_quit \(\);\n          wasmacs_host_wait_for_input \(\);\n        \}\n    \}\n#endif\n~~' "${sysdep_file}"
+fi
+
+if [ "${terminal_tty_enabled}" = "1" ]; then
+  perl -0pi -e 's#/\* Read from FD to a buffer BUF with size NBYTE\.\n#/* wasmacs terminal tty service spike. */\nextern int wasmacs_host_wait_for_input (void);\nextern int wasmacs_host_terminal_input_available (void);\nextern int wasmacs_host_terminal_read_byte (void);\nextern int wasmacs_host_is_tty_fd (int fd);\nextern int wasmacs_host_scheduler_checkpoint (int code);\n\n/* Read from FD to a buffer BUF with size NBYTE.\n#' "${sysdep_file}"
+
+  perl -0pi -e 's~  ssize_t result;\n\n  do~  ssize_t result;\n\n#ifdef __EMSCRIPTEN__\n  if (wasmacs_host_is_tty_fd (fd))\n    {\n      unsigned char *tty_buf = buf;\n      ptrdiff_t bytes_read = 0;\n\n      while (bytes_read == 0)\n        {\n          while (bytes_read < nbyte)\n            {\n              int byte = wasmacs_host_terminal_read_byte ();\n              if (byte < 0)\n                break;\n              wasmacs_host_scheduler_checkpoint (102);\n              tty_buf[bytes_read++] = (unsigned char) byte;\n            }\n\n          if (bytes_read > 0)\n            return bytes_read;\n\n          if (interruptible)\n            maybe_quit ();\n          wasmacs_host_scheduler_checkpoint (100);\n          wasmacs_host_wait_for_input ();\n          wasmacs_host_scheduler_checkpoint (101);\n        }\n    }\n#endif\n\n  do~' "${sysdep_file}"
+fi
+
 read -r -d '' entrypoint_block <<'EOF' || true
 static char *wasmacs_last_eval_result;
 static char *wasmacs_last_minibuffer_state;
+static char *wasmacs_last_interactive_state;
 static char *wasmacs_last_entrypoint_state;
+static char *wasmacs_last_os_lifecycle_state;
+static char *wasmacs_last_os_stack_bounds_probe;
+static char *wasmacs_last_os_gc_permission_state;
+static char *wasmacs_last_os_root_safety_probe;
 static int wasmacs_command_busy;
 static int wasmacs_eval_had_error;
 static int wasmacs_entrypoint_refresh_count;
@@ -38,6 +56,10 @@ int wasmacs_os_pop_gc_guard (void);
 int wasmacs_os_begin_command (const char *kind);
 int wasmacs_os_finish_command (void);
 int wasmacs_os_cancel_command (void);
+const char *wasmacs_os_lifecycle_state (void);
+const char *wasmacs_os_stack_bounds_probe (void);
+const char *wasmacs_os_gc_permission_state (void);
+const char *wasmacs_os_root_safety_probe (void);
 static char const *wasmacs_os_phase_name (void);
 static Lisp_Object wasmacs_eval_error_handler (Lisp_Object error);
 static Lisp_Object wasmacs_recursive_edit_body (Lisp_Object ignored);
@@ -203,6 +225,134 @@ wasmacs_os_pending_command_state (void)
   if (wasmacs_command_busy)
     return "command-running";
   return "idle";
+}
+
+__attribute__ ((used, visibility ("default")))
+const char *
+wasmacs_os_lifecycle_state (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  char *state = xmalloc (512);
+  snprintf (state, 512,
+            "{\"service\":\"Lifecycle\",\"owner\":\"C/wasm facade\","
+            "\"diagnostic\":true,\"phase\":\"%s\",\"initialized\":%s,"
+            "\"commandBusy\":%s,\"minibufferDepth\":%"pI"d,"
+            "\"commandLoopLevel\":%"pI"d,\"pendingCommandState\":\"%s\"}",
+            wasmacs_os_phase_name (),
+            initialized ? "true" : "false",
+            wasmacs_command_busy ? "true" : "false",
+            minibuf_level,
+            command_loop_level,
+            wasmacs_os_pending_command_state ());
+
+  xfree (wasmacs_last_os_lifecycle_state);
+  wasmacs_last_os_lifecycle_state = state;
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return wasmacs_last_os_lifecycle_state;
+}
+
+__attribute__ ((used, visibility ("default")))
+const char *
+wasmacs_os_stack_bounds_probe (void)
+{
+  char current_stack_probe;
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  char *state = xmalloc (1024);
+  snprintf (state, 1024,
+            "{\"service\":\"Memory and Root\",\"owner\":\"C/wasm facade\","
+            "\"diagnostic\":true,\"stackBottomRefreshed\":%s,"
+            "\"stackTopRefreshed\":%s,\"savedStackBottomAddress\":\"%p\","
+            "\"entryStackBottomAddress\":\"%p\",\"savedStackTopAddress\":\"%p\","
+            "\"entryStackTopAddress\":\"%p\",\"currentStackProbeAddress\":\"%p\","
+            "\"entrypointRefreshCount\":%d}",
+            wasmacs_last_entry_stack_bottom != wasmacs_last_saved_stack_bottom
+            ? "true" : "false",
+            wasmacs_last_entry_stack_top != wasmacs_last_saved_stack_top
+            ? "true" : "false",
+            wasmacs_last_saved_stack_bottom,
+            wasmacs_last_entry_stack_bottom,
+            wasmacs_last_saved_stack_top,
+            wasmacs_last_entry_stack_top,
+            &current_stack_probe,
+            wasmacs_entrypoint_refresh_count);
+
+  xfree (wasmacs_last_os_stack_bounds_probe);
+  wasmacs_last_os_stack_bounds_probe = state;
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return wasmacs_last_os_stack_bounds_probe;
+}
+
+__attribute__ ((used, visibility ("default")))
+const char *
+wasmacs_os_gc_permission_state (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  bool allowed = false;
+  const char *reason = "allowed";
+  if (!initialized)
+    reason = "blocked:lifecycle";
+  else if (wasmacs_command_busy)
+    reason = "blocked:pending-command";
+  else if (garbage_collection_inhibited)
+    reason = "inhibited";
+  else
+    allowed = true;
+
+  char *state = xmalloc (768);
+  snprintf (state, 768,
+            "{\"service\":\"Memory and Root\",\"owner\":\"C/wasm facade\","
+            "\"diagnostic\":true,\"allowed\":%s,\"reason\":\"%s\","
+            "\"garbageCollectionInhibited\":%td,\"wasmacsGcGuardDepth\":%d,"
+            "\"pendingCommandState\":\"%s\",\"stackRootsFresh\":%s}",
+            allowed ? "true" : "false",
+            reason,
+            (ptrdiff_t) garbage_collection_inhibited,
+            wasmacs_pending_gc_inhibit_depth,
+            wasmacs_os_pending_command_state (),
+            (wasmacs_last_entry_stack_bottom != wasmacs_last_saved_stack_bottom
+             && wasmacs_last_entry_stack_top != wasmacs_last_saved_stack_top)
+            ? "true" : "false");
+
+  xfree (wasmacs_last_os_gc_permission_state);
+  wasmacs_last_os_gc_permission_state = state;
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return wasmacs_last_os_gc_permission_state;
+}
+
+__attribute__ ((used, visibility ("default")))
+const char *
+wasmacs_os_root_safety_probe (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  bool stack_roots_fresh
+    = (wasmacs_last_entry_stack_bottom != wasmacs_last_saved_stack_bottom
+       && wasmacs_last_entry_stack_top != wasmacs_last_saved_stack_top);
+  bool gc_allowed = initialized && !wasmacs_command_busy
+                    && !garbage_collection_inhibited;
+  char *state = xmalloc (768);
+  snprintf (state, 768,
+            "{\"service\":\"Memory and Root\",\"owner\":\"C/wasm facade\","
+            "\"diagnostic\":true,\"policyDefined\":true,"
+            "\"entrypointRefreshCount\":%d,\"stackBottomRefreshed\":%s,"
+            "\"stackTopRefreshed\":%s,\"backtraceArgsPinned\":%s,"
+            "\"gcPermission\":\"%s\",\"pendingCommandState\":\"%s\"}",
+            wasmacs_entrypoint_refresh_count,
+            wasmacs_last_entry_stack_bottom != wasmacs_last_saved_stack_bottom
+            ? "true" : "false",
+            wasmacs_last_entry_stack_top != wasmacs_last_saved_stack_top
+            ? "true" : "false",
+            wasmacs_backtrace_args_pinned ? "true" : "false",
+            gc_allowed && stack_roots_fresh ? "allowed" : "blocked-or-unsafe",
+            wasmacs_os_pending_command_state ());
+
+  xfree (wasmacs_last_os_root_safety_probe);
+  wasmacs_last_os_root_safety_probe = state;
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return wasmacs_last_os_root_safety_probe;
 }
 
 __attribute__ ((used, visibility ("default")))
@@ -478,6 +628,68 @@ wasmacs_minibuffer_state (void)
   unbind_to (gc_count, Qnil);
   WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
   return wasmacs_last_minibuffer_state;
+}
+
+__attribute__ ((used, visibility ("default")))
+const char *
+wasmacs_interactive_state (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  specpdl_ref gc_count = inhibit_garbage_collection ();
+  ptrdiff_t capacity = 1024;
+  ptrdiff_t length = 0;
+  char *state = xmalloc (capacity);
+  state[0] = '\0';
+
+  char line[256];
+  wasmacs_append_text (&state, &length, &capacity, "buffer-name:");
+  wasmacs_append_lisp_string (&state, &length, &capacity,
+                              BVAR (current_buffer, name));
+  wasmacs_append_text (&state, &length, &capacity, "\n");
+
+  wasmacs_append_text (&state, &length, &capacity, "buffer-file-name:");
+  wasmacs_append_lisp_string (&state, &length, &capacity,
+                              BVAR (current_buffer, filename));
+  wasmacs_append_text (&state, &length, &capacity, "\n");
+
+  snprintf (line, sizeof line, "point:%"pD"d\n", PT);
+  wasmacs_append_text (&state, &length, &capacity, line);
+  snprintf (line, sizeof line, "buffer-size:%"pD"d\n", Z - BEG);
+  wasmacs_append_text (&state, &length, &capacity, line);
+  snprintf (line, sizeof line, "modified:%s\n",
+            BUF_MODIFF (current_buffer) == BUF_SAVE_MODIFF (current_buffer)
+            ? "false" : "true");
+  wasmacs_append_text (&state, &length, &capacity, line);
+
+  Lisp_Object undo = BVAR (current_buffer, undo_list);
+  wasmacs_append_text (&state, &length, &capacity, "undo-list:");
+  if (NILP (undo))
+    wasmacs_append_text (&state, &length, &capacity, "nil\n");
+  else if (EQ (undo, Qt))
+    wasmacs_append_text (&state, &length, &capacity, "disabled\n");
+  else
+    wasmacs_append_text (&state, &length, &capacity, "present\n");
+
+  wasmacs_append_text (&state, &length, &capacity, "selected-window-buffer:");
+  if (WINDOWP (selected_window)
+      && BUFFERP (XWINDOW (selected_window)->contents))
+    wasmacs_append_lisp_string (&state, &length, &capacity,
+                                BVAR (XBUFFER (XWINDOW (selected_window)->contents),
+                                      name));
+  wasmacs_append_text (&state, &length, &capacity, "\n");
+
+  snprintf (line, sizeof line, "minibuffer-depth:%"pI"d\n", minibuf_level);
+  wasmacs_append_text (&state, &length, &capacity, line);
+  snprintf (line, sizeof line, "command-loop-level:%"pI"d\n",
+            command_loop_level);
+  wasmacs_append_text (&state, &length, &capacity, line);
+
+  xfree (wasmacs_last_interactive_state);
+  wasmacs_last_interactive_state = state;
+  unbind_to (gc_count, Qnil);
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return wasmacs_last_interactive_state;
 }
 
 static void
@@ -783,8 +995,8 @@ wasmacs_os_push_gc_guard (void)
 
   char result[80];
   snprintf (result, sizeof result,
-            "gc-guard-pushed:emacs-depth=%d:wasmacs-depth=%d",
-            garbage_collection_inhibited,
+            "gc-guard-pushed:emacs-depth=%td:wasmacs-depth=%d",
+            (ptrdiff_t) garbage_collection_inhibited,
             wasmacs_pending_gc_inhibit_depth);
   wasmacs_store_c_string_result (result);
   WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
@@ -809,8 +1021,8 @@ wasmacs_os_pop_gc_guard (void)
 
   char result[80];
   snprintf (result, sizeof result,
-            "gc-guard-popped:emacs-depth=%d:wasmacs-depth=%d",
-            garbage_collection_inhibited,
+            "gc-guard-popped:emacs-depth=%td:wasmacs-depth=%d",
+            (ptrdiff_t) garbage_collection_inhibited,
             wasmacs_pending_gc_inhibit_depth);
   wasmacs_store_c_string_result (result);
   WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
@@ -928,7 +1140,9 @@ perl -0pi -e 'BEGIN { $block = $ENV{"WASMACS_ENTRYPOINT_BLOCK"} } s/DEFUN \("inv
 if rg 'wasmacs_host_wait_for_input' "${keyboard_file}" >/dev/null; then
   perl -0pi -e 's#/\* wasmacs browser input injection spike\. \*/.*?\nvoid\nkbd_buffer_store_event#void\nkbd_buffer_store_event#sg' "${keyboard_file}"
   perl -0pi -e 's/\n\/\* wasmacs asyncify input waitpoint spike\. \*\/\nextern int wasmacs_host_wait_for_input \(void\);\n//s' "${keyboard_file}"
+  perl -0pi -e 's/\nextern int wasmacs_host_scheduler_checkpoint \(int code\);\n//s' "${keyboard_file}"
   perl -0pi -e 's/\n\s+\/\* wasmacs asyncify input waitpoint spike: yield only while an\n\s+active minibuffer read is waiting for real input\.  The JS import is\n\s+currently a no-op probe hook; later input-event work must make this\n\s+the suspension point that browser input resumes\.  \*\/\n\s+if \(minibuf_level > 0 && !end_time && !input_pending\n\s+&& !detect_input_pending_run_timers \(0\)\)\n\s+wasmacs_host_wait_for_input \(\);\n//s' "${keyboard_file}"
+  perl -0pi -e 's~\n#ifdef __EMSCRIPTEN__\n  wasmacs_host_scheduler_checkpoint \(200\);\n#endif[ \t]*~\n~' "${keyboard_file}"
 fi
 
 if rg 'wasmacs_host_wait_for_input' "${minibuf_file}" >/dev/null; then
@@ -986,9 +1200,10 @@ if [ "${WASMACS_ENABLE_ASYNCIFY_WAITPOINT:-0}" = "1" ]; then
   case "${waitpoint_mode}" in
     read-char)
       perl -0pi -e 's#\n      /\* wasmacs asyncify input waitpoint spike:.*?\n\n      c = read_decoded_event_from_main_queue#\n      c = read_decoded_event_from_main_queue#sg' "${keyboard_file}"
-      perl -0pi -e 's#/\* Read a character from the keyboard; call the redisplay if needed\.  \*/#/\* wasmacs asyncify input waitpoint spike. \*/\nextern int wasmacs_host_wait_for_input (void);\n\n/\* Read a character from the keyboard; call the redisplay if needed.  \*/#' "${keyboard_file}"
+      perl -0pi -e 's#/\* Read a character from the keyboard; call the redisplay if needed\.  \*/#/\* wasmacs asyncify input waitpoint spike. \*/\nextern int wasmacs_host_wait_for_input (void);\nextern int wasmacs_host_scheduler_checkpoint (int code);\n\n/\* Read a character from the keyboard; call the redisplay if needed.  \*/#' "${keyboard_file}"
+      perl -0pi -e 's~read_char \(int commandflag, Lisp_Object map,\n\t   Lisp_Object prev_event,\n\t   bool \*used_mouse_menu, struct timespec \*end_time\)\n\{~read_char (int commandflag, Lisp_Object map,\n\t   Lisp_Object prev_event,\n\t   bool *used_mouse_menu, struct timespec *end_time)\n{\n#ifdef __EMSCRIPTEN__\n  wasmacs_host_scheduler_checkpoint (200);\n#endif\n~' "${keyboard_file}"
 
-      perl -0pi -e 's#  if \(NILP \(c\)\)\n    \{\n      c = read_decoded_event_from_main_queue \(end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu\);#  if (NILP (c))\n    {\n      /* wasmacs asyncify input waitpoint spike: yield when an interactive\n         command loop would otherwise block for real browser input.  In the\n         browser host, stdin readiness can look like input_pending without a\n         real Emacs key event, so JS owns the actual wait/resume boundary. */\n      if (!noninteractive && !end_time)\n        wasmacs_host_wait_for_input ();\n\n      c = read_decoded_event_from_main_queue (end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu);#' "${keyboard_file}"
+      perl -0pi -e 's#  if \(NILP \(c\)\)\n    \{\n      c = read_decoded_event_from_main_queue \(end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu\);#  if (NILP (c))\n    {\n      /* wasmacs asyncify input waitpoint spike: yield when an interactive\n         command loop would otherwise block for real browser input.  In the\n         browser host, stdin readiness can look like input_pending without a\n         real Emacs key event, so JS owns the actual wait/resume boundary. */\n      if (!noninteractive && !end_time)\n        {\n          wasmacs_host_scheduler_checkpoint (201);\n          wasmacs_host_wait_for_input ();\n          wasmacs_host_scheduler_checkpoint (202);\n        }\n\n      c = read_decoded_event_from_main_queue (end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu);#' "${keyboard_file}"
       ;;
     minibuf-setup)
       perl -0pi -e 's#static Lisp_Object\nread_minibuf #/\* wasmacs asyncify minibuffer setup waitpoint spike. \*/\nextern int wasmacs_host_wait_for_input (void);\n\nstatic Lisp_Object\nread_minibuf #' "${minibuf_file}"

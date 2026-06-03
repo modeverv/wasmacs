@@ -65,6 +65,7 @@ rg 'pendingCommandEvents' "${repo_root}/app/src/main.js" >/dev/null
 rg 'asyncifyMinibufferReadSmoke' "${repo_root}/app/src/main.js" >/dev/null
 rg 'asyncifyNoLoadupBootSmoke' "${repo_root}/app/src/main.js" >/dev/null
 rg 'asyncifyInteractiveLoopProbeSmoke' "${repo_root}/app/src/main.js" >/dev/null
+rg 'asyncifyInteractiveSemanticsProbeSmoke' "${repo_root}/app/src/main.js" >/dev/null
 rg 'nextPointIndexForCommand' "${repo_root}/app/src/main.js" >/dev/null
 rg 'validateBufferCommand' "${repo_root}/app/src/input-protocol.js" >/dev/null
 rg 'insert-text' "${repo_root}/app/src/input-protocol.js" >/dev/null
@@ -95,6 +96,12 @@ rg 'materializeUserImage' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'FS_createDataFile' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'wasmacs_eval_string' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'wasmacs_last_result' "${repo_root}/app/src/wasm-worker.js" >/dev/null
+rg 'os-diagnostic-snapshot' "${repo_root}/app/src/wasm-worker.js" >/dev/null
+rg 'readOsDiagnosticSnapshot' "${repo_root}/app/src/wasm-worker.js" >/dev/null
+rg 'wasmacs_os_lifecycle_state' "${repo_root}/app/src/wasm-worker.js" >/dev/null
+rg 'wasmacs_os_stack_bounds_probe' "${repo_root}/app/src/wasm-worker.js" >/dev/null
+rg 'wasmacs_os_gc_permission_state' "${repo_root}/app/src/wasm-worker.js" >/dev/null
+rg 'wasmacs_os_root_safety_probe' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'buildCommandForm' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'find-file path' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'save-buffer' "${repo_root}/app/src/wasm-worker.js" >/dev/null
@@ -125,15 +132,19 @@ rg 'PASS pending-command find-file starting unavailable' "${repo_root}/scripts/r
 rg 'asyncifyMinibufferReadSmoke' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'asyncifyNoLoadupBootSmoke' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'asyncifyInteractiveLoopProbeSmoke' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
+rg 'asyncifyInteractiveSemanticsProbeSmoke' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'PASS asyncify pending-input minibuffer read' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'PASS asyncify no-loadup browser worker boot' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'KNOWN_BLOCKER asyncify no-loadup boot status' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'KNOWN_BLOCKER asyncify browser worker stack' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'KNOWN_BLOCKER asyncify interactive command-loop waitpoint' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
+rg 'PASS asyncify real command-loop minibuffer undo buffer window semantics' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
+rg 'KNOWN_BLOCKER asyncify real command-loop semantics blocked by OS compatibility memory/runtime layer' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg -- '--js-flags=--stack_size=65500' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'minibuffer editing files boundaries' "${repo_root}/package.json" >/dev/null
 rg 'browser:smoke:editing' "${repo_root}/package.json" >/dev/null
 rg 'browser:smoke:all' "${repo_root}/package.json" >/dev/null
+rg 'browser:smoke:interactive' "${repo_root}/package.json" >/dev/null
 rg '"dev": "node scripts/serve-app\.mjs"' "${repo_root}/package.json" >/dev/null
 
 echo "browser worker app validation passed"

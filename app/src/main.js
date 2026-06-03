@@ -622,7 +622,10 @@ window.__wasmacsSmoke = {
         const message = event.data;
         if (message.type === "stdout") appendLine(message.text);
         if (message.type === "stderr") appendLine(message.text);
-        if (message.type === "status") setStatus(message.text);
+        if (message.type === "status") {
+          setStatus(message.text);
+          appendLine(`ASYNCIFY_INTERACTIVE_LOOP_STATUS:${message.text}`);
+        }
         if (message.type === "pending-command") {
           handlePendingCommandMessage(message);
           if (message.state === "pending-input" && !inputSent) {
@@ -672,7 +675,10 @@ window.__wasmacsSmoke = {
         const message = event.data;
         if (message.type === "stdout") appendLine(message.text);
         if (message.type === "stderr") appendLine(message.text);
-        if (message.type === "status") setStatus(message.text);
+        if (message.type === "status") {
+          setStatus(message.text);
+          appendLine(`ASYNCIFY_INTERACTIVE_SEMANTICS_STATUS:${message.text}`);
+        }
         if (message.type === "asyncify-boot-probe-result") {
           clearTimeout(timeout);
           asyncifyWorker.terminate();
@@ -720,6 +726,139 @@ window.__wasmacsSmoke = {
       asyncifyWorker.postMessage({ type: "interactive-loop-probe" });
     });
     appendLine(`ASYNCIFY_INTERACTIVE_LOOP_PROBE:${result.passed ? "PASS" : "FAIL"}`);
+    return result;
+  },
+  async asyncifyInteractiveSemanticsProbeSmoke() {
+    const asyncifyWorker = new Worker("/app/src/asyncify-minibuffer-worker.js");
+    const result = await new Promise((resolve) => {
+      const terminalBytes = [];
+      const outputLines = [];
+      const steps = [];
+      const script = [
+        { name: "insert-printable", bytes: "abc" },
+        { name: "undo", bytes: [31] },
+        { name: "find-file-prefix", bytes: [24, 6] },
+        { name: "find-file-submit", bytes: "wasmacs-real-route.txt\r" },
+        { name: "split-window", bytes: [24, 50] },
+      ];
+      let waitEvents = 0;
+      let finished = false;
+
+      const terminalText = () => String.fromCharCode(...terminalBytes.slice(-40000));
+      const finish = (message) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timeout);
+        asyncifyWorker.terminate();
+        resolve(message);
+      };
+      const completeIfDone = () => {
+        if (waitEvents <= script.length) return;
+        const text = terminalText();
+        const afterInsert = steps.find((step) => step.name === "after-insert-printable");
+        const afterUndo = steps.find((step) => step.name === "after-undo");
+        const afterFindFile = steps.find((step) => step.name === "after-find-file-submit");
+        const afterSplit = steps.find((step) => step.name === "after-split-window");
+        const abortOutput = outputLines.filter((line) => /Aborted|OOM/i.test(line));
+        const checks = {
+          commandLoopReached: waitEvents >= 1 && /\*scratch\*/.test(text),
+          printableInserted: /abc/.test(afterInsert?.text || text),
+          undoRedisplayed: (afterUndo?.byteCount || 0) > (afterInsert?.byteCount || 0),
+          minibufferOwnedByEmacs: /Find file:/.test(text),
+          findFileSelectedBuffer: /wasmacs-real-route\.txt/.test(afterFindFile?.text || text),
+          splitWindowRedisplayed: (afterSplit?.byteCount || 0) > (afterFindFile?.byteCount || 0),
+          terminalOutputObserved: terminalBytes.length > 0,
+          noAbort: abortOutput.length === 0,
+        };
+        finish({
+          type: "asyncify-interactive-semantics-probe-result",
+          passed: Object.values(checks).every(Boolean),
+          checks,
+          waitEvents,
+          steps,
+          abortOutput,
+          terminalTextTail: text.slice(-2000),
+          terminalBytes: terminalBytes.slice(-240),
+          output: outputLines.slice(-80),
+          note: "main thread drove terminal bytes through the real Emacs command loop; browser did not emulate minibuffer, undo, buffer, or window semantics",
+        });
+      };
+
+      const timeout = setTimeout(() => {
+        finish({
+          passed: false,
+          error: "timed out waiting for asyncify interactive semantics probe",
+          waitEvents,
+          steps,
+          terminalTextTail: terminalText().slice(-2000),
+          output: outputLines.slice(-80),
+        });
+      }, 300_000);
+
+      asyncifyWorker.onmessage = (event) => {
+        const message = event.data;
+        if (message.type === "stdout") appendLine(message.text);
+        if (message.type === "stderr") appendLine(message.text);
+        if (message.type === "stdout") outputLines.push(`OUT:${message.text}`);
+        if (message.type === "stderr") {
+          outputLines.push(`ERR:${message.text}`);
+          if (/Aborted|OOM/i.test(message.text)) {
+            finish({
+              passed: false,
+              error: `asyncify interactive semantics aborted: ${message.text}`,
+              waitEvents,
+              steps,
+              terminalTextTail: terminalText().slice(-2000),
+              output: outputLines.slice(-80),
+            });
+          }
+        }
+        if (message.type === "terminal-output") {
+          terminalBytes.push(...(message.bytes || []));
+        }
+        if (message.type === "status") {
+          setStatus(message.text);
+          outputLines.push(`STATUS:${message.text}`);
+        }
+        if (message.type === "interactive-command-loop-returned") {
+          outputLines.push(`RETURNED:${JSON.stringify(message)}`);
+        }
+        if (message.type === "emacs-waiting") {
+          waitEvents += 1;
+          const previousStep = script[waitEvents - 2];
+          if (previousStep) {
+            steps.push({
+              name: `after-${previousStep.name}`,
+              waitEvents,
+              byteCount: terminalBytes.length,
+              text: terminalText().slice(-2000),
+            });
+          } else {
+            steps.push({
+              name: "initial-command-loop",
+              waitEvents,
+              byteCount: terminalBytes.length,
+              text: terminalText().slice(-2000),
+            });
+          }
+          if (waitEvents <= script.length) {
+            asyncifyWorker.postMessage({
+              type: "terminal-input",
+              bytes: script[waitEvents - 1].bytes,
+            });
+            return;
+          }
+          completeIfDone();
+        }
+      };
+
+      asyncifyWorker.onerror = (event) => {
+        finish({ passed: false, error: event.message, waitEvents, output: outputLines.slice(-80) });
+      };
+
+      asyncifyWorker.postMessage({ type: "start-interactive-command-loop" });
+    });
+    appendLine(`ASYNCIFY_INTERACTIVE_SEMANTICS_PROBE:${result.passed ? "PASS" : "FAIL"}`);
     return result;
   },
   lastRealUndoSmoke() {

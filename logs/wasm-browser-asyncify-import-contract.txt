@@ -1,0 +1,77 @@
+CASE:asyncify-import-contract
+BUILD_STATUS:0
+READY
+CHECKPOINT:manual-complete
+CHECKPOINT:async-wrapper-complete
+CHECKPOINT:handle-async-complete
+SUMMARY_BEGIN
+{
+  "status": "PASS",
+  "cases": [
+    {
+      "kind": "manual",
+      "passed": true,
+      "returnedPromise": true,
+      "phaseBeforeResolve": 201,
+      "phaseAfter": 201,
+      "lastValue": 0,
+      "result": {
+        "kind": "completed",
+        "value": 20
+      },
+      "expectedSuspends": false,
+      "suspendedUntilResolve": false,
+      "promiseIdentity": {
+        "createdPromiseId": 1,
+        "resolverPromiseId": 1,
+        "thenPromiseId": 2,
+        "returnedPromiseId": 2
+      }
+    },
+    {
+      "kind": "async-wrapper",
+      "passed": true,
+      "returnedPromise": true,
+      "phaseBeforeResolve": 101,
+      "phaseAfter": 101,
+      "lastValue": 0,
+      "result": {
+        "kind": "completed",
+        "value": 10
+      },
+      "expectedSuspends": false,
+      "suspendedUntilResolve": false,
+      "promiseIdentity": {
+        "createdPromiseId": 3,
+        "resolverPromiseId": 3,
+        "thenPromiseId": 4,
+        "returnedExpressionPromiseId": 4,
+        "actualReturnedPromiseId": "unobservable-async-function-wrapper",
+        "asyncFunctionWrapsReturnExpression": true
+      }
+    },
+    {
+      "kind": "handle-async",
+      "passed": true,
+      "returnedPromise": true,
+      "phaseBeforeResolve": 300,
+      "phaseAfter": 301,
+      "lastValue": 3,
+      "result": {
+        "kind": "completed",
+        "value": 43
+      },
+      "expectedSuspends": true,
+      "suspendedUntilResolve": true,
+      "promiseIdentity": {
+        "createdPromiseId": 5,
+        "resolverPromiseId": 5,
+        "thenPromiseId": 6,
+        "returnedPromiseId": 6,
+        "asyncifyHandleAsyncOwnsSuspend": true
+      }
+    }
+  ],
+  "asyncifyImports": "host_wait_manual_promise,host_wait_async_wrapper,host_wait_handle_async"
+}
+SUMMARY_END

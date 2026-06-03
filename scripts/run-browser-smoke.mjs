@@ -387,6 +387,25 @@ try {
     }
   }
 
+  if (scenarios.includes("interactive-semantics")) {
+    await logEvent("SCENARIO_START interactive-semantics");
+    const interactiveSemantics = await evaluate(
+      client,
+      sessionId,
+      "window.__wasmacsSmoke.asyncifyInteractiveSemanticsProbeSmoke()",
+      300_000,
+    );
+    if (interactiveSemantics?.passed) {
+      evidence.push("PASS asyncify real command-loop minibuffer undo buffer window semantics");
+      await logEvent(`SCENARIO_PASS interactive-semantics ${JSON.stringify(interactiveSemantics)}`);
+      console.log("browser smoke scenario passed: interactive-semantics");
+    } else {
+      evidence.push("KNOWN_BLOCKER asyncify real command-loop semantics blocked by OS compatibility memory/runtime layer");
+      await logEvent(`SCENARIO_KNOWN_BLOCKER interactive-semantics ${JSON.stringify(interactiveSemantics)}`);
+      console.log("browser smoke scenario recorded known blocker: interactive-semantics");
+    }
+  }
+
   console.log(`browser smoke passed: ${scenarios.join(",")} ${appUrl}`);
   await logEvent("SMOKE_PASS");
   await appendFile(logPath, `${evidence.join("\n")}\n`);

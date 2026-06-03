@@ -19,6 +19,10 @@ let emacsModule;
 let emacsReady;
 
 self.onmessage = async (event) => {
+  if (event.data?.type === "os-diagnostic-snapshot") {
+    await runOsDiagnosticSnapshot(event.data.entries || []);
+    return;
+  }
   if (event.data?.type === "run-buffer-command") {
     await runEmacsCommand(event.data.entries, event.data.command);
   }
@@ -142,6 +146,38 @@ async function runEmacsCommand(userEntries, command) {
     post("exit", { code: 0 });
   } catch (error) {
     post("error", { text: error && error.stack ? error.stack : String(error) });
+  }
+}
+
+async function runOsDiagnosticSnapshot(userEntries) {
+  try {
+    const module = await ensureEmacs(userEntries);
+    post("os-diagnostic-snapshot", {
+      snapshot: readOsDiagnosticSnapshot(module),
+    });
+  } catch (error) {
+    post("error", { text: error && error.stack ? error.stack : String(error) });
+  }
+}
+
+function readOsDiagnosticSnapshot(module) {
+  return {
+    lifecycle: parseDiagnosticJson(module.ccall("wasmacs_os_lifecycle_state", "string", [], [])),
+    stack: parseDiagnosticJson(module.ccall("wasmacs_os_stack_bounds_probe", "string", [], [])),
+    gc: parseDiagnosticJson(module.ccall("wasmacs_os_gc_permission_state", "string", [], [])),
+    rootSafety: parseDiagnosticJson(module.ccall("wasmacs_os_root_safety_probe", "string", [], [])),
+  };
+}
+
+function parseDiagnosticJson(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    return {
+      diagnostic: true,
+      parseError: String(error),
+      raw: String(raw),
+    };
   }
 }
 

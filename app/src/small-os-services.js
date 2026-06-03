@@ -5,6 +5,7 @@ export const SmallOsServices = Object.freeze({
   blockingInputScheduler: "blocking-input-scheduler",
   filesystemPersistence: "filesystem-persistence",
   preloadedState: "preloaded-state",
+  terminalTty: "terminal-tty",
   hostCapability: "host-capability",
   browserGuiBoundary: "browser-gui-boundary",
 });
@@ -32,6 +33,9 @@ export const CrossServiceChecks = Object.freeze({
   inputSchedulerControlFlow: "Input Scheduler x Control Flow",
   filesystemCommandLifecycle: "Filesystem x Command Lifecycle",
   preloadedStateFilesystem: "Preloaded State x Filesystem",
+  terminalLifecycle: "Terminal x Lifecycle",
+  terminalInputScheduler: "Terminal x Input Scheduler",
+  terminalBrowserGui: "Terminal x Browser GUI",
   hostCapabilityBrowserGui: "Host Capability x Browser GUI",
 });
 
@@ -46,6 +50,8 @@ export const EmacsSourceSurfaces = Object.freeze({
   lisp: "vendor/emacs/src/lisp.h",
   puresize: "vendor/emacs/src/puresize.h",
   keyboard: "vendor/emacs/src/keyboard.c",
+  dispnew: "vendor/emacs/src/dispnew.c",
+  term: "vendor/emacs/src/term.c",
   minibuf: "vendor/emacs/src/minibuf.c",
   callint: "vendor/emacs/src/callint.c",
   minibufferEl: "vendor/emacs/lisp/minibuffer.el",
@@ -74,6 +80,269 @@ export const JsRoles = Object.freeze({
   diagnosticHarness: "diagnostic-harness",
 });
 
+export const OwnershipLayers = Object.freeze({
+  emacsC: "Emacs C core",
+  cWasmFacade: "C/wasm facade",
+  emscriptenRuntime: "Emscripten runtime",
+  jsWorker: "JS worker",
+  browserMain: "browser main thread",
+  appUi: "app UI",
+});
+
+export const BoundaryRisk = Object.freeze({
+  jsOwnsLowLevelState: "js-owns-low-level-state",
+  ambiguousOwner: "ambiguous-owner",
+  diagnosticOnly: "diagnostic-only",
+  productScaffold: "product-scaffold",
+});
+
+export const OsCompatibilityBoundaryInventory = Object.freeze({
+  lifecycle: Object.freeze({
+    service: SmallOsServices.lifecycle,
+    currentOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.emscriptenRuntime,
+      OwnershipLayers.jsWorker,
+    ],
+    currentStateOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.jsWorker,
+    ],
+    desiredOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+    ],
+    jsAllowedRoles: [
+      JsRoles.observer,
+      JsRoles.browserCoordinator,
+    ],
+    risk: BoundaryRisk.ambiguousOwner,
+    sourceSurfaces: [
+      EmacsSourceSurfaces.emacs,
+      EmacsSourceSurfaces.loadup,
+      EmacsSourceSurfaces.pdumper,
+    ],
+    nextFacadeOrProbe: "wasmacs_os_lifecycle_state",
+  }),
+  memoryRoot: Object.freeze({
+    service: SmallOsServices.memoryRoot,
+    currentOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.emscriptenRuntime,
+    ],
+    currentStateOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+    ],
+    desiredOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+    ],
+    jsAllowedRoles: [JsRoles.observer, JsRoles.diagnosticHarness],
+    risk: BoundaryRisk.diagnosticOnly,
+    sourceSurfaces: [
+      EmacsSourceSurfaces.alloc,
+      EmacsSourceSurfaces.thread,
+      EmacsSourceSurfaces.eval,
+      EmacsSourceSurfaces.lisp,
+    ],
+    nextFacadeOrProbe: "wasmacs_os_root_safety_probe",
+  }),
+  controlFlow: Object.freeze({
+    service: SmallOsServices.controlFlow,
+    currentOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.jsWorker,
+    ],
+    currentStateOwners: [
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.jsWorker,
+    ],
+    desiredOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+    ],
+    jsAllowedRoles: [JsRoles.browserCoordinator, JsRoles.observer],
+    risk: BoundaryRisk.productScaffold,
+    sourceSurfaces: [
+      EmacsSourceSurfaces.keyboard,
+      EmacsSourceSurfaces.minibuf,
+      EmacsSourceSurfaces.callint,
+    ],
+    nextFacadeOrProbe: "wasmacs_os_reentrant_entrypoint_probe",
+  }),
+  blockingInputScheduler: Object.freeze({
+    service: SmallOsServices.blockingInputScheduler,
+    currentOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.emscriptenRuntime,
+      OwnershipLayers.jsWorker,
+    ],
+    currentStateOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.emscriptenRuntime,
+      OwnershipLayers.jsWorker,
+    ],
+    desiredOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.jsWorker,
+    ],
+    jsAllowedRoles: [JsRoles.hostCapabilityProvider, JsRoles.browserCoordinator],
+    risk: BoundaryRisk.ambiguousOwner,
+    sourceSurfaces: [
+      EmacsSourceSurfaces.keyboard,
+      EmacsSourceSurfaces.sysdep,
+      EmacsSourceSurfaces.term,
+    ],
+    nextFacadeOrProbe: "wasmacs_os_blocking_input_state",
+  }),
+  filesystemPersistence: Object.freeze({
+    service: SmallOsServices.filesystemPersistence,
+    currentOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.emscriptenRuntime,
+      OwnershipLayers.jsWorker,
+      OwnershipLayers.browserMain,
+    ],
+    currentStateOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.emscriptenRuntime,
+      OwnershipLayers.browserMain,
+    ],
+    desiredOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.browserMain,
+    ],
+    jsAllowedRoles: [JsRoles.hostCapabilityProvider, JsRoles.browserCoordinator],
+    risk: BoundaryRisk.productScaffold,
+    sourceSurfaces: [
+      EmacsSourceSurfaces.fileio,
+      EmacsSourceSurfaces.buffer,
+      EmacsSourceSurfaces.filesEl,
+      EmacsSourceSurfaces.insdel,
+    ],
+    nextFacadeOrProbe: "wasmacs_os_filesystem_sync_boundary_state",
+  }),
+  preloadedState: Object.freeze({
+    service: SmallOsServices.preloadedState,
+    currentOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.emscriptenRuntime,
+      OwnershipLayers.jsWorker,
+    ],
+    currentStateOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.jsWorker,
+    ],
+    desiredOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+    ],
+    jsAllowedRoles: [JsRoles.hostCapabilityProvider, JsRoles.diagnosticHarness],
+    risk: BoundaryRisk.diagnosticOnly,
+    sourceSurfaces: [
+      EmacsSourceSurfaces.pdumper,
+      EmacsSourceSurfaces.alloc,
+      EmacsSourceSurfaces.puresize,
+      EmacsSourceSurfaces.loadup,
+      EmacsSourceSurfaces.bindingsEl,
+    ],
+    nextFacadeOrProbe: "wasmacs_os_preloaded_state_status",
+  }),
+  terminalTty: Object.freeze({
+    service: SmallOsServices.terminalTty,
+    currentOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.emscriptenRuntime,
+      OwnershipLayers.jsWorker,
+    ],
+    currentStateOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.emscriptenRuntime,
+      OwnershipLayers.jsWorker,
+    ],
+    desiredOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.jsWorker,
+    ],
+    jsAllowedRoles: [JsRoles.hostCapabilityProvider, JsRoles.diagnosticHarness],
+    risk: BoundaryRisk.ambiguousOwner,
+    sourceSurfaces: [
+      EmacsSourceSurfaces.emacs,
+      EmacsSourceSurfaces.dispnew,
+      EmacsSourceSurfaces.term,
+      EmacsSourceSurfaces.keyboard,
+      EmacsSourceSurfaces.sysdep,
+    ],
+    nextFacadeOrProbe: "wasmacs_os_terminal_state",
+  }),
+  hostCapability: Object.freeze({
+    service: SmallOsServices.hostCapability,
+    currentOwners: [
+      OwnershipLayers.emscriptenRuntime,
+      OwnershipLayers.jsWorker,
+      OwnershipLayers.browserMain,
+    ],
+    currentStateOwners: [
+      OwnershipLayers.emscriptenRuntime,
+      OwnershipLayers.jsWorker,
+      OwnershipLayers.browserMain,
+    ],
+    desiredOwners: [
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.emscriptenRuntime,
+      OwnershipLayers.jsWorker,
+      OwnershipLayers.browserMain,
+    ],
+    jsAllowedRoles: [JsRoles.hostCapabilityProvider, JsRoles.diagnosticHarness],
+    risk: BoundaryRisk.productScaffold,
+    sourceSurfaces: [
+      EmacsSourceSurfaces.process,
+      EmacsSourceSurfaces.callproc,
+      EmacsSourceSurfaces.sysdep,
+    ],
+    nextFacadeOrProbe: "wasmacs_os_host_capability_state",
+  }),
+  browserGuiBoundary: Object.freeze({
+    service: SmallOsServices.browserGuiBoundary,
+    currentOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.jsWorker,
+      OwnershipLayers.browserMain,
+      OwnershipLayers.appUi,
+    ],
+    currentStateOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.browserMain,
+      OwnershipLayers.appUi,
+    ],
+    desiredOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.browserMain,
+      OwnershipLayers.appUi,
+    ],
+    jsAllowedRoles: [JsRoles.browserCoordinator, JsRoles.observer],
+    risk: BoundaryRisk.productScaffold,
+    sourceSurfaces: [
+      EmacsSourceSurfaces.xdisp,
+      EmacsSourceSurfaces.window,
+      EmacsSourceSurfaces.keyboard,
+      EmacsSourceSurfaces.minibuf,
+    ],
+    nextFacadeOrProbe: "terminal-byte-renderer-smoke",
+  }),
+});
+
 export const SmallOsFacades = Object.freeze({
   lifecycleState: Object.freeze({
     id: "lifecycle-state-facade",
@@ -86,6 +355,7 @@ export const SmallOsFacades = Object.freeze({
     ],
     cWasmEntrypoints: [
       "wasmacs_os_lifecycle_phase",
+      "wasmacs_os_lifecycle_state",
       "wasmacs_os_mark_preloaded_state_loading",
       "wasmacs_os_mark_initialized",
     ],
@@ -107,6 +377,8 @@ export const SmallOsFacades = Object.freeze({
       "wasmacs_os_enter_host_entrypoint",
       "wasmacs_os_leave_host_entrypoint",
       "wasmacs_os_root_state_snapshot",
+      "wasmacs_os_stack_bounds_probe",
+      "wasmacs_os_root_safety_probe",
     ],
     jsRole: JsRoles.observer,
     status: FacadeStatus.diagnostic,
@@ -123,6 +395,7 @@ export const SmallOsFacades = Object.freeze({
     ],
     cWasmEntrypoints: [
       "wasmacs_os_gc_permission",
+      "wasmacs_os_gc_permission_state",
       "wasmacs_os_push_gc_guard",
       "wasmacs_os_pop_gc_guard",
     ],
@@ -211,6 +484,34 @@ export const SmallOsFacades = Object.freeze({
     status: FacadeStatus.placeholder,
     acceptance: "Segment/root/relocation diagnostics explain purecopy or pdump failures without JS owning raw roots, pure space, or relocation tables.",
   }),
+  terminalTty: Object.freeze({
+    id: "terminal-tty-facade",
+    capability: "Make stdin/stdout/stderr and /dev/tty look like a minimal text terminal so --nw startup reaches the real Emacs command loop.",
+    ownerServices: [
+      SmallOsServices.terminalTty,
+      SmallOsServices.lifecycle,
+      SmallOsServices.blockingInputScheduler,
+      SmallOsServices.browserGuiBoundary,
+    ],
+    sourceSurfaces: [
+      EmacsSourceSurfaces.emacs,
+      EmacsSourceSurfaces.dispnew,
+      EmacsSourceSurfaces.term,
+      EmacsSourceSurfaces.keyboard,
+      EmacsSourceSurfaces.sysdep,
+    ],
+    cWasmEntrypoints: [
+      "wasmacs_os_terminal_isatty",
+      "wasmacs_os_terminal_getattr",
+      "wasmacs_os_terminal_setattr",
+      "wasmacs_os_terminal_get_winsize",
+      "wasmacs_os_terminal_read_byte",
+      "wasmacs_os_terminal_write_bytes",
+    ],
+    jsRole: JsRoles.hostCapabilityProvider,
+    status: FacadeStatus.productScaffold,
+    acceptance: "Browser worker --nw startup reaches command_loop/read_char/tty_read_avail_input, terminal bytes are observed in JS, and printable bytes resume Emacs through tty input.",
+  }),
 });
 
 export const SmallOsOperations = Object.freeze({
@@ -270,6 +571,29 @@ export const SmallOsOperations = Object.freeze({
     ],
     treatment: BehaviorTreatment.product,
     acceptance: "Worker owns one pending command and browser renders state without owning minibuffer semantics.",
+  }),
+  terminalTtyStartup: Object.freeze({
+    id: "terminal-tty-startup",
+    ownerServices: [
+      SmallOsServices.terminalTty,
+      SmallOsServices.lifecycle,
+      SmallOsServices.blockingInputScheduler,
+      SmallOsServices.browserGuiBoundary,
+    ],
+    crossServiceChecks: [
+      CrossServiceChecks.terminalLifecycle,
+      CrossServiceChecks.terminalInputScheduler,
+      CrossServiceChecks.terminalBrowserGui,
+    ],
+    sourceSurfaces: [
+      EmacsSourceSurfaces.emacs,
+      EmacsSourceSurfaces.dispnew,
+      EmacsSourceSurfaces.term,
+      EmacsSourceSurfaces.keyboard,
+      EmacsSourceSurfaces.sysdep,
+    ],
+    treatment: BehaviorTreatment.product,
+    acceptance: "Minimal fake tty lets emacs --quick --no-splash --nw avoid synchronous status 1, reach command_loop/read_char/tty input wait, emit terminal bytes, and consume JS-provided printable input.",
   }),
   filesystemReverseSync: Object.freeze({
     id: "filesystem-reverse-sync",
@@ -419,4 +743,19 @@ export function validateFacadeContract(contract) {
   if (!Object.values(JsRoles).includes(contract.jsRole)) return false;
   if (!Object.values(FacadeStatus).includes(contract.status)) return false;
   return typeof contract.acceptance === "string" && contract.acceptance.length > 0;
+}
+
+export function validateBoundaryInventoryRecord(record) {
+  if (!record || !Object.values(SmallOsServices).includes(record.service)) return false;
+  if (!Array.isArray(record.currentOwners) || record.currentOwners.length === 0) return false;
+  if (!record.currentOwners.every((owner) => Object.values(OwnershipLayers).includes(owner))) return false;
+  if (!Array.isArray(record.currentStateOwners) || record.currentStateOwners.length === 0) return false;
+  if (!record.currentStateOwners.every((owner) => Object.values(OwnershipLayers).includes(owner))) return false;
+  if (!Array.isArray(record.desiredOwners) || record.desiredOwners.length === 0) return false;
+  if (!record.desiredOwners.every((owner) => Object.values(OwnershipLayers).includes(owner))) return false;
+  if (!Array.isArray(record.jsAllowedRoles) || record.jsAllowedRoles.length === 0) return false;
+  if (!record.jsAllowedRoles.every((role) => Object.values(JsRoles).includes(role))) return false;
+  if (!Object.values(BoundaryRisk).includes(record.risk)) return false;
+  if (!Array.isArray(record.sourceSurfaces) || record.sourceSurfaces.length === 0) return false;
+  return typeof record.nextFacadeOrProbe === "string" && record.nextFacadeOrProbe.length > 0;
 }

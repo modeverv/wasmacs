@@ -26,8 +26,12 @@ rg "Module\\['_wasmacs_entrypoint_state'\\].*wasmacs_entrypoint_state" "${artifa
 rg "Module\\['_wasmacs_minibuffer_state'\\].*wasmacs_minibuffer_state" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_command_state'\\].*wasmacs_command_state" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_os_lifecycle_phase'\\].*wasmacs_os_lifecycle_phase" "${artifact_dir}/temacs" >/dev/null
+rg "Module\\['_wasmacs_os_lifecycle_state'\\].*wasmacs_os_lifecycle_state" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_os_root_state_snapshot'\\].*wasmacs_os_root_state_snapshot" "${artifact_dir}/temacs" >/dev/null
+rg "Module\\['_wasmacs_os_stack_bounds_probe'\\].*wasmacs_os_stack_bounds_probe" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_os_gc_permission'\\].*wasmacs_os_gc_permission" "${artifact_dir}/temacs" >/dev/null
+rg "Module\\['_wasmacs_os_gc_permission_state'\\].*wasmacs_os_gc_permission_state" "${artifact_dir}/temacs" >/dev/null
+rg "Module\\['_wasmacs_os_root_safety_probe'\\].*wasmacs_os_root_safety_probe" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_os_pending_command_state'\\].*wasmacs_os_pending_command_state" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_command_begin_minibuffer_probe'\\].*wasmacs_command_begin_minibuffer_probe" "${artifact_dir}/temacs" >/dev/null
 

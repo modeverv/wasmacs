@@ -1229,3 +1229,192 @@
   `OS_PENDING_COMMAND_STATE:idle`,
   `OS_GC_PERMISSION_READBACK:gc-permission:allowed`, and refreshed root
   snapshots.
+
+- Added the first minimal Terminal/Tty Service slice for Milestone 13.5.
+  `scripts/wasmacs-asyncify-host-library.js` now provides a deterministic
+  browser terminal profile (`TERM=dumb`, inline `TERMCAP`, 80x24 winsize),
+  byte-queues stdin, posts stdout/stderr terminal bytes, and answers tty
+  `FIONREAD`. `scripts/patch-emacs-host-entrypoint-spike.sh` patches copied
+  `sysdep.c` so tty reads wait via `wasmacs_host_wait_for_input` and then
+  consume JS-provided terminal bytes. `app/src/small-os-services.js` and
+  `tests/runtime/small-os-services.test.js` now record `Terminal/Tty Service`
+  as a product scaffold with lifecycle/input/browser-boundary checks. Rebuilt
+  `artifacts/emacs-browser-interactive/` and reached the byte-level proof
+  point with `node scripts/run-browser-smoke.mjs interactive-loop`: browser
+  fd 0/1/2 are tty streams, terminal bytes are observed, the waitpoint is
+  reached twice, and printable `a` moves real Emacs point from 1 to 2.
+  However, the worker result still contains `ERR:Aborted(OOM)`, so the smoke
+  must not be treated as a clean pass; terminal profile stability is the next
+  blocker before xterm.js wiring.
+
+- Investigated the interactive-loop OOM layer. The abort is Emscripten
+  `_emscripten_resize_heap`, not Emacs `alloc.c:memory_full`: temporary
+  launcher diagnostics recorded requested sizes of 536,940,544 to 537,006,080
+  bytes against the fixed 536,870,912-byte wasm heap. The captured stack runs
+  through `___syscall_poll`, Asyncify `handleAsync` / `handleSleep`, and
+  `allocateData`, so the failure is at the Asyncify sleep/snapshot allocation
+  while returning to the terminal input waitpoint. Added
+  `WASMACS_INTERACTIVE_INITIAL_MEMORY` as a diagnostic override in
+  `scripts/build-emacs-browser-interactive.sh`; a 768MiB rebuild did not emit
+  the immediate OOM in the same early smoke window and remained pending at the
+  terminal waitpoint until the diagnostic smoke was stopped manually. Current
+  working theory: the 512MiB fixed-memory layout leaves too little heap-end
+  slack for the Asyncify poll snapshot. This is not yet proof of a bad pointer
+  offset; the next probe should expose runtime brk, heap base/end, and stack
+  bounds.
+
+- Added the first real-route interactive semantics smoke for the terminal
+  profile. `app/src/asyncify-minibuffer-worker.js` can now start the
+  interactive command loop as a long-lived worker operation, and
+  `app/src/main.js` drives it from `emacs-waiting` messages by sending only
+  terminal bytes: printable text, `C-_` undo, `C-x C-f`, filename submission,
+  and `C-x 2`. `scripts/run-browser-smoke.mjs interactive-semantics` records
+  PASS only if terminal output proves those routes, and otherwise records a
+  known blocker for the OS compatibility memory/runtime layer. Added the
+  `browser:smoke:interactive` npm alias and validation checks for the new
+  smoke entry.
+
+- Corrected the memory-budget finding from the 768MiB diagnostic profile. A
+  768MiB fixed-memory artifact and a 1GiB fixed-memory artifact both reached
+  the first real terminal waitpoint with fd 0/1/2 tty, 13,272 initial terminal
+  bytes, and `*scratch*` visible in the terminal stream. Both then aborted
+  with `Aborted(OOM)` immediately after the first terminal byte was sent and
+  the wait was resolved. A 1GiB initial-memory artifact with
+  `ALLOW_MEMORY_GROWTH=1` did not hit that immediate fixed-limit OOM during
+  the observed window, but also did not progress back to `emacs-waiting`
+  before the diagnostic run was stopped. The semantics smoke is therefore
+  installed, but its current result is a substrate blocker: Asyncify
+  resume/memory layout after the first tty input must be fixed before
+  minibuffer/undo/buffer/window smoke can pass.
+
+- Added `docs/os-compatibility-boundary.md` to inventory the OS compatibility
+  layer by service and owner. The document records current implementation
+  owners, current state owners, desired owners, risks, and next diagnostic
+  facade/probe candidates for Lifecycle, Memory and Root, Control Flow,
+  Blocking Input Scheduler, Filesystem and Persistence, Preloaded State,
+  Terminal/Tty, Host Capability, and Browser GUI Boundary. It explicitly keeps
+  memory reduction out of scope and treats success as clearer ownership plus
+  diagnostic observability. `app/src/small-os-services.js` now mirrors the
+  same boundary as `OwnershipLayers`, `BoundaryRisk`, and
+  `OsCompatibilityBoundaryInventory`; tests assert the inventory covers every
+  service and that lifecycle/memory/root/control-flow desired ownership stays
+  in Emacs C core plus the C/wasm facade rather than JS. The existing
+  validation script now checks the new boundary document and registry entries.
+
+- Added diagnostic-only C/wasm facades for the OS compatibility boundary:
+  `wasmacs_os_lifecycle_state`, `wasmacs_os_stack_bounds_probe`,
+  `wasmacs_os_gc_permission_state`, and `wasmacs_os_root_safety_probe`.
+  They are patched into copied `emacs.c` by
+  `scripts/patch-emacs-host-entrypoint-spike.sh` and return copied JSON
+  snapshots only; JS does not receive or own raw pointers, `Lisp_Object`,
+  `specpdl`, pure space, relocation, or lifecycle state. Build scripts now
+  export the probes, `app/src/wasm-worker.js` exposes only a debug
+  `os-diagnostic-snapshot` read path, and
+  `scripts/probe-browser-os-diagnostic-facade.mjs` validates that wasm boots
+  and the structured `lifecycle` / `stack` / `gc` / `rootSafety` snapshot is
+  readable.
+
+- Validation for the diagnostic facade pass: rebuilt the persistent browser
+  artifact, ran `node scripts/probe-browser-os-diagnostic-facade.mjs`,
+  `npm test`, and `scripts/validate-browser-persistent-spike.sh`; all passed.
+  The probe log records `BOOT_EXIT:0`, lifecycle `phase: initialized`, idle
+  pending command state, refreshed stack bottom/top, GC `allowed`, and
+  root-safety `policyDefined: true`.
+
+- Added a resume-boundary Memory and Root diagnostic probe:
+  `scripts/probe-browser-os-resume-memory-root.mjs`. It captures copied
+  C/wasm snapshots at `after-boot`, `before-asyncify-wait`, `pending-input`,
+  `before-input-injection`, `after-input-injection-before-resume`,
+  `after-resume`, `after-command-complete`, and `after-explicit-gc`, writing
+  `logs/wasm-browser-os-resume-memory-root.txt` and
+  `logs/wasm-browser-os-resume-memory-root.jsonl`. The probe reuses the
+  existing Asyncify pending-input path and does not add product-path
+  dependency on diagnostics. Observed result: GC permission flips from
+  `allowed` to `blocked:pending-command` during pending input, with wasmacs
+  GC guard depth 1, then returns to `allowed` and guard depth 0 after resume /
+  completion / explicit GC. Stack roots stay fresh in the copied C snapshots.
+  JS wait state is already true again after resume because Emacs has entered
+  the next input wait.
+
+- Added a diagnostic-only Blocking Input Scheduler probe for the tty route:
+  `scripts/probe-browser-blocking-input-scheduler.mjs`. It uses the Asyncify
+  browser profile and `emacs --quick --no-splash --nw`, records scheduler
+  phase, wait active/count, resolver presence, queued bytes/preview, last
+  injected input, last resolved wait id, repeated wait count, and copied
+  lifecycle/GC/root-safety snapshots. Validation with
+  `WASMACS_BLOCKING_INPUT_SCHEDULER_TIMEOUT_MS=60000 node
+  scripts/probe-browser-blocking-input-scheduler.mjs` captured checkpoints
+  through `after-wait-resolve-before-resume` and then synthesized a `failure`
+  checkpoint after parent timeout. Evidence: first wait reaches
+  `waitActive:true` / `waitCount:1`; queued input byte `[97]` is present before
+  resolve; after resolving wait id 1 the resolver is cleared, but queued bytes
+  remain 1 and no resume/next-wait checkpoint is reached. C/wasm state remains
+  lifecycle `initialized`, GC `allowed`, root safety `allowed`, which points
+  the next investigation at the scheduler/tty Asyncify resume edge.
+
+- Refined the Blocking Input Scheduler probe with low-level boundary events:
+  JS wait import enter, resolver called, resolve-after, import promise `.then`,
+  copied C `read_char` reached, copied C wait return, and tty byte dequeue.
+  After rebuilding the Asyncify browser artifact and rerunning
+  `WASMACS_BLOCKING_INPUT_SCHEDULER_TIMEOUT_MS=60000 node
+  scripts/probe-browser-blocking-input-scheduler.mjs`, the event log shows
+  `c-keyboard-read-char-reached`, `c-keyboard-before-wait-import`,
+  `js-import-wait-enter`, `js-import-resolver-called`, and
+  `js-import-resolve-after`. It does not show `js-import-promise-then`,
+  `c-sysdep-before-wait`, `c-sysdep-after-wait-return`,
+  `js-terminal-read-byte-dequeue`, or `c-sysdep-byte-dequeued`. The printable
+  byte `[97]` stays queued at timeout. This places the stop before Asyncify
+  resumes far enough to re-enter the tty read/dequeue path.
+
+- Added a minimal Asyncify import contract probe:
+  `scripts/probe-asyncify-import-contract.mjs` with fixture sources under
+  `tests/fixtures/asyncify-import-contract.*`. It builds a small wasm module
+  with `ASYNCIFY_IMPORTS` covering raw Promise, `async function` wrapper, and
+  `Asyncify.handleAsync` imports. Validation with
+  `npm run test:asyncify-import-contract` passed and logged that raw Promise
+  and async-wrapper imports do not suspend C execution even though their
+  Promise `.then` callbacks run; both C paths continue before resolver
+  invocation and observe default return value 0. The `Asyncify.handleAsync`
+  import suspends until resolver invocation and returns the resolved integer
+  to C.
+
+- Added Promise identity diagnostics to
+  `scripts/wasmacs-asyncify-host-library.js` and the Blocking Input Scheduler
+  JSONL snapshots. After rebuilding `artifacts/emacs-browser-asyncify-spike/`
+  and rerunning
+  `WASMACS_BLOCKING_INPUT_SCHEDULER_TIMEOUT_MS=60000 npm run
+  test:blocking-input-scheduler`, the real Emacs route records
+  `createdPromiseId:1`, `resolverPromiseId:1`, `thenPromiseId:2`,
+  `returnedExpressionPromiseId:2`, and
+  `actualReturnedPromiseId:"unobservable-async-function-wrapper"`.
+  `ASYNCIFY_IMPORTS=wasmacs_host_wait_for_input` is present in the asyncify
+  build profiles, but `callMain` returns 0 rather than an Asyncify Promise,
+  `c-keyboard-after-wait-return` is observed before external resolver
+  invocation, `js-import-promise-then` is still absent at timeout, and queued
+  byte `[97]` remains unconsumed. This keeps the current blocker in the
+  Promise / Asyncify import contract layer.
+
+- Added diagnostic-only wait import mode switching to
+  `scripts/wasmacs-asyncify-host-library.js`. The default
+  `async-wrapper` mode preserves the previous async-function wrapper shape;
+  `WASMACS_WAIT_IMPORT_MODE=handleAsync` routes the same host wait through
+  `Asyncify.handleAsync`. Added handleAsync checkpoints:
+  `js-import-handleasync-enter`,
+  `js-import-handleasync-promise-created`, and
+  `js-import-handleasync-returning`.
+
+- Updated `scripts/probe-browser-blocking-input-scheduler.mjs` to compare
+  `async-wrapper` and `handleAsync` modes by default and write separate logs:
+  `logs/wasm-browser-blocking-input-scheduler-async-wrapper.txt/jsonl`,
+  `logs/wasm-browser-blocking-input-scheduler-handleasync.txt/jsonl`, plus
+  `logs/wasm-browser-blocking-input-scheduler-compare.txt`. Validation with
+  `WASMACS_BLOCKING_INPUT_SCHEDULER_TIMEOUT_MS=60000 node
+  scripts/probe-browser-blocking-input-scheduler.mjs` passed as diagnostic
+  capture. async-wrapper reproduced the old ordering:
+  `c-keyboard-after-wait-return` before resolver, then
+  `js-import-resolver-called` / `js-import-resolve-after`, with byte `[97]`
+  still queued. handleAsync reached the handleAsync-specific import
+  checkpoints and did not show `c-keyboard-after-wait-return` before resolver,
+  but after resolver it still did not reach Promise `.then`, C wait return,
+  `c-sysdep-before-wait`, or terminal byte dequeue. In both modes `callMain`
+  reported return value 0 rather than a Promise.

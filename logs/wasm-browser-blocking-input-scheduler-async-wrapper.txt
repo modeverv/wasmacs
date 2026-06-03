@@ -1,0 +1,75 @@
+CASE:blocking-input-scheduler
+MODE:async-wrapper
+READY
+CHECKPOINT:after-boot
+CHECKPOINT:before-tty-read
+ERR:warning: unsupported syscall: __syscall_prlimit64
+ERR:warning: unsupported syscall: __syscall_prlimit64
+ERR:warning: unsupported syscall: __syscall_prlimit64
+CHECKPOINT:before-asyncify-wait
+CHECKPOINT:pending-input
+CHECKPOINT:before-input-queue
+CHECKPOINT:after-input-queue-before-resolve
+CHECKPOINT:before-wait-resolver-call
+CHECKPOINT:after-wait-resolve-before-resume
+EXIT_STATUS:null
+SIGNAL:SIGTERM
+TIMEOUT:true
+STDOUT_BEGIN
+READY
+CHECKPOINT:after-boot
+CHECKPOINT:before-tty-read
+ERR:warning: unsupported syscall: __syscall_prlimit64
+ERR:warning: unsupported syscall: __syscall_prlimit64
+ERR:warning: unsupported syscall: __syscall_prlimit64
+CHECKPOINT:before-asyncify-wait
+CHECKPOINT:pending-input
+CHECKPOINT:before-input-queue
+CHECKPOINT:after-input-queue-before-resolve
+CHECKPOINT:before-wait-resolver-call
+CHECKPOINT:after-wait-resolve-before-resume
+STDOUT_END
+STDERR_BEGIN
+
+STDERR_END
+SUMMARY_BEGIN
+{
+  "status": "PASS",
+  "mode": "async-wrapper",
+  "exitStatus": null,
+  "signal": "SIGTERM",
+  "checkpoints": [
+    "after-boot",
+    "before-tty-read",
+    "before-asyncify-wait",
+    "pending-input",
+    "before-input-queue",
+    "after-input-queue-before-resolve",
+    "before-wait-resolver-call",
+    "after-wait-resolve-before-resume",
+    "failure"
+  ],
+  "schedulerEventLabels": [
+    "c-keyboard-read-char-reached",
+    "c-keyboard-before-wait-import",
+    "js-import-wait-enter",
+    "js-import-promise-created",
+    "js-import-resolver-bound",
+    "js-import-promise-return-expression",
+    "c-keyboard-after-wait-return",
+    "js-import-resolver-called",
+    "js-import-resolve-after"
+  ],
+  "snapshotCount": 9,
+  "lastCheckpoint": "failure",
+  "queuedWasConsumed": false,
+  "resolverCleared": true,
+  "cKeyboardAfterWaitReturnBeforeResolver": true,
+  "cKeyboardAfterWaitReturnAfterResolver": false,
+  "reachedHandleAsync": false,
+  "reachedSysdepBeforeWait": false,
+  "reachedByteDequeue": false,
+  "waitCountStart": 1,
+  "waitCountEnd": 1
+}
+SUMMARY_END

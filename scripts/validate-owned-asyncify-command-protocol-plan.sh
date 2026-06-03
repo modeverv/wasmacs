@@ -6,6 +6,7 @@ plan="${repo_root}/PLAN.md"
 arch="${repo_root}/ARCHITECTURE.md"
 doc="${repo_root}/docs/owned-asyncify-command-protocol-plan.md"
 substrate_doc="${repo_root}/docs/small-os-substrate-implementation.md"
+boundary_doc="${repo_root}/docs/os-compatibility-boundary.md"
 small_os="${repo_root}/small-os-for-emacs.md"
 substrate_js="${repo_root}/app/src/small-os-services.js"
 runtime_js="${repo_root}/app/src/small-os-runtime.js"
@@ -16,6 +17,7 @@ test -f "${plan}"
 test -f "${arch}"
 test -f "${doc}"
 test -f "${substrate_doc}"
+test -f "${boundary_doc}"
 test -f "${small_os}"
 test -f "${substrate_js}"
 test -f "${runtime_js}"
@@ -132,8 +134,25 @@ rg 'pending-command-protocol' "${substrate_doc}" >/dev/null
 rg 'filesystem-reverse-sync' "${substrate_doc}" >/dev/null
 rg 'Product vs Diagnostic Rule' "${substrate_doc}" >/dev/null
 rg 'Browser Coordinator' "${substrate_doc}" >/dev/null
+rg 'OS Compatibility Boundary' "${boundary_doc}" >/dev/null
+rg 'Service Inventory' "${boundary_doc}" >/dev/null
+rg 'Current implementation and owner' "${boundary_doc}" >/dev/null
+rg 'Current state owner' "${boundary_doc}" >/dev/null
+rg 'Desired owner' "${boundary_doc}" >/dev/null
+rg 'Ambiguous or Unsafe Ownership' "${boundary_doc}" >/dev/null
+rg 'Minimal Facade Candidates' "${boundary_doc}" >/dev/null
+rg 'wasmacs_os_lifecycle_state' "${boundary_doc}" >/dev/null
+rg 'wasmacs_os_gc_permission_state' "${boundary_doc}" >/dev/null
+rg 'wasmacs_os_entrypoint_begin' "${boundary_doc}" >/dev/null
+rg 'wasmacs_os_entrypoint_end' "${boundary_doc}" >/dev/null
+rg 'wasmacs_os_root_safety_probe' "${boundary_doc}" >/dev/null
+rg 'wasmacs_os_stack_bounds_probe' "${boundary_doc}" >/dev/null
+rg 'not a success criterion' "${boundary_doc}" >/dev/null
 rg 'SmallOsServices' "${substrate_js}" >/dev/null
 rg 'LifecyclePhases' "${substrate_js}" >/dev/null
+rg 'OwnershipLayers' "${substrate_js}" >/dev/null
+rg 'OsCompatibilityBoundaryInventory' "${substrate_js}" >/dev/null
+rg 'validateBoundaryInventoryRecord' "${substrate_js}" >/dev/null
 rg 'CrossServiceChecks' "${substrate_js}" >/dev/null
 rg 'SmallOsFacades' "${substrate_js}" >/dev/null
 rg 'FacadeStatus' "${substrate_js}" >/dev/null
@@ -193,21 +212,94 @@ rg 'WASMACS_ENTER_HOST_ENTRYPOINT' "${repo_root}/scripts/patch-emacs-host-entryp
 rg 'WASMACS_LEAVE_HOST_ENTRYPOINT' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
 rg 'wasmacs_entrypoint_state' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
 rg 'wasmacs_os_lifecycle_phase' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
+rg 'wasmacs_os_lifecycle_state' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
 rg 'wasmacs_os_root_state_snapshot' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
+rg 'wasmacs_os_stack_bounds_probe' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
 rg 'wasmacs_os_gc_permission' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
+rg 'wasmacs_os_gc_permission_state' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
+rg 'wasmacs_os_root_safety_probe' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
 rg 'wasmacs_os_pending_command_state' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
 rg '_wasmacs_entrypoint_state' "${repo_root}/scripts/build-emacs-browser-persistent-spike.sh" >/dev/null
 rg '_wasmacs_os_lifecycle_phase' "${repo_root}/scripts/build-emacs-browser-persistent-spike.sh" >/dev/null
+rg '_wasmacs_os_lifecycle_state' "${repo_root}/scripts/build-emacs-browser-persistent-spike.sh" >/dev/null
 rg '_wasmacs_os_root_state_snapshot' "${repo_root}/scripts/build-emacs-browser-persistent-spike.sh" >/dev/null
+rg '_wasmacs_os_stack_bounds_probe' "${repo_root}/scripts/build-emacs-browser-persistent-spike.sh" >/dev/null
 rg '_wasmacs_os_gc_permission' "${repo_root}/scripts/build-emacs-browser-persistent-spike.sh" >/dev/null
+rg '_wasmacs_os_gc_permission_state' "${repo_root}/scripts/build-emacs-browser-persistent-spike.sh" >/dev/null
+rg '_wasmacs_os_root_safety_probe' "${repo_root}/scripts/build-emacs-browser-persistent-spike.sh" >/dev/null
 rg '_wasmacs_os_pending_command_state' "${repo_root}/scripts/build-emacs-browser-persistent-spike.sh" >/dev/null
 rg '_wasmacs_entrypoint_state' "${repo_root}/scripts/build-emacs-browser-asyncify-spike.sh" >/dev/null
 rg '_wasmacs_os_lifecycle_phase' "${repo_root}/scripts/build-emacs-browser-asyncify-spike.sh" >/dev/null
+rg '_wasmacs_os_lifecycle_state' "${repo_root}/scripts/build-emacs-browser-asyncify-spike.sh" >/dev/null
 rg '_wasmacs_os_root_state_snapshot' "${repo_root}/scripts/build-emacs-browser-asyncify-spike.sh" >/dev/null
+rg '_wasmacs_os_stack_bounds_probe' "${repo_root}/scripts/build-emacs-browser-asyncify-spike.sh" >/dev/null
 rg '_wasmacs_os_gc_permission' "${repo_root}/scripts/build-emacs-browser-asyncify-spike.sh" >/dev/null
+rg '_wasmacs_os_gc_permission_state' "${repo_root}/scripts/build-emacs-browser-asyncify-spike.sh" >/dev/null
+rg '_wasmacs_os_root_safety_probe' "${repo_root}/scripts/build-emacs-browser-asyncify-spike.sh" >/dev/null
 rg '_wasmacs_os_pending_command_state' "${repo_root}/scripts/build-emacs-browser-asyncify-spike.sh" >/dev/null
 
 test -x "${repo_root}/scripts/validate-minibuffer-asyncify-entrypoint-plan.sh"
+test -f "${repo_root}/scripts/probe-browser-os-diagnostic-facade.mjs"
+test -f "${repo_root}/scripts/probe-browser-os-resume-memory-root.mjs"
+test -f "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs"
+test -f "${repo_root}/scripts/probe-asyncify-import-contract.mjs"
+test -f "${repo_root}/tests/fixtures/asyncify-import-contract.c"
+test -f "${repo_root}/tests/fixtures/asyncify-import-contract-library.js"
+rg 'after-boot' "${repo_root}/scripts/probe-browser-os-resume-memory-root.mjs" >/dev/null
+rg 'pending-input' "${repo_root}/scripts/probe-browser-os-resume-memory-root.mjs" >/dev/null
+rg 'after-input-injection-before-resume' "${repo_root}/scripts/probe-browser-os-resume-memory-root.mjs" >/dev/null
+rg 'after-resume' "${repo_root}/scripts/probe-browser-os-resume-memory-root.mjs" >/dev/null
+rg 'after-explicit-gc' "${repo_root}/scripts/probe-browser-os-resume-memory-root.mjs" >/dev/null
+rg 'wasmacs_os_lifecycle_state' "${repo_root}/scripts/probe-browser-os-resume-memory-root.mjs" >/dev/null
+rg 'wasmacs_os_stack_bounds_probe' "${repo_root}/scripts/probe-browser-os-resume-memory-root.mjs" >/dev/null
+rg 'wasmacs_os_gc_permission_state' "${repo_root}/scripts/probe-browser-os-resume-memory-root.mjs" >/dev/null
+rg 'wasmacs_os_root_safety_probe' "${repo_root}/scripts/probe-browser-os-resume-memory-root.mjs" >/dev/null
+rg 'test:os-resume-memory-root' "${package_json}" >/dev/null
+rg 'before-tty-read' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'before-input-queue' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'after-input-queue-before-resolve' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'before-wait-resolver-call' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'after-wait-resolve-before-resume' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'after-next-wait' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'queuedPreview' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'promiseIdentity' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'jsImportPromiseCreated' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'jsImportPromiseReturned' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'jsImportResolverBound' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'jsImportHandleAsyncEnter' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'WASMACS_WAIT_IMPORT_MODE' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'async-wrapper' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'handleAsync' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'host_wait_manual_promise,host_wait_async_wrapper,host_wait_handle_async' "${repo_root}/scripts/probe-asyncify-import-contract.mjs" >/dev/null
+rg 'host_wait_manual_promise' "${repo_root}/tests/fixtures/asyncify-import-contract-library.js" >/dev/null
+rg 'host_wait_async_wrapper' "${repo_root}/tests/fixtures/asyncify-import-contract-library.js" >/dev/null
+rg 'host_wait_handle_async' "${repo_root}/tests/fixtures/asyncify-import-contract-library.js" >/dev/null
+rg 'Asyncify\.handleAsync' "${repo_root}/tests/fixtures/asyncify-import-contract-library.js" >/dev/null
+rg 'js-import-promise-created' "${repo_root}/scripts/wasmacs-asyncify-host-library.js" >/dev/null
+rg 'js-import-promise-return-expression' "${repo_root}/scripts/wasmacs-asyncify-host-library.js" >/dev/null
+rg 'js-import-resolver-bound' "${repo_root}/scripts/wasmacs-asyncify-host-library.js" >/dev/null
+rg 'js-import-handleasync-enter' "${repo_root}/scripts/wasmacs-asyncify-host-library.js" >/dev/null
+rg 'js-import-handleasync-promise-created' "${repo_root}/scripts/wasmacs-asyncify-host-library.js" >/dev/null
+rg 'js-import-handleasync-returning' "${repo_root}/scripts/wasmacs-asyncify-host-library.js" >/dev/null
+rg 'Asyncify\.handleAsync' "${repo_root}/scripts/wasmacs-asyncify-host-library.js" >/dev/null
+rg 'WASMACS_WAIT_IMPORT_MODE' "${repo_root}/scripts/wasmacs-asyncify-host-library.js" >/dev/null
+rg '__wasmacsWaitPromiseState' "${repo_root}/scripts/wasmacs-asyncify-host-library.js" >/dev/null
+rg 'ASYNCIFY_IMPORTS=wasmacs_host_wait_for_input' "${repo_root}/scripts/build-emacs-browser-asyncify-spike.sh" >/dev/null
+rg 'ASYNCIFY_IMPORTS=wasmacs_host_wait_for_input' "${repo_root}/scripts/build-emacs-browser-interactive.sh" >/dev/null
+rg 'ASYNCIFY_IMPORTS=wasmacs_host_wait_for_input' "${repo_root}/scripts/build-emacs-browser-asyncify-pdump.sh" >/dev/null
+rg 'test:asyncify-import-contract' "${package_json}" >/dev/null
+rg 'lastResolvedWaitId' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'repeatedWaitCount' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'jsImportResolveAfter' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'jsImportPromiseThen' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'cSysdepAfterWaitReturn' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'jsTerminalReadByteDequeue' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'cKeyboardReadCharReached' "${repo_root}/scripts/probe-browser-blocking-input-scheduler.mjs" >/dev/null
+rg 'wasmacs_host_scheduler_checkpoint' "${repo_root}/scripts/wasmacs-asyncify-host-library.js" >/dev/null
+rg 'c-keyboard-read-char-reached' "${repo_root}/scripts/wasmacs-asyncify-host-library.js" >/dev/null
+rg 'wasmacs_host_scheduler_checkpoint \(200\)' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
+rg 'wasmacs_host_scheduler_checkpoint \(101\)' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
+rg 'test:blocking-input-scheduler' "${package_json}" >/dev/null
 test -f "${repo_root}/scripts/probe-browser-asyncify-gc-after-completion.mjs"
 test -f "${repo_root}/scripts/probe-browser-asyncify-minibuffer-input-injection.mjs"
 test -f "${repo_root}/scripts/probe-browser-asyncify-minibuffer-cancel.mjs"
