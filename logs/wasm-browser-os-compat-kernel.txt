@@ -1,0 +1,11 @@
+PUSH_GC_GUARD:0 gc-guard-pushed:emacs-depth=1:wasmacs-depth=1
+POP_GC_GUARD:0 gc-guard-popped:emacs-depth=0:wasmacs-depth=0
+BEGIN_COMMAND:0 command-begun:kind=minibuffer-read
+REENTRANT_REJECTED:3 unavailable:busy
+CANCEL_COMMAND:0 command-cancel-queued
+FINISH_COMMAND:0 command-finished
+GC_AFTER_FINISH:0 garbage-collected
+OS_LIFECYCLE_PHASE:initialized
+OS_GC_PERMISSION:gc-permission:allowed
+STATUS:PASS
+STATUS:PASS os-compat kernel probe recorded

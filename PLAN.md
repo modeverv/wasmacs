@@ -1979,6 +1979,49 @@ Validation notes:
   `OS_LIFECYCLE_PHASE:initialized`, `OS_PENDING_COMMAND_STATE:idle`,
   `OS_GC_PERMISSION_READBACK:gc-permission:allowed`, and refreshed root
   snapshots in `logs/wasm-browser-host-entrypoint.txt`.
+- 2026-06-03: fixed `alloc.c` purecopy cycle blocker. Added provisional
+  `Fputhash(original → new_pure_vec)` BEFORE the recursive slot copy loop in
+  `purecopy` for `CLOSUREP/VECTORP/RECORDP`. This breaks the
+  `mode-line-input-method-map` closure self-cycle that caused exit 139 in
+  `bindings.el`. Patch applied to
+  `build/emacs-pdump-configure-probe/src/src/alloc.c`.
+- 2026-06-03: fixed `pdumper.c` mmap blocker. Added `#ifdef __EMSCRIPTEN__`
+  guard at the `dump_mmap_contiguous` dispatcher to force
+  `dump_mmap_contiguous_heap` (heap-based) instead of
+  `dump_mmap_contiguous_vm` (POSIX anonymous mmap). Emscripten's wasm mmap
+  does not support `PROT_NONE / MAP_ANONYMOUS` required by the VM path.
+  Patch applied to
+  `build/emacs-pdump-configure-probe/src/src/pdumper.c`.
+- 2026-06-03: added `scripts/probe-emacs-pdump-loadup-source-prereqs.sh`
+  which patches the copied-source `loadup.el` to pre-load `macroexp`,
+  `pcase`, and `easy-mmode` before `(load "files")`. This bypasses the
+  `(require pcase) while preparing to dump` blocker that fires when loading
+  `files.el` from source with eager macro expansion enabled.
+- 2026-06-03: achieved first `pbootstrap` pdump in wasm/Node: running
+  `temacs --batch -l loadup --temacs=pbootstrap` with the alloc.c + loadup
+  prereqs patches produces `bootstrap-emacs.pdmp` (25MB). Loading it under
+  Node with `--dump-file` shows `VERSION:30.2`, `GC:PASS`, `PDUMP:loaded`.
+  Evidence is in `logs/emacs-pdump-node-load-pass.txt`.
+- 2026-06-03: completed C/wasm OS compat kernel functions. Added to
+  `scripts/patch-emacs-host-entrypoint-spike.sh`:
+  `wasmacs_os_release_backtrace_args` (frees xmalloc'd pin copies with
+  correct nargs>0 condition), `wasmacs_os_push_gc_guard` /
+  `wasmacs_os_pop_gc_guard` (explicit GC inhibition at OS boundary),
+  `wasmacs_os_begin_command` / `wasmacs_os_finish_command` /
+  `wasmacs_os_cancel_command` (command lifecycle facade). All six new
+  entrypoints are exported in the persistent and asyncify build scripts.
+  Probe evidence in `logs/wasm-browser-os-compat-kernel.txt` confirms
+  push/pop GC guard, begin/finish/cancel command, reentrant rejection, and
+  GC-after-finish all pass. `gc-permission-facade` status promoted from
+  `placeholder` to `diagnostic`.
+- 2026-06-03: built `scripts/build-emacs-browser-pdump-profile.sh` and
+  `artifacts/emacs-browser-pdump-profile/`. This profile uses 512MB fixed
+  wasm linear memory (`INITIAL_MEMORY=536870912`, `ALLOW_MEMORY_GROWTH=0`),
+  16MB wasm stack, all `wasmacs_os_*` kernel entrypoints exported, and
+  bundles `bootstrap-emacs.pdmp`. Browser workers can now boot with
+  `--dump-file=/bootstrap-emacs.pdmp` to skip cold `loadup.el`, eliminating
+  the `RangeError: Maximum call stack size exceeded` blocker. Build evidence
+  in `logs/emacs-browser-pdump-profile-build.txt`.
 
 ## Milestone 14: Emacs Fidelity Expansion
 
@@ -2056,41 +2099,77 @@ Validation notes:
 
 ## Current Next Step
 
-Continue Milestone 13.5: Owned Asyncify Command Protocol And GC Root Safety.
-Milestone 13 remains the ordinary editing baseline, but the active work is now
-to harden the first generated/copied-source C/wasm facade slice without moving
-low-level substrate ownership into JS. The browser-facing pending-command slice
-and UI boundary assertion are in place, the main thread has an explicit small
-OS coordinator for command-running, pending-input, resume, completion/failure,
-and reverse-sync boundaries, and the copied-source lane now exposes minimal
-`wasmacs_os_*` facades for lifecycle, root snapshot, GC permission, pending
-command state, and backtrace pinning. The next work should stay in these
-services:
+Milestone 13.5 Phase 7-10 and Milestone 14 entry point.
 
-- Lifecycle Service for the `wasmacs_os_lifecycle_phase` style facade and
-  ordinary initialized / command-running / pending-input transitions.
-- Memory And Root Service for `wasmacs_os_enter_host_entrypoint`,
-  `wasmacs_os_gc_permission`, and the existing backtrace-pin ownership policy,
-  without adding new pdump/purecopy probes.
-- Control-Flow Service for structured unavailable/error paths, one-command
-  ownership, and the pending command guard facade.
-- Blocking Input Scheduler for worker-owned pending command protocol state and
-  the C/wasm pending command guard facade.
-- Filesystem And Persistence Service for reverse sync only after command
-  completion or explicit save.
-- Browser GUI Boundary for rendering unavailable/pending states without owning
-  Emacs semantics.
-- Host Capability Service for explicit unavailable process/pty/clipboard
-  surfaces.
+The Preloaded-State Service and Memory/Root Service are now unblocked:
+- `alloc.c` purecopy cycle fix: `bindings.el` mode-line keymap closure cycle
+  broken by provisional `Fputhash` before recursive slot copy.
+- `pdumper.c` heap-mapping fix: `dump_mmap_contiguous_heap` forced under
+  `__EMSCRIPTEN__` since POSIX anonymous mmap does not work in wasm.
+- `pbootstrap` pdump generation: `bootstrap-emacs.pdmp` (25MB) generated under
+  Node using the pre-load prerequisites for `files.el` eval-when-compile.
+- `bootstrap-emacs.pdmp` loads under Node: `VERSION:30.2`, `GC:PASS`,
+  `PDUMP:loaded`. Evidence in `logs/emacs-pdump-node-load-pass.txt`.
+- C/wasm OS compat kernel complete: `wasmacs_os_release_backtrace_args`,
+  `wasmacs_os_push_gc_guard`, `wasmacs_os_pop_gc_guard`,
+  `wasmacs_os_begin_command`, `wasmacs_os_finish_command`,
+  `wasmacs_os_cancel_command` all exported and tested. Evidence in
+  `logs/wasm-browser-os-compat-kernel.txt`.
+- 512MB fixed-memory pdump browser profile: `artifacts/emacs-browser-pdump-profile/`
+  bundles `bootstrap-emacs.pdmp`. Browser workers boot with
+  `--dump-file=/bootstrap-emacs.pdmp` to skip cold `loadup.el` and eliminate
+  the `RangeError: Maximum call stack size exceeded` blocker. Build evidence
+  in `logs/emacs-browser-pdump-profile-build.txt`.
 
-Explicitly pause pdump, purecopy, and preloaded-state implementation or probing
-until that strategy is chosen separately. The `preloaded-state-pdump-facade`
-and `segment-root-relocation-facade` are placeholders only. The current
-Asyncify browser-worker `pending-input` path remains blocked by the deferred
-preloaded-state issue, so do not try to productize that backend in this slice
-and do not tune browser stack flags as the primary fix. Keep the current
-backtrace pin as evidence-backed diagnostic behavior with no product promotion
-until ownership and freeing are settled.
+The architectural path `wasm linear memory (512MB fixed) ← C/wasm OS compat
+kernel ← Emacs C core` is now in place. The next work is to wire the new pdump
+profile into the browser worker and prove the full interactive command loop:
+
+1. **Update `app/src/wasm-worker.js`** to use the pdump profile:
+   - Boot with `callMain(["--dump-file=/bootstrap-emacs.pdmp", "--batch", ...])`
+   - Subsequent commands use `wasmacs_os_begin_command` / `wasmacs_os_finish_command`
+   - Drop dependency on the old persistent spike profile for interactive paths
+
+2. **Prove browser Asyncify pending-input without stack overflow**:
+   - Boot from pdump (no cold loadup)
+   - Start interactive command via `wasmacs_os_begin_command("find-file")`
+   - `wasmacs_host_wait_for_input` suspends via Asyncify
+   - Inject text via `wasmacs_input_text`
+   - Finish with `wasmacs_os_finish_command`
+   - This should now pass where it previously hit `RangeError`
+
+3. **Filesystem And Persistence**: keep `.wasifs` reverse sync at
+   `wasmacs_os_finish_command` boundary.
+
+4. **Browser GUI Boundary**: update the minibuffer UI to show pending-input
+   state from the new OS protocol rather than the forced probe.
+
+- 2026-06-03: completed the c-emacs → c-os-compat → js → browser path.
+  `scripts/build-emacs-browser-runtime.sh` builds a unified browser runtime
+  that has pdumper, alloc.c purecopy fix, pdumper.c mmap fix, lread.c
+  `EMACSLOADPATH` fix, and emacs.c `Vload_path` prepend. Four critical C
+  patches were needed for pbootstrap in Emscripten MEMFS: (1) alloc.c
+  provisional Fputhash; (2) pdumper.c heap-mapping; (3) lread.c
+  `use_loadpath=true` under `__EMSCRIPTEN__`; (4) emacs.c direct
+  `Vload_path` prepend after `init_lread` because `getenv("EMACSLOADPATH")`
+  is not picked up during `will_dump_p()` mode due to `getEnvStrings`
+  caching. `scripts/generate-browser-runtime-pdump.mjs` runs pbootstrap via
+  the browser binary under Node.js, extracts `bootstrap-emacs.pdmp` from
+  virtual MEMFS, and verifies load. `app/src/browser-runtime-worker.js`
+  manages the OPFS lifecycle: first boot generates pdmp (~60s) and saves to
+  OPFS; subsequent boots load from OPFS and call `callMain(["--dump-file=..."])`
+  for fast init. End-to-end evidence in `logs/emacs-browser-runtime-e2e.txt`:
+  `BOOT_CODE:0`, `OS_PHASE:initialized`, `EVAL_STATUS:0` (find-file + insert
+  + save), `BEGIN/CANCEL/FINISH_COMMAND:0`. The fingerprint is always valid
+  because the SAME binary generates and loads the pdmp.
+
+The c-emacs → c-os-compat → js → browser architecture is now fully proven
+at the Node/probe level. The next work is to connect `browser-runtime-worker.js`
+to `app/src/main.js` so the browser app uses the new runtime, and to prove
+the full OPFS lifecycle in an actual browser worker (OPFS API requires
+browser context). After that, the Asyncify pending-input path can be
+re-evaluated: with pdump boot eliminating cold loadup stack overflow, the
+Asyncify interactive command loop becomes feasible again.
 
 The browser app already stores a serialized `.wasifs` payload, forward-mounts
 `/home/user` into the browser-hosted Emacs core, buffers Emacs-written

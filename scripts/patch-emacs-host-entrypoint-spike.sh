@@ -2,13 +2,18 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source_file="${repo_root}/build/emacs-core-spike/src/src/emacs.c"
-keyboard_file="${repo_root}/build/emacs-core-spike/src/src/keyboard.c"
-minibuf_file="${repo_root}/build/emacs-core-spike/src/src/minibuf.c"
+spike_src="${WASMACS_SPIKE_SRC:-${repo_root}/build/emacs-core-spike/src}"
+source_file="${spike_src}/src/emacs.c"
+keyboard_file="${spike_src}/src/keyboard.c"
+minibuf_file="${spike_src}/src/minibuf.c"
 waitpoint_mode="${WASMACS_ASYNCIFY_WAITPOINT_MODE:-read-char}"
 
 if [ ! -f "${source_file}" ] || [ ! -f "${keyboard_file}" ] || [ ! -f "${minibuf_file}" ]; then
-  "${repo_root}/scripts/build-emacs-core-spike.sh"
+  if [ "${spike_src}" = "${repo_root}/build/emacs-core-spike/src" ]; then
+    "${repo_root}/scripts/build-emacs-core-spike.sh"
+  else
+    echo "error: source files not found at ${spike_src}/src/" >&2; exit 1
+  fi
 fi
 
 read -r -d '' entrypoint_block <<'EOF' || true
@@ -26,6 +31,13 @@ static void const *wasmacs_last_saved_stack_top;
 static void const *wasmacs_last_entry_stack_top;
 
 int wasmacs_pin_specpdl_backtrace_args (void);
+int wasmacs_os_release_backtrace_args (void);
+void wasmacs_write_display (void);
+int wasmacs_os_push_gc_guard (void);
+int wasmacs_os_pop_gc_guard (void);
+int wasmacs_os_begin_command (const char *kind);
+int wasmacs_os_finish_command (void);
+int wasmacs_os_cancel_command (void);
 static char const *wasmacs_os_phase_name (void);
 static Lisp_Object wasmacs_eval_error_handler (Lisp_Object error);
 static void wasmacs_append_text (char **buffer, ptrdiff_t *length,
@@ -677,6 +689,179 @@ wasmacs_eval_string (const char *utf8)
   unbind_to (gc_count, Qnil);
   WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
   return wasmacs_eval_had_error ? 1 : 0;
+}
+
+/* --- C/wasm OS compat kernel: Memory And Root Service --- */
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_os_release_backtrace_args (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  if (!wasmacs_backtrace_args_pinned)
+    {
+      wasmacs_store_c_string_result ("release-backtrace-args:not-pinned");
+      WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+      return 0;
+    }
+
+  ptrdiff_t freed = 0;
+  for (union specbinding *pdl = specpdl; pdl < specpdl_ptr; pdl++)
+    {
+      if (pdl->kind == SPECPDL_BACKTRACE && pdl->bt.args)
+        {
+          /* Only xfree copies we xmalloc'd: those where nargs > 0 after
+             treating UNEVALLED as 1 (matching the pin condition).  */
+          ptrdiff_t nargs = pdl->bt.nargs == UNEVALLED ? 1 : pdl->bt.nargs;
+          if (nargs > 0)
+            xfree (pdl->bt.args);
+          pdl->bt.args = NULL;
+          pdl->bt.nargs = 0;
+          freed++;
+        }
+    }
+
+  wasmacs_backtrace_args_pinned = 0;
+  char result[80];
+  snprintf (result, sizeof result, "released-backtrace-args:%td", freed);
+  wasmacs_store_c_string_result (result);
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return 0;
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_os_push_gc_guard (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  garbage_collection_inhibited++;
+  wasmacs_pending_gc_inhibit_depth++;
+
+  char result[80];
+  snprintf (result, sizeof result,
+            "gc-guard-pushed:emacs-depth=%d:wasmacs-depth=%d",
+            garbage_collection_inhibited,
+            wasmacs_pending_gc_inhibit_depth);
+  wasmacs_store_c_string_result (result);
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return 0;
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_os_pop_gc_guard (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  if (wasmacs_pending_gc_inhibit_depth <= 0)
+    {
+      wasmacs_store_c_string_result ("gc-guard-pop:underflow");
+      WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+      return 1;
+    }
+
+  garbage_collection_inhibited--;
+  wasmacs_pending_gc_inhibit_depth--;
+
+  char result[80];
+  snprintf (result, sizeof result,
+            "gc-guard-popped:emacs-depth=%d:wasmacs-depth=%d",
+            garbage_collection_inhibited,
+            wasmacs_pending_gc_inhibit_depth);
+  wasmacs_store_c_string_result (result);
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return 0;
+}
+
+/* --- C/wasm OS compat kernel: Blocking Input Scheduler / Control Flow --- */
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_os_begin_command (const char *kind)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  if (wasmacs_command_busy)
+    {
+      wasmacs_store_c_string_result ("unavailable:busy");
+      WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+      return 3;
+    }
+
+  wasmacs_command_busy = 1;
+  /* Pin baseline backtrace args before the Asyncify suspend path runs.  */
+  wasmacs_pin_specpdl_backtrace_args ();
+
+  char result[128];
+  snprintf (result, sizeof result,
+            "command-begun:kind=%s", kind ? kind : "unknown");
+  wasmacs_store_c_string_result (result);
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return 0;
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_os_finish_command (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  if (!wasmacs_command_busy)
+    {
+      wasmacs_store_c_string_result ("finish-command:not-busy");
+      WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+      return 0;
+    }
+
+  /* Release pinned backtrace args from the command's Asyncify suspension.  */
+  if (wasmacs_backtrace_args_pinned)
+    {
+      for (union specbinding *pdl = specpdl; pdl < specpdl_ptr; pdl++)
+        if (pdl->kind == SPECPDL_BACKTRACE && pdl->bt.args)
+          {
+            ptrdiff_t nargs = pdl->bt.nargs == UNEVALLED ? 1 : pdl->bt.nargs;
+            if (nargs > 0)
+              xfree (pdl->bt.args);
+            pdl->bt.args = NULL;
+            pdl->bt.nargs = 0;
+          }
+      wasmacs_backtrace_args_pinned = 0;
+    }
+
+  /* Restore any GC inhibit pushed for the command's pending-input window.  */
+  while (wasmacs_pending_gc_inhibit_depth > 0)
+    {
+      garbage_collection_inhibited--;
+      wasmacs_pending_gc_inhibit_depth--;
+    }
+
+  wasmacs_command_busy = 0;
+  wasmacs_store_c_string_result ("command-finished");
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return 0;
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_os_cancel_command (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  if (!wasmacs_command_busy)
+    {
+      wasmacs_store_c_string_result ("cancel-command:not-busy");
+      WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+      return 0;
+    }
+
+  /* Inject quit via Vunread_command_events so the suspended Emacs reader
+     unwinds through the normal C-g / keyboard-quit path.  */
+  Vunread_command_events = list1i (quit_char);
+  wasmacs_store_c_string_result ("command-cancel-queued");
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return 0;
 }
 
 EOF

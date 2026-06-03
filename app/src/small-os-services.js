@@ -127,7 +127,7 @@ export const SmallOsFacades = Object.freeze({
       "wasmacs_os_pop_gc_guard",
     ],
     jsRole: JsRoles.observer,
-    status: FacadeStatus.placeholder,
+    status: FacadeStatus.diagnostic,
     acceptance: "Text/cancel completion unwind to idle with GC allowed, and fresh-entry explicit GC passes without JS toggling raw Emacs GC roots.",
   }),
   pendingCommandGuard: Object.freeze({
@@ -169,7 +169,7 @@ export const SmallOsFacades = Object.freeze({
     ],
     jsRole: JsRoles.observer,
     status: FacadeStatus.diagnostic,
-    acceptance: "Backtrace args remain valid after Asyncify resume, post-completion GC passes, and the copied-source pin has an explicit freeing/retirement policy.",
+    acceptance: "Backtrace args remain valid after Asyncify resume, post-completion GC passes, and the pin has an explicit xfree-safe freeing policy (matches pin nargs>0 condition).",
   }),
   preloadedStatePdump: Object.freeze({
     id: "preloaded-state-pdump-facade",

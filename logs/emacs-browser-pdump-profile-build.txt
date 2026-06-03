@@ -1,0 +1,19 @@
+emacs-browser-pdump-profile build — 2026-06-03T03:29:12Z
+memory: 512MB fixed, no growth
+stack: 16MB wasm stack
+pdump: /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/build-gnu-host-internal-termcap-pdump/src/bootstrap-emacs.pdmp
+pdump size:  25M
+artifacts: /Users/seijiro/Sync/sync_work/by-llms/wasmacs/artifacts/emacs-browser-pdump-profile
+exported OS kernel entrypoints:
+  wasmacs_os_lifecycle_phase
+  wasmacs_os_root_state_snapshot
+  wasmacs_os_gc_permission
+  wasmacs_os_pending_command_state
+  wasmacs_os_pin_backtrace_args
+  wasmacs_os_release_backtrace_args
+  wasmacs_os_push_gc_guard
+  wasmacs_os_pop_gc_guard
+  wasmacs_os_begin_command
+  wasmacs_os_finish_command
+  wasmacs_os_cancel_command
+STATUS:PASS

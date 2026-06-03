@@ -1,0 +1,24 @@
+pdump Node load probe — 2026-06-03
+
+Summary
+-------
+alloc.c fix: provisional Fputhash before recursive slot copy in purecopy
+  → bindings.el mode-line keymap closure cycle broken
+  → bindings.el loading passes
+
+pdumper.c fix: force dump_mmap_contiguous_heap under __EMSCRIPTEN__
+  → mmap(PROT_NONE, MAP_ANONYMOUS) does not work in wasm
+  → heap-based contiguous mapping succeeds
+
+Bootstrap loadup: --temacs=pbootstrap with EMACSLOADPATH=build_src/lisp
+  (pre-loads macroexp+pcase+easy-mmode before files.el in loadup.el)
+  → full loadup.el completes
+  → bootstrap-emacs.pdmp generated (25MB)
+
+pdmp load: temacs --dump-file=bootstrap-emacs.pdmp --batch
+  With LANG=C and EMACSLOADPATH set:
+  → VERSION:30.2
+  → GC_PASSED
+  → PDUMP_STATS:loaded
+
+Next: wire pdmp into 512MB browser profile with Atomics.wait() input
