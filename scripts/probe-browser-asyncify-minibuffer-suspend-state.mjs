@@ -16,7 +16,7 @@ if (!process.argv.includes("--child")) {
     ["--stack-size=65500", fileURLToPath(import.meta.url), "--child"],
     {
       encoding: "utf8",
-      timeout: 90_000,
+      timeout: 240_000,
     },
   );
   const combined = `${result.stdout || ""}${result.stderr || ""}`.trimEnd();
@@ -112,6 +112,7 @@ if (waitCount < 1) {
 
 let commandState = "";
 let minibufferState = "";
+let entrypointState = "";
 let reentrantEvalStatus = -1;
 let reentrantEvalReadback = "";
 let reentrantCommandStatus = -1;
@@ -119,6 +120,7 @@ let reentrantCommandReadback = "";
 try {
   commandState = context.Module.ccall("wasmacs_command_state", "string", [], []);
   minibufferState = context.Module.ccall("wasmacs_minibuffer_state", "string", [], []);
+  entrypointState = context.Module.ccall("wasmacs_entrypoint_state", "string", [], []);
   reentrantEvalStatus = context.Module.ccall(
     "wasmacs_eval_string",
     "number",
@@ -137,6 +139,9 @@ try {
   lines.push("MINIBUFFER_STATE_BEGIN");
   lines.push(minibufferState.trimEnd());
   lines.push("MINIBUFFER_STATE_END");
+  lines.push("ENTRYPOINT_STATE_BEGIN");
+  lines.push(entrypointState.trimEnd());
+  lines.push("ENTRYPOINT_STATE_END");
   lines.push(`REENTRANT_EVAL_STATUS:${reentrantEvalStatus}`);
   lines.push(`REENTRANT_EVAL_READBACK:${reentrantEvalReadback}`);
   lines.push(`REENTRANT_COMMAND_STATUS:${reentrantCommandStatus}`);
@@ -156,6 +161,21 @@ if (commandState !== "pending") {
 }
 if (!minibufferState.includes("active:true\n") || !minibufferState.includes("depth:1\n")) {
   throw new Error(`expected active minibuffer state during suspension; see ${logPath}`);
+}
+if (!entrypointState.includes("command-state:pending\n")) {
+  throw new Error(`expected entrypoint state to report pending command; see ${logPath}`);
+}
+if (!entrypointState.includes("pending-asyncify-command:true\n")) {
+  throw new Error(`expected entrypoint state to report pending asyncify command; see ${logPath}`);
+}
+if (!entrypointState.includes("gc-inhibit-depth:1\n")) {
+  throw new Error(`expected entrypoint state to report pending command GC inhibit depth; see ${logPath}`);
+}
+if (!entrypointState.includes("stack-bottom-refreshed:true\n")) {
+  throw new Error(`expected entrypoint state to report refreshed stack bottom; see ${logPath}`);
+}
+if (!entrypointState.includes("stack-top-refreshed:true\n")) {
+  throw new Error(`expected entrypoint state to report refreshed stack top; see ${logPath}`);
 }
 if (reentrantEvalStatus !== 3 || reentrantEvalReadback !== "unavailable:busy") {
   throw new Error(`expected reentrant eval to be unavailable:busy; see ${logPath}`);

@@ -1,5 +1,8 @@
 # AGENTS.md
 
+## 重要
+実装中に迷った場合にはemacsの実装を確認し、wasmがemacsに対して何を用意すれば良いのかの情報を集め、問題点を先鋭化した上で対応すること。闇雲なパッチ、探索は可能な限り避けること。
+
 ## Project
 
 `wasmacs` explores a browser-hosted Emacs built from WebAssembly, WASI-like host capabilities, and portable filesystem images.

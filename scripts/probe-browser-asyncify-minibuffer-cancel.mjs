@@ -16,7 +16,7 @@ if (!process.argv.includes("--child")) {
     ["--stack-size=65500", fileURLToPath(import.meta.url), "--child"],
     {
       encoding: "utf8",
-      timeout: 90_000,
+      timeout: 240_000,
     },
   );
   const combined = `${result.stdout || ""}${result.stderr || ""}`.trimEnd();

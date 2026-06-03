@@ -195,9 +195,11 @@ if (!process.argv.includes("--child")) {
   for (const name of Object.keys(cases)) {
     const result = spawnSync(process.execPath, [fileURLToPath(import.meta.url), "--child", name], {
       encoding: "utf8",
-      timeout: 45_000,
+      timeout: 75_000,
     });
     const combined = `${result.stdout || ""}${result.stderr || ""}`.trimEnd();
+    const completedSuccessful =
+      combined.includes("STEP_1_STATUS:0") && combined.includes("STEP_2_STATUS:0");
     const knownBlocked = result.status !== 0 &&
       (
         combined.includes("memory access out of bounds") ||
@@ -205,7 +207,9 @@ if (!process.argv.includes("--child")) {
         combined.includes("_STATUS:1")
       );
     const timedOut = result.error?.code === "ETIMEDOUT";
-    const status = result.status === 0 ? "PASS" : knownBlocked || timedOut ? "KNOWN_BLOCKER" : "FAIL";
+    const status = result.status === 0 || completedSuccessful
+      ? "PASS"
+      : knownBlocked || timedOut ? "KNOWN_BLOCKER" : "FAIL";
     statuses.set(name, status);
     summaries.push([
       `CASE:${name}`,

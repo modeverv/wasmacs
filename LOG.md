@@ -70,6 +70,40 @@
   `--with-dumping=none`, each byte-compile reloads `loadup.el`, so the full
   compile is too slow for this milestone and is deferred to a later
   release/performance pass.
+- Re-read the Emacs dump/preload path while diagnosing the browser Asyncify
+  worker stack blocker. `vendor/emacs/src/pdumper.c` shows `pdumper_load`
+  must run before the Lisp universe is `initialized`, has a heap-backed
+  contiguous mapping fallback (`dump_mmap_contiguous_heap`), and still applies
+  dump and Emacs relocations (`dump_do_all_emacs_relocations`). Conclusion:
+  the next Asyncify boot spike should prove a Node-first pdump/preloaded-state
+  path or record why Emscripten blocks it; a custom snapshot is only acceptable
+  if it preserves pdumper-class relocation/static-root semantics.
+- Added Node-first pdump/preloaded-state probes. `scripts/probe-emacs-pdump-configure.sh`
+  shows Emscripten configure can enable `--with-dumping=pdumper` and
+  `--with-pdumper=yes`. `scripts/probe-emacs-pdump-temacs-build.sh` builds a
+  pdumper-enabled wasm `temacs`; the concrete wasm wrinkle is that upstream
+  `make-fingerprint` searches the CommonJS launcher `temacs.tmp`, while the
+  fingerprint bytes live in `temacs.wasm`, so the probe applies
+  `make-fingerprint` to `temacs.wasm` as a generated-artifact workaround.
+  With `EMACSLOADPATH` pointed at the copied source `lisp/`, Node reaches
+  `loadup.el --temacs=pdump` and loads through `bindings`, but `.pdmp`
+  generation is still blocked by exit 139. A large-stack
+  `STACK_OVERFLOW_CHECK=0` diagnostic build reaches the same point and also
+  exits 139, so the next focus is the early `bindings.el` / loadup-time
+  wasm runtime/root/memory failure, not pdumper configure or C compilation.
+- Split the pdump `bindings.el` failure. Disabling the `loadup.el`
+  after-load GC hook still exits 139 at `Loading bindings (source)`, so the
+  failure is not simply the per-load GC. Instrumenting completed top-level
+  forms shows the crash after line 50, before the next top-level form
+  completes. The next source form is the mode-line keymap defvar pair:
+  `mode-line-input-method-map` and `mode-line-coding-system-map`. Replacing
+  both with nil, or keeping their keymaps/`define-key` calls while removing
+  `purecopy`, gets past `bindings.el` and `window` into `files.el`; replacing
+  only the first still crashes because the second original purecopy remains.
+  This narrows the current wasm pdump blocker to purecopying those early
+  keymap/closure structures. The next error after bypassing that blocker is
+  `(require pcase) while preparing to dump`, a separate compiled-Lisp artifact
+  issue from running source-only `files.el`.
 
 ### Milestone 5: User Filesystem Image Builder
 
@@ -912,3 +946,286 @@
   `wasmacs_host_wait_for_input` import, treats browser storage as a backing
   store for MEMFS/preloaded images, and rejects reentrant eval while a suspended
   Emacs command is pending.
+- Grew `emacs.md` and `p.md` with a second source pass focused on the remaining
+  wasm uncertainties. `alloc.c` shows `mark_c_stack` assumes a contiguous stack
+  range and `flush_stack_call_func1` refreshes `current_thread->stack_top`
+  before a no-allocation callback; `eval.c` shows `mark_specpdl` marks
+  unwind/backtrace/let roots and only marks pointer payloads with a custom mark
+  function; `insdel.c` shows text edits run Lisp and may GC before gap
+  mutation, then record undo and marker changes; `files.el` shows real
+  file-visiting/save state flows through `find-file-noselect-1`,
+  `set-visited-file-name`, and `basic-save-buffer`; `callint.c` shows real
+  command dispatch must preserve interactive specs and minibuffer argument
+  reading. The updated plan now treats stack refresh as the durable entrypoint
+  rule and GC inhibition as a temporary pending-Asyncify-command guard.
+- Added Milestone 13.5 to `PLAN.md` as the active bridge from the current
+  `p.md` understanding to implementation. The milestone retires browser-side
+  semantic substitutes, keeps the forced minibuffer probe as diagnostic only,
+  and defines the required path: owned Asyncify command protocol, host
+  entrypoint stack/root refresh, narrow pending-command GC inhibition,
+  GC-after-completion/cancel probes, and live file-visiting undo-list GC
+  probes before Milestone 14 real minibuffer exposure.
+- Started Milestone 13.5 Phase 1 implementation. Added
+  `docs/owned-asyncify-command-protocol-plan.md` to classify active gates,
+  baseline gates, diagnostics, known-blocker probes, and historical evidence.
+  Added `scripts/validate-owned-asyncify-command-protocol-plan.sh` and wired it
+  into `npm test` so the milestone keeps naming the required hazards: stack
+  refresh, pending-command GC inhibition, Asyncify import narrowing,
+  reentrant-call rejection, file-visiting undo GC, and browser event-loop
+  ownership. Validation passed with
+  `scripts/validate-owned-asyncify-command-protocol-plan.sh`.
+- Reran the Phase 1 baseline gates. `npm test` passed, including the new
+  13.5 plan gate and the existing known-blocker probes for undo, file-buffer
+  GC roots, live visited-file cross-eval, find-file phases, and high-level
+  undo tails. `npm run browser:smoke:all` also passed for minibuffer, editing,
+  files, and boundaries.
+- Implemented the first Milestone 13.5 Phase 2 stack/root diagnostic slice.
+  The copied-source patch now injects a shared host-entrypoint refresh macro
+  that updates both `stack_bottom` and `current_thread->stack_top` from an
+  entrypoint-local sentry, and `wasmacs_eval_string` no longer carries a
+  one-off stack-bottom-only refresh. Added `_wasmacs_entrypoint_state` to the
+  persistent and Asyncify exported functions. Rebuilt both artifacts.
+  `node scripts/probe-browser-host-entrypoint.mjs` passed and logged
+  `entrypoint-refresh-count:2`, `stack-bottom-refreshed:true`, and
+  `stack-top-refreshed:true`. `node scripts/probe-browser-asyncify-minibuffer-suspend-state.mjs`
+  passed and logged pending command state with `gc-inhibit-depth:1` plus
+  refreshed stack bottom/top while reentrant eval/command calls still return
+  `unavailable:busy`.
+- Split `package.json` test scripts to keep the normal loop short. `npm test`
+  now runs unit tests plus lightweight plan/profile validation; the long
+  Asyncify, persistent, known-blocker, and full-regression paths are available
+  as `npm run test:asyncify`, `npm run test:persistent`,
+  `npm run test:known-blockers`, and `npm run test:heavy`. Reran `npm test`;
+  it passed in the short default shape.
+- Added `_wasmacs_garbage_collect` and
+  `scripts/probe-browser-asyncify-gc-after-completion.mjs` for Milestone 13.5
+  Phase 3/5. The GC export is a fresh host entrypoint with stack refresh and no
+  eval-wide GC inhibition. The new probe records both text completion and
+  cancel reaching post-completion state with command `idle`,
+  `pending-asyncify-command:false`, `gc-inhibit-depth:0`, and
+  `emacs-gc-inhibited:0`; explicit GC then still crashes in `mark_specpdl`.
+  This is now a known blocker under `npm run test:known-blockers`, not part of
+  the short default loop.
+- Narrowed the post-completion GC blocker. `_wasmacs_entrypoint_state` now
+  reports `specpdl` kind counts plus tail backtrace argument pointers/raw Lisp
+  words, and the GC-after-completion probe includes a `boot` baseline case.
+  Boot-baseline explicit GC passes with the same 34-entry/10-backtrace
+  `specpdl` shape seen after text completion and cancel. After Asyncify resume,
+  the same tail backtrace `args` pointers contain different raw words, and
+  explicit GC fails through `mark_specpdl`. The current suspect is stale
+  backtrace argument slots on the wasm stack being overwritten after resume,
+  rather than extra un-unwound Asyncify frames.
+- Added a diagnostic `_wasmacs_scrub_specpdl_backtrace_args` export and
+  expanded `scripts/probe-browser-asyncify-gc-after-completion.mjs` with
+  `text-scrub` and `cancel-scrub`. The ordinary text/cancel cases remain
+  `KNOWN_BLOCKER` through `mark_specpdl`; both scrubbed cases pass explicit
+  post-completion GC after clearing 8 non-empty `SPECPDL_BACKTRACE` argument
+  slots. This sharpens the next implementation target: preserve/rebase
+  backtrace argument roots across Asyncify resume, do not ship the scrub as
+  product behavior. Validation passed with
+  `WASMACS_ASYNCIFY_WAITPOINT_MODE=minibuf-setup scripts/build-emacs-browser-asyncify-spike.sh`
+  and `node scripts/probe-browser-asyncify-gc-after-completion.mjs`.
+- Promoted the post-completion GC workaround from scrub to pin. Added
+  `_wasmacs_pin_specpdl_backtrace_args`, exported it from both browser spike
+  profiles, and call it once before the forced Asyncify minibuffer command
+  starts. The pin copies 8 non-empty baseline `SPECPDL_BACKTRACE` argument
+  vectors from stale wasm stack slots into durable `xmalloc` storage while
+  preserving argument words and `nargs`; this avoids erasing backtrace
+  information. Rebuilt the Asyncify artifact with
+  `WASMACS_ASYNCIFY_WAITPOINT_MODE=minibuf-setup scripts/build-emacs-browser-asyncify-spike.sh`.
+  `node scripts/probe-browser-asyncify-gc-after-completion.mjs` now passes all
+  cases: `boot`, ordinary `text`, ordinary `cancel`, `text-scrub`,
+  `cancel-scrub`, `text-pin`, and `cancel-pin`. The old ordinary text/cancel
+  `mark_specpdl` known blocker is cleared in the copied-source spike. The
+  remaining caveat is deliberate: the pinned arrays currently leak, so the
+  product path still needs a real ownership/freeing policy before Milestone
+  13.5 can call this final.
+- Added `scripts/probe-browser-asyncify-file-undo-gc.mjs` and
+  `logs/wasm-browser-asyncify-file-undo-gc.txt`. The probe runs against the
+  Asyncify artifact with `node --stack-size=65500`, pins baseline backtrace
+  args, opens a real `/home/user/projects/asyncify-file-undo.txt` visited file,
+  inserts/saves `A` and `X`, runs real `undo-only` and `undo-redo`, then calls
+  fresh `_wasmacs_garbage_collect`. After GC it verifies the same file-visiting
+  buffer still has `buffer-file-name`, content `AX\n`, and a usable undo list,
+  then performs a follow-up insert `Z` and real `undo-only` back to `AX\n`.
+  The probe passed and is now included in `npm run test:asyncify`. The next
+  Milestone 13.5 Phase 6 target is a two-file file-switch undo/redo GC probe.
+- Added `scripts/probe-browser-asyncify-file-switch-undo-gc.mjs` and
+  `logs/wasm-browser-asyncify-file-switch-undo-gc.txt`. The probe opens two
+  live visited files under `/home/user/projects`, edits/saves A to `AX\n` and
+  B to `BY\n`, runs fresh `_wasmacs_garbage_collect`, and then proves each
+  buffer's real `undo-only` / `undo-redo` state remains independent after GC.
+  The probe passed and is now included in `npm run test:asyncify`. This
+  completes the Milestone 13.5 Phase 6 proof shape; the next active target is
+  the Phase 7 worker/browser pending-command protocol, while the copied-source
+  backtrace pin still needs a real ownership/freeing policy before product use.
+- Started Milestone 13.5 Phase 7 by adding the browser/worker side of an
+  owned pending-command protocol. `app/src/pending-command-protocol.js` now
+  defines and validates structured `pending-command` messages with explicit
+  lifecycle states and command kinds; `tests/runtime/pending-command-protocol.test.js`
+  covers the message shape and command-boundary filter. The worker emits
+  `pending-command` `starting` and `unavailable` states for the currently
+  unsupported `find-file` / `switch-buffer` minibuffer paths, and the main
+  thread validates those messages before updating status/minibuffer UI. This
+  keeps the old unavailable boundary intact while making it protocol-visible.
+  Validation passed with `npm test` and `npm run browser:smoke:all`.
+- Added browser runner coverage for that Phase 7 protocol visibility.
+  `app/src/main.js` now records validated pending-command messages for the
+  smoke harness, and `scripts/run-browser-smoke.mjs` asserts that `C-x C-f`
+  produces `find-file` `starting` and `unavailable` protocol events plus the
+  `Find file: ` prompt before the final minibuffer-unavailable UI state.
+  `scripts/validate-browser-worker-app.sh` now checks the smoke assertion is
+  still wired. Validation passed with `npm test` and
+  `npm run browser:smoke:all`; `logs/browser-runner-smoke.txt` includes
+  `PASS pending-command find-file starting unavailable`.
+- Attempted the first real browser-worker Asyncify `pending-input` path behind
+  the Phase 7 protocol. Added `app/src/asyncify-minibuffer-worker.js` and
+  `window.__wasmacsSmoke.asyncifyMinibufferReadSmoke`; the scaffold starts the
+  Emacs-owned `wasmacs_command_begin_minibuffer_force_probe`, is prepared to
+  inject browser-provided text with `wasmacs_input_text`, and reports through
+  the existing `pending-command` lifecycle. Real browser worker execution is
+  currently blocked before `pending-input` by `RangeError: Maximum call stack
+  size exceeded` from the Asyncify artifact. Recorded this as
+  `KNOWN_BLOCKER asyncify browser worker stack` in
+  `logs/browser-asyncify-protocol-smoke.txt` via
+  `node scripts/run-browser-smoke.mjs asyncify`. The underlying Node/VM
+  Asyncify path still passes:
+  `node scripts/probe-browser-asyncify-minibuffer-input-injection.mjs` records
+  `STATUS:PASS`, `WAITPOINT_REACHED:true`, and `INPUT_TEXT_ACCEPTED:true`.
+- Added a browser-worker `--no-loadup` Asyncify boot split:
+  `window.__wasmacsSmoke.asyncifyNoLoadupBootSmoke` and
+  `node scripts/run-browser-smoke.mjs asyncify-boot`. The probe avoids replaying
+  cold `loadup.el`, but bare no-loadup Emacs still exits with status `-1`, so
+  it is not a usable product runtime. Evidence is recorded in
+  `logs/browser-asyncify-no-loadup-boot-smoke.txt` as
+  `KNOWN_BLOCKER asyncify no-loadup boot status -1`. This reinforces the
+  source-backed plan change: the Asyncify browser lane needs an explicit
+  post-loadup/preloaded Emacs Lisp-machine state rather than either full cold
+  loadup or a bare no-loadup runtime.
+- Added `small-os-for-emacs.md` to stop the compatibility layer from growing
+  ad hoc. The document reframes Milestone 13.5 as a small Emacs compatibility
+  OS with explicit services for lifecycle, memory/root safety, control flow,
+  blocking input scheduling, filesystem/persistence, preloaded state, host
+  capabilities, and browser GUI boundaries. `PLAN.md` now points 13.5 work at
+  that contract so future patches must name the owning service, violated
+  cross-service check, relevant Emacs source surface, and acceptance test
+  before changing code.
+- Continued the preloaded-state investigation by reading Emacs'
+  `vendor/emacs/src/alloc.c` `purecopy` implementation and
+  `vendor/emacs/src/puresize.h`. The source makes the wasm requirement
+  concrete: dump-time `purecopy` recursively copies conses, strings, vectors,
+  records, closures, and purecopy-enabled hash tables into a fixed pure-space
+  region while pinning objects that cannot safely be copied. Added
+  `scripts/probe-emacs-pdump-purecopy-trace.sh`, which confirms the generated
+  pdumper wasm artifact has a pure region and performs early pure allocations
+  before still exiting 139 in `bindings.el`. Added
+  `scripts/probe-emacs-pdump-bindings-purecopy-markers.sh`, which wraps the
+  first two `bindings.el` mode-line keymap `purecopy` calls. `both-marked`,
+  `input-only`, and `coding-only` all print the corresponding "before" marker
+  and exit 139 without printing an "after" marker. The blocker is now narrowed
+  to recursive `purecopy` of these keymap/closure structures in the wasm
+  pdumper runtime, not configure, pdumper C compilation, fingerprinting,
+  after-load GC, `make-sparse-keymap`, or `define-key`.
+- Added `scripts/probe-emacs-pdump-purecopy-enabled-trace.sh` and
+  `logs/emacs-pdump-purecopy-enabled-trace.txt`. The focused trace enables
+  C-level logging only inside the marked `Fpurecopy` call and shows the
+  `input-only` mode-line keymap case repeatedly recopying the same
+  closure/vector-shaped graph before exiting 139. Since `loadup.el` sets
+  `purify-flag` to an `equal` hash table and `alloc.c` uses that table around
+  recursive `purecopy`, the next problem is now sharpened to wasm behavior for
+  closure/vector layout and hash-consing/cycle boundaries, not another broad
+  `loadup.el` patch.
+- Extended that focused trace with `Fgethash`/`Fputhash` logging. The trace now
+  shows the `purify-flag` table does produce hits for some surrounding cons
+  structure and records completed copies with `puthash`, but the repeatedly
+  re-entered closure itself keeps logging `gethash ... hit=0` until status 139.
+  This supports the narrower hypothesis that the keymap closure graph is
+  re-entering the same closure before recursive `purecopy` reaches its final
+  hash-consing insertion, or that the wasm build has created an unexpected
+  closure self-cycle. The next comparison should be native/pdump behavior for
+  the same `bindings.el` map before attempting a compatibility workaround.
+- Reclassified Milestone 13.5 under `small-os-for-emacs.md` after the small OS
+  framing intervention. `PLAN.md` now has an active blocker table that assigns
+  browser-worker Asyncify stack failure, pdump/loadup 139, `bindings.el`
+  purecopy recursion, backtrace-arg pinning, `.wasifs` reverse sync, and the
+  pending-command UI scaffold to owning services, cross-service invariants,
+  Emacs source surfaces, diagnostic/product status, and acceptance tests.
+  `ARCHITECTURE.md` now names the Small Compatibility OS Layer explicitly and
+  clarifies that pdump/preloaded-state remains outside normal MVP UI behavior
+  while still being a valid Preloaded-State Service diagnostic lane for the
+  Asyncify worker. `scripts/validate-owned-asyncify-command-protocol-plan.sh`
+  now gates the small OS service list and cross-service checks.
+- Added the first small OS substrate implementation skeleton. `app/src/small-os-services.js`
+  defines the service names, lifecycle phases, cross-service checks, Emacs
+  source surfaces, active operation contracts, and small state gates for GC,
+  pending-command start, reverse sync, and lifecycle transitions.
+  `app/src/pending-command-protocol.js` now attaches the
+  `pending-command-protocol` substrate record to messages created through the
+  module, while accepting classic-worker messages that do not yet include that
+  optional field. Added `tests/runtime/small-os-services.test.js` and extended
+  `tests/runtime/pending-command-protocol.test.js` so diagnostic contracts
+  cannot claim product readiness and pending-command messages stay assigned to
+  Blocking Input Scheduler / Control-Flow / Browser GUI Boundary. Added
+  `docs/small-os-substrate-implementation.md` and extended the owned-protocol
+  validator to gate the substrate module and doc.
+- Continued only the preloaded-state-adjacent product scaffold, leaving
+  pdump/purecopy/preloaded-state itself deferred. Added
+  `app/src/small-os-runtime.js` as the browser-side coordinator for command
+  lifecycle, pending input, resume, completion/failure, and reverse-sync
+  boundaries. `app/src/main.js` now starts a small OS command before worker
+  dispatch, buffers `sync-file` until command exit, applies reverse sync only
+  after successful completion, and exposes `smallOs` in the smoke state. The
+  Asyncify minibuffer smoke enters the same lifecycle before launching its
+  separate worker, but still does not attempt to solve the preloaded-state boot
+  blocker. Added `tests/runtime/small-os-runtime.test.js` and extended
+  `docs/small-os-substrate-implementation.md` plus the owned-protocol validator
+  for the runtime coordinator.
+- Added a top-down build policy to `small-os-for-emacs.md` and reflected it in
+  Milestone 13.5. Future substrate work should list the OS/runtime capability
+  Emacs requires, define the service interface, then add only the
+  lowest-quality implementation that preserves correctness. Dummy, diagnostic,
+  slow, or leak-prone implementations are acceptable only when the owning
+  service, lifecycle, acceptance test, and replacement path are explicit.
+- Added a C-first low-level substrate policy to `small-os-for-emacs.md` and
+  reflected it in Milestone 13.5. The JS small OS modules are now explicitly
+  browser coordinators, policy mirrors, diagnostic scaffolds, and test
+  harnesses, not the owner of memory/root/lifecycle/preloaded-state semantics.
+  Future GC-root, pure-space, relocation, preloaded-state, or entrypoint
+  ownership work should first define the C/wasm facade and only expose copied
+  snapshots/status/protocol state to JS when the browser needs to observe it.
+- Clarified the first Level 1 C/wasm memory/root facade can use a deliberately
+  overallocated fixed-memory profile, around 512MB wasm linear memory with
+  memory growth disabled and an oversized stack. This is recorded as a
+  temporary diagnostic stability profile, not the product browser memory
+  budget, so early substrate work can avoid JS typed-array view invalidation,
+  growth-time relocation surprises, and premature allocator tuning.
+- Repositioned the current JS small OS scaffold as coordinator/mirror/harness
+  and added the C/wasm facade plan. `app/src/small-os-services.js` now mirrors
+  facade contracts for lifecycle state, entrypoint root refresh, GC
+  permission, pending command guard, backtrace/root ownership,
+  preloaded-state/pdump, and segment/root/relocation. Each contract names the
+  Emacs-requested capability, owner service, source surfaces, proposed
+  `wasmacs_os_*` entrypoints, allowed JS role, diagnostic/product/placeholder
+  status, and acceptance test. `docs/small-os-substrate-implementation.md`,
+  `ARCHITECTURE.md`, `PLAN.md`, `tests/runtime/small-os-services.test.js`, and
+  `scripts/validate-owned-asyncify-command-protocol-plan.sh` now gate the rule
+  that JS observes/provides host capability/coordinators only and does not own
+  raw Emacs object/root/lifecycle substrate state.
+- Implemented the first minimal C/wasm facade slice in the generated/copied
+  source lane. `scripts/patch-emacs-host-entrypoint-spike.sh` now exposes
+  `wasmacs_os_lifecycle_phase`, `wasmacs_os_root_state_snapshot`,
+  `wasmacs_os_gc_permission`, `wasmacs_os_pending_command_state`, and
+  `wasmacs_os_pin_backtrace_args`; the persistent and Asyncify build scripts
+  export those symbols. The functions wrap existing C-side lifecycle,
+  host-entrypoint/root, GC permission, pending-command, and backtrace-pin state
+  rather than moving that state into JS. Rebuilt the persistent browser profile
+  with `scripts/build-emacs-browser-persistent-spike.sh`, rebuilt the Asyncify
+  profile with
+  `WASMACS_ASYNCIFY_WAITPOINT_MODE=minibuf-setup scripts/build-emacs-browser-asyncify-spike.sh`,
+  then passed `scripts/validate-browser-persistent-spike.sh`,
+  `scripts/validate-minibuffer-asyncify-entrypoint-plan.sh`, and
+  `node scripts/probe-browser-host-entrypoint.mjs`. The host-entrypoint log now
+  records `OS_LIFECYCLE_PHASE:initialized`,
+  `OS_PENDING_COMMAND_STATE:idle`,
+  `OS_GC_PERMISSION_READBACK:gc-permission:allowed`, and refreshed root
+  snapshots.

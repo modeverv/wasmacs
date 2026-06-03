@@ -2,6 +2,19 @@ function post(type, payload = {}) {
   self.postMessage({ type, ...payload });
 }
 
+function postPendingCommand(command, state, details = {}) {
+  post("pending-command", {
+    id: details.id ?? `${command?.type ?? "command"}:${command?.path ?? ""}`,
+    commandType: command?.type ?? "unknown",
+    path: command?.path,
+    pointIndex: command?.pointIndex,
+    state,
+    minibuffer: details.minibuffer ?? "",
+    result: details.result,
+    error: details.error,
+  });
+}
+
 let emacsModule;
 let emacsReady;
 
@@ -107,7 +120,12 @@ async function runEmacsCommand(userEntries, command) {
       throw new Error("clipboard/kill-ring requires GUI clipboard protocol plus persistent region and kill-ring state");
     }
     if (command?.type === "find-file" || command?.type === "switch-buffer") {
-      throw new Error("minibuffer requires persistent Emacs command loop, minibuffer window state, and completion UI");
+      const error = "minibuffer requires persistent Emacs command loop, minibuffer window state, and completion UI";
+      postPendingCommand(command, "starting", {
+        minibuffer: command.type === "find-file" ? "Find file: " : "Switch to buffer: ",
+      });
+      postPendingCommand(command, "unavailable", { error });
+      throw new Error(error);
     }
     const module = await ensureEmacs(userEntries, { skipFilePaths: [command?.path].filter(Boolean) });
     const evalStatus = module.ccall(

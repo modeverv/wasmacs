@@ -14,10 +14,44 @@ fi
 read -r -d '' entrypoint_block <<'EOF' || true
 static char *wasmacs_last_eval_result;
 static char *wasmacs_last_minibuffer_state;
+static char *wasmacs_last_entrypoint_state;
 static int wasmacs_command_busy;
 static int wasmacs_eval_had_error;
+static int wasmacs_entrypoint_refresh_count;
+static int wasmacs_pending_gc_inhibit_depth;
+static int wasmacs_backtrace_args_pinned;
+static char const *wasmacs_last_saved_stack_bottom;
+static char const *wasmacs_last_entry_stack_bottom;
+static void const *wasmacs_last_saved_stack_top;
+static void const *wasmacs_last_entry_stack_top;
 
+int wasmacs_pin_specpdl_backtrace_args (void);
+static char const *wasmacs_os_phase_name (void);
 static Lisp_Object wasmacs_eval_error_handler (Lisp_Object error);
+static void wasmacs_append_text (char **buffer, ptrdiff_t *length,
+                                 ptrdiff_t *capacity, const char *text);
+static void wasmacs_store_c_string_result (const char *value);
+static char const *wasmacs_specpdl_kind_name (enum specbind_tag kind);
+static void wasmacs_append_specpdl_summary (char **buffer, ptrdiff_t *length,
+                                            ptrdiff_t *capacity,
+                                            union specbinding *first,
+                                            union specbinding *limit);
+
+#define WASMACS_ENTER_HOST_ENTRYPOINT(saved_bottom_name, saved_top_name) \
+  void *wasmacs_entrypoint_stack_sentry; \
+  char const *saved_bottom_name = stack_bottom; \
+  void const *saved_top_name = current_thread->stack_top; \
+  stack_bottom = (char *) &wasmacs_entrypoint_stack_sentry; \
+  current_thread->stack_top = &wasmacs_entrypoint_stack_sentry; \
+  wasmacs_last_saved_stack_bottom = saved_bottom_name; \
+  wasmacs_last_saved_stack_top = saved_top_name; \
+  wasmacs_last_entry_stack_bottom = stack_bottom; \
+  wasmacs_last_entry_stack_top = current_thread->stack_top; \
+  wasmacs_entrypoint_refresh_count++
+
+#define WASMACS_LEAVE_HOST_ENTRYPOINT(saved_bottom_name, saved_top_name) \
+  stack_bottom = saved_bottom_name; \
+  current_thread->stack_top = saved_top_name
 
 __attribute__ ((used, visibility ("default")))
 const char *
@@ -28,11 +62,141 @@ wasmacs_last_result (void)
 
 __attribute__ ((used, visibility ("default")))
 const char *
+wasmacs_entrypoint_state (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  intptr_t entry_gc_inhibited = garbage_collection_inhibited;
+  specpdl_ref gc_count = inhibit_garbage_collection ();
+  ptrdiff_t capacity = 1024;
+  ptrdiff_t length = 0;
+  char *state = xmalloc (capacity);
+  state[0] = '\0';
+
+  char line[256];
+  snprintf (line, sizeof line, "command-state:%s\n",
+            wasmacs_command_busy ? "pending" : "idle");
+  wasmacs_append_text (&state, &length, &capacity, line);
+  snprintf (line, sizeof line, "pending-asyncify-command:%s\n",
+            wasmacs_command_busy ? "true" : "false");
+  wasmacs_append_text (&state, &length, &capacity, line);
+  snprintf (line, sizeof line, "minibuffer-depth:%"pI"d\n", minibuf_level);
+  wasmacs_append_text (&state, &length, &capacity, line);
+  snprintf (line, sizeof line, "command-loop-level:%"pI"d\n", command_loop_level);
+  wasmacs_append_text (&state, &length, &capacity, line);
+  snprintf (line, sizeof line, "specpdl-depth:%td\n",
+            specpdl_ref_to_count (SPECPDL_INDEX ()));
+  wasmacs_append_text (&state, &length, &capacity, line);
+  snprintf (line, sizeof line, "specpdl-depth-before-state-read:%td\n",
+            specpdl_ref_to_count (gc_count));
+  wasmacs_append_text (&state, &length, &capacity, line);
+  wasmacs_append_specpdl_summary (&state, &length, &capacity, specpdl,
+                                  specpdl_ref_to_ptr (gc_count));
+  snprintf (line, sizeof line, "gc-inhibit-depth:%d\n",
+            wasmacs_pending_gc_inhibit_depth);
+  wasmacs_append_text (&state, &length, &capacity, line);
+  snprintf (line, sizeof line, "emacs-gc-inhibited:%td\n",
+            (ptrdiff_t) entry_gc_inhibited);
+  wasmacs_append_text (&state, &length, &capacity, line);
+  snprintf (line, sizeof line, "entrypoint-refresh-count:%d\n",
+            wasmacs_entrypoint_refresh_count);
+  wasmacs_append_text (&state, &length, &capacity, line);
+  snprintf (line, sizeof line, "stack-bottom-refreshed:%s\n",
+            wasmacs_last_entry_stack_bottom != wasmacs_last_saved_stack_bottom
+            ? "true" : "false");
+  wasmacs_append_text (&state, &length, &capacity, line);
+  snprintf (line, sizeof line, "stack-top-refreshed:%s\n",
+            wasmacs_last_entry_stack_top != wasmacs_last_saved_stack_top
+            ? "true" : "false");
+  wasmacs_append_text (&state, &length, &capacity, line);
+
+  xfree (wasmacs_last_entrypoint_state);
+  wasmacs_last_entrypoint_state = state;
+  unbind_to (gc_count, Qnil);
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return wasmacs_last_entrypoint_state;
+}
+
+__attribute__ ((used, visibility ("default")))
+const char *
 wasmacs_command_state (void)
 {
   if (wasmacs_command_busy)
     return "pending";
   return "idle";
+}
+
+static char const *
+wasmacs_os_phase_name (void)
+{
+  if (!initialized)
+    return "uninitialized";
+  if (wasmacs_command_busy && minibuf_level > 0)
+    return "pending-input";
+  if (wasmacs_command_busy)
+    return "command-running";
+  return "initialized";
+}
+
+__attribute__ ((used, visibility ("default")))
+const char *
+wasmacs_os_lifecycle_phase (void)
+{
+  return wasmacs_os_phase_name ();
+}
+
+__attribute__ ((used, visibility ("default")))
+const char *
+wasmacs_os_root_state_snapshot (void)
+{
+  return wasmacs_entrypoint_state ();
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_os_gc_permission (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  int status = 0;
+  if (!initialized)
+    {
+      wasmacs_store_c_string_result ("gc-permission:blocked:lifecycle");
+      status = 3;
+    }
+  else if (wasmacs_command_busy)
+    {
+      wasmacs_store_c_string_result ("gc-permission:blocked:pending-command");
+      status = 3;
+    }
+  else if (garbage_collection_inhibited)
+    {
+      wasmacs_store_c_string_result ("gc-permission:inhibited");
+      status = 3;
+    }
+  else
+    wasmacs_store_c_string_result ("gc-permission:allowed");
+
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return status;
+}
+
+__attribute__ ((used, visibility ("default")))
+const char *
+wasmacs_os_pending_command_state (void)
+{
+  if (wasmacs_command_busy && minibuf_level > 0)
+    return "pending-input";
+  if (wasmacs_command_busy)
+    return "command-running";
+  return "idle";
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_os_pin_backtrace_args (void)
+{
+  return wasmacs_pin_specpdl_backtrace_args ();
 }
 
 static void
@@ -49,6 +213,179 @@ wasmacs_append_text (char **buffer, ptrdiff_t *length, ptrdiff_t *capacity,
   memcpy (*buffer + *length, text, text_length);
   *length += text_length;
   (*buffer)[*length] = '\0';
+}
+
+static char const *
+wasmacs_specpdl_kind_name (enum specbind_tag kind)
+{
+  switch (kind)
+    {
+    case SPECPDL_UNWIND:
+      return "UNWIND";
+    case SPECPDL_UNWIND_ARRAY:
+      return "UNWIND_ARRAY";
+    case SPECPDL_UNWIND_PTR:
+      return "UNWIND_PTR";
+    case SPECPDL_UNWIND_INT:
+      return "UNWIND_INT";
+    case SPECPDL_UNWIND_INTMAX:
+      return "UNWIND_INTMAX";
+    case SPECPDL_UNWIND_EXCURSION:
+      return "UNWIND_EXCURSION";
+    case SPECPDL_UNWIND_VOID:
+      return "UNWIND_VOID";
+    case SPECPDL_BACKTRACE:
+      return "BACKTRACE";
+    case SPECPDL_NOP:
+      return "NOP";
+#ifdef HAVE_MODULES
+    case SPECPDL_MODULE_RUNTIME:
+      return "MODULE_RUNTIME";
+    case SPECPDL_MODULE_ENVIRONMENT:
+      return "MODULE_ENVIRONMENT";
+#endif
+    case SPECPDL_LET:
+      return "LET";
+    case SPECPDL_LET_LOCAL:
+      return "LET_LOCAL";
+    case SPECPDL_LET_DEFAULT:
+      return "LET_DEFAULT";
+    default:
+      return "UNKNOWN";
+    }
+}
+
+static void
+wasmacs_append_specpdl_summary (char **buffer, ptrdiff_t *length,
+                                ptrdiff_t *capacity,
+                                union specbinding *first,
+                                union specbinding *limit)
+{
+  ptrdiff_t total = limit - first;
+  ptrdiff_t unwind = 0;
+  ptrdiff_t unwind_array = 0;
+  ptrdiff_t unwind_ptr = 0;
+  ptrdiff_t unwind_int = 0;
+  ptrdiff_t unwind_intmax = 0;
+  ptrdiff_t unwind_excursion = 0;
+  ptrdiff_t unwind_void = 0;
+  ptrdiff_t backtrace = 0;
+  ptrdiff_t nop = 0;
+  ptrdiff_t module_runtime = 0;
+  ptrdiff_t module_environment = 0;
+  ptrdiff_t let = 0;
+  ptrdiff_t let_local = 0;
+  ptrdiff_t let_default = 0;
+  ptrdiff_t unknown = 0;
+
+  for (union specbinding *pdl = first; pdl < limit; pdl++)
+    {
+      switch (pdl->kind)
+        {
+        case SPECPDL_UNWIND:
+          unwind++;
+          break;
+        case SPECPDL_UNWIND_ARRAY:
+          unwind_array++;
+          break;
+        case SPECPDL_UNWIND_PTR:
+          unwind_ptr++;
+          break;
+        case SPECPDL_UNWIND_INT:
+          unwind_int++;
+          break;
+        case SPECPDL_UNWIND_INTMAX:
+          unwind_intmax++;
+          break;
+        case SPECPDL_UNWIND_EXCURSION:
+          unwind_excursion++;
+          break;
+        case SPECPDL_UNWIND_VOID:
+          unwind_void++;
+          break;
+        case SPECPDL_BACKTRACE:
+          backtrace++;
+          break;
+        case SPECPDL_NOP:
+          nop++;
+          break;
+#ifdef HAVE_MODULES
+        case SPECPDL_MODULE_RUNTIME:
+          module_runtime++;
+          break;
+        case SPECPDL_MODULE_ENVIRONMENT:
+          module_environment++;
+          break;
+#endif
+        case SPECPDL_LET:
+          let++;
+          break;
+        case SPECPDL_LET_LOCAL:
+          let_local++;
+          break;
+        case SPECPDL_LET_DEFAULT:
+          let_default++;
+          break;
+        default:
+          unknown++;
+          break;
+        }
+    }
+
+  char line[512];
+  snprintf (line, sizeof line,
+            "specpdl-summary:total=%td,unwind=%td,unwind-array=%td,"
+            "unwind-ptr=%td,unwind-int=%td,unwind-intmax=%td,"
+            "unwind-excursion=%td,unwind-void=%td,backtrace=%td,nop=%td,"
+            "module-runtime=%td,module-environment=%td,let=%td,"
+            "let-local=%td,let-default=%td,unknown=%td\n",
+            total, unwind, unwind_array, unwind_ptr, unwind_int,
+            unwind_intmax, unwind_excursion, unwind_void, backtrace, nop,
+            module_runtime, module_environment, let, let_local, let_default,
+            unknown);
+  wasmacs_append_text (buffer, length, capacity, line);
+
+  ptrdiff_t tail = total < 8 ? total : 8;
+  for (ptrdiff_t i = total - tail; i < total; i++)
+    {
+      union specbinding *pdl = first + i;
+      snprintf (line, sizeof line, "specpdl-tail[%td]:kind=%s", i,
+                wasmacs_specpdl_kind_name (pdl->kind));
+      wasmacs_append_text (buffer, length, capacity, line);
+      if (pdl->kind == SPECPDL_BACKTRACE)
+        {
+          ptrdiff_t nargs = pdl->bt.nargs == UNEVALLED ? 1 : pdl->bt.nargs;
+          snprintf (line, sizeof line,
+                    ",function=0x%llx,args=%p,nargs=%td",
+                    (unsigned long long) XLI (pdl->bt.function),
+                    (void *) pdl->bt.args, pdl->bt.nargs);
+          wasmacs_append_text (buffer, length, capacity, line);
+          if (pdl->bt.args && nargs > 0)
+            {
+              ptrdiff_t arg_limit = nargs < 3 ? nargs : 3;
+              for (ptrdiff_t j = 0; j < arg_limit; j++)
+                {
+                  snprintf (line, sizeof line, ",arg%td=0x%llx", j,
+                            (unsigned long long) XLI (pdl->bt.args[j]));
+                  wasmacs_append_text (buffer, length, capacity, line);
+                }
+            }
+        }
+      else if (pdl->kind == SPECPDL_UNWIND_ARRAY)
+        {
+          snprintf (line, sizeof line, ",array=%p,nelts=%td",
+                    (void *) pdl->unwind_array.array,
+                    pdl->unwind_array.nelts);
+          wasmacs_append_text (buffer, length, capacity, line);
+        }
+      else if (pdl->kind == SPECPDL_UNWIND_PTR)
+        {
+          snprintf (line, sizeof line, ",arg=%p,mark=%p",
+                    pdl->unwind_ptr.arg, (void *) pdl->unwind_ptr.mark);
+          wasmacs_append_text (buffer, length, capacity, line);
+        }
+      wasmacs_append_text (buffer, length, capacity, "\n");
+    }
 }
 
 static void
@@ -80,6 +417,8 @@ __attribute__ ((used, visibility ("default")))
 const char *
 wasmacs_minibuffer_state (void)
 {
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
   specpdl_ref gc_count = inhibit_garbage_collection ();
   ptrdiff_t capacity = 1024;
   ptrdiff_t length = 0;
@@ -124,6 +463,7 @@ wasmacs_minibuffer_state (void)
   xfree (wasmacs_last_minibuffer_state);
   wasmacs_last_minibuffer_state = state;
   unbind_to (gc_count, Qnil);
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
   return wasmacs_last_minibuffer_state;
 }
 
@@ -186,7 +526,11 @@ wasmacs_command_begin_minibuffer_force_probe (void)
   bool saved_noninteractive = noninteractive;
   noninteractive = false;
   wasmacs_eval_had_error = 0;
+  if (!wasmacs_backtrace_args_pinned)
+    wasmacs_pin_specpdl_backtrace_args ();
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
   specpdl_ref gc_count = inhibit_garbage_collection ();
+  wasmacs_pending_gc_inhibit_depth++;
 
   Lisp_Object prompt = build_string ("Find file: ");
   Lisp_Object result = internal_condition_case_1 (wasmacs_read_minibuffer_probe_body,
@@ -194,7 +538,9 @@ wasmacs_command_begin_minibuffer_force_probe (void)
                                                  Qt,
                                                  wasmacs_eval_error_handler);
   wasmacs_store_result (result);
+  wasmacs_pending_gc_inhibit_depth--;
   unbind_to (gc_count, Qnil);
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
   noninteractive = saved_noninteractive;
   wasmacs_command_busy = 0;
   return wasmacs_eval_had_error ? 1 : 0;
@@ -218,23 +564,106 @@ wasmacs_eval_error_handler (Lisp_Object error)
 
 __attribute__ ((used, visibility ("default")))
 int
-wasmacs_eval_string (const char *utf8)
+wasmacs_pin_specpdl_backtrace_args (void)
 {
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  ptrdiff_t pinned = 0;
+  if (!wasmacs_backtrace_args_pinned)
+    {
+      for (union specbinding *pdl = specpdl; pdl < specpdl_ptr; pdl++)
+        {
+          if (pdl->kind == SPECPDL_BACKTRACE && pdl->bt.args)
+            {
+              ptrdiff_t nargs = pdl->bt.nargs == UNEVALLED ? 1 : pdl->bt.nargs;
+              if (nargs > 0)
+                {
+                  Lisp_Object *copy = xmalloc (nargs * sizeof *copy);
+                  memcpy (copy, pdl->bt.args, nargs * sizeof *copy);
+                  pdl->bt.args = copy;
+                  pinned++;
+                }
+            }
+        }
+      wasmacs_backtrace_args_pinned = 1;
+    }
+
+  char result[80];
+  snprintf (result, sizeof result, "pinned-backtrace-args:%td", pinned);
+  wasmacs_store_c_string_result (result);
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return 0;
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_scrub_specpdl_backtrace_args (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  ptrdiff_t scrubbed = 0;
+  for (union specbinding *pdl = specpdl; pdl < specpdl_ptr; pdl++)
+    {
+      if (pdl->kind == SPECPDL_BACKTRACE && pdl->bt.nargs != 0)
+        {
+          pdl->bt.args = NULL;
+          pdl->bt.nargs = 0;
+          scrubbed++;
+        }
+    }
+
+  char result[80];
+  snprintf (result, sizeof result, "scrubbed-backtrace-args:%td", scrubbed);
+  wasmacs_store_c_string_result (result);
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return 0;
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_garbage_collect (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
   if (wasmacs_command_busy)
     {
       wasmacs_store_c_string_result ("unavailable:busy");
+      WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
       return 3;
     }
 
-  /* callMain returns before JavaScript invokes this entrypoint.  Refresh the
-     stack scan bottom so Emacs GC does not scan the old main frame.  */
-  void *stack_bottom_variable;
-  char const *saved_stack_bottom = stack_bottom;
-  stack_bottom = (char *) &stack_bottom_variable;
+  if (garbage_collection_inhibited)
+    {
+      wasmacs_store_c_string_result ("unavailable:gc-inhibited");
+      WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+      return 3;
+    }
+
+  specpdl_ref count = SPECPDL_INDEX ();
+  specbind (Qsymbols_with_pos_enabled, Qnil);
+  garbage_collect ();
+  unbind_to (count, Qnil);
+  wasmacs_store_c_string_result ("garbage-collected");
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return 0;
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_eval_string (const char *utf8)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  if (wasmacs_command_busy)
+    {
+      wasmacs_store_c_string_result ("unavailable:busy");
+      WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+      return 3;
+    }
 
   if (!utf8)
     {
-      stack_bottom = saved_stack_bottom;
+      WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
       return 2;
     }
 
@@ -246,7 +675,7 @@ wasmacs_eval_string (const char *utf8)
                                                  wasmacs_eval_error_handler);
   wasmacs_store_result (result);
   unbind_to (gc_count, Qnil);
-  stack_bottom = saved_stack_bottom;
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
   return wasmacs_eval_had_error ? 1 : 0;
 }
 

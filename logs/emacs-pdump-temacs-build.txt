@@ -1,0 +1,152 @@
+pdump temacs build probe
+workdir: /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/build-gnu-host-internal-termcap-pdump
+target: src/temacs
+
+emmake: "make -j16 -C lib 'CFLAGS=-g3 -O0' all" in "/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/build-gnu-host-internal-termcap-pdump"
+make: Nothing to be done for `all'.
+emmake: "make -j16 -C lib-src 'CFLAGS=-g3 -O0' all" in "/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/build-gnu-host-internal-termcap-pdump"
+/Library/Developer/CommandLineTools/usr/bin/make -C ../lib all
+  CC       pop.o
+make[1]: Nothing to be done for `all'.
+  CCLD     etags
+  CCLD     ctags
+  CCLD     emacsclient
+  CCLD     ebrowse
+  CCLD     hexl
+  CCLD     make-docfile
+  CCLD     make-fingerprint
+  CCLD     movemail
+emmake: "make -j16 -C src 'CFLAGS=-g3 -O0' 'LDFLAGS=-sNODERAWFS=1 -sEXIT_RUNTIME=1 -sSTACK_SIZE=134217728 -sSTACK_OVERFLOW_CHECK=0 -sINITIAL_MEMORY=1073741824 -sALLOW_MEMORY_GROWTH=1' temacs" in "/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/build-gnu-host-internal-termcap-pdump"
+/Library/Developer/CommandLineTools/usr/bin/make -C ../lib/ all
+  GEN      buildobj.h
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/charsets all
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/unidata charscript.el
+/Library/Developer/CommandLineTools/usr/bin/make -C ../admin/unidata emoji-zwj.el
+make[1]: Nothing to be done for `charscript.el'.
+make[1]: Nothing to be done for `emoji-zwj.el'.
+make[1]: Nothing to be done for `all'.
+make[1]: Nothing to be done for `all'.
+  GEN      globals.h
+  CC       dispnew.o
+  CC       frame.o
+  CC       scroll.o
+  CC       xdisp.o
+  CC       menu.o
+  CC       window.o
+  CC       charset.o
+  CC       coding.o
+  CC       category.o
+  CC       ccl.o
+  CC       character.o
+  CC       chartab.o
+  CC       bidi.o
+  CC       cm.o
+  CC       term.o
+  CC       terminal.o
+  CC       xfaces.o
+  CC       emacs.o
+  CC       keyboard.o
+  CC       macros.o
+  CC       keymap.o
+  CC       sysdep.o
+  CC       bignum.o
+  CC       buffer.o
+  CC       filelock.o
+  CC       insdel.o
+  CC       marker.o
+  CC       minibuf.o
+  CC       fileio.o
+  CC       dired.o
+  CC       cmds.o
+  CC       casetab.o
+  CC       casefiddle.o
+  CC       indent.o
+  CC       search.o
+  CC       regex-emacs.o
+  CC       undo.o
+  CC       alloc.o
+  CC       pdumper.o
+  CC       data.o
+  CC       doc.o
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/src/fileio.c:3954:31: warning: implicit conversion from 'off_t' (aka 'long long') to 'double' changes value from 9223372036854775807 to 9223372036854775808 [-Wimplicit-const-int-float-conversion]
+ 3954 |       if (0 <= v && v < 1.0 + TYPE_MAXIMUM (off_t))
+      |                             ~ ^~~~~~~~~~~~~~~~~~~~
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/lib/intprops.h:48:4: note: expanded from macro 'TYPE_MAXIMUM'
+   48 |   ((t) (! TYPE_SIGNED (t)                                               \
+      |    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   49 |         ? (t) -1                                                        \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   50 |         : ((((t) 1 << (TYPE_WIDTH (t) - 2)) - 1) * 2 + 1)))
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  CC       editfns.o
+  CC       callint.o
+  CC       eval.o
+  CC       floatfns.o
+  CC       fns.o
+1 warning generated.
+  CC       sort.o
+  CC       font.o
+  CC       print.o
+  CC       lread.o
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/src/alloc.c:6052:58: warning: format specifies type 'ptrdiff_t' (aka 'long') but the argument has type 'intmax_t' (aka 'long long') [-Wformat]
+ 6049 |                "WASMACS_ENABLED_PURECOPY entry #%d kind=%s raw=0x%jx ptr=%p pure=%d used=%td\n",
+      |                                                                                          ~~~
+      |                                                                                          %jd
+ 6050 |                wasmacs_trace_index, kind, (uintmax_t) XLI (obj),
+ 6051 |                FIXNUMP (obj) ? NULL : XPNTR (obj),
+ 6052 |                FIXNUMP (obj) ? 0 : PURE_P (XPNTR (obj)), pure_bytes_used);
+      |                                                          ^~~~~~~~~~~~~~~
+./globals.h:895:25: note: expanded from macro 'pure_bytes_used'
+  895 | #define pure_bytes_used globals.f_pure_bytes_used
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/src/alloc.c:6518:18: warning: implicit conversion from 'long long' to 'double' changes value from 4611686018427387903 to 4611686018427387904 [-Wimplicit-const-int-float-conversion]
+ 6518 |               if (tot < HI_THRESHOLD)
+      |                       ~ ^~~~~~~~~~~~
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/src/alloc.c:348:37: note: expanded from macro 'HI_THRESHOLD'
+  348 | #define HI_THRESHOLD (EMACS_INT_MAX / 2)
+      |                       ~~~~~~~~~~~~~~^~~
+  CC       syntax.o
+  CC       bytecode.o
+  CC       comp.o
+  CC       process.o
+/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/src/editfns.c:3976:21: warning: implicit conversion from 'unsigned long long' to 'double' changes value from 18446744073709551615 to 18446744073709551616 [-Wimplicit-const-int-float-conversion]
+ 3976 |                       if (abs_d < UINTMAX_MAX + 1.0)
+      |                                   ^~~~~~~~~~~ ~
+/opt/homebrew/Cellar/emscripten/5.0.7/libexec/cache/sysroot/include/stdint.h:93:21: note: expanded from macro 'UINTMAX_MAX'
+   93 | #define UINTMAX_MAX __UINTMAX_MAX__
+      |                     ^~~~~~~~~~~~~~~
+<built-in>:71:25: note: expanded from macro '__UINTMAX_MAX__'
+   71 | #define __UINTMAX_MAX__ 18446744073709551615ULL
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~
+  CC       gnutls.o
+  CC       callproc.o
+2 warnings generated.
+  CC       region-cache.o
+  CC       sound.o
+  CC       timefns.o
+  CC       atimer.o
+1 warning generated.
+  CC       doprnt.o
+  CC       intervals.o
+  CC       textprop.o
+  CC       composite.o
+  CC       xml.o
+  CC       lcms.o
+  CC       profiler.o
+  CC       decompress.o
+  CC       thread.o
+  CC       systhread.o
+  CC       sqlite.o
+  CC       treesit.o
+  CC       itree.o
+  CC       json.o
+  CC       termcap.o
+  CC       tparam.o
+  CC       lastfile.o
+  CCLD     temacs
+../lib-src/make-fingerprint: temacs.tmp: missing fingerprint
+make: *** [temacs] Error 1
+
+Applying wasm-side pdumper fingerprint workaround.
+Reason: upstream make-fingerprint was run on the JS launcher; the fingerprint bytes live in temacs.wasm for Emscripten.
+STATUS:PASS pdumper temacs build completed

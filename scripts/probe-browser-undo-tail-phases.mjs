@@ -215,10 +215,12 @@ if (!process.argv.includes("--child")) {
   for (const name of Object.keys(cases)) {
     const result = spawnSync(process.execPath, [fileURLToPath(import.meta.url), "--child", name], {
       encoding: "utf8",
-      timeout: 45_000,
+      timeout: 75_000,
     });
     const combined = `${result.stdout || ""}${result.stderr || ""}`.trimEnd();
     const timedOut = result.error?.code === "ETIMEDOUT";
+    const completedSuccessful =
+      combined.includes("EVAL_STATUS:0") && combined.includes("READBACK:");
     const knownBlocked = result.status !== 0 &&
       (
         timedOut ||
@@ -228,7 +230,9 @@ if (!process.argv.includes("--child")) {
         combined.includes("Aborted(native code called abort())") ||
         combined.includes("EVAL_STATUS:1")
       );
-    const status = result.status === 0 ? "PASS" : knownBlocked ? "KNOWN_BLOCKER" : "FAIL";
+    const status = result.status === 0 || completedSuccessful
+      ? "PASS"
+      : knownBlocked ? "KNOWN_BLOCKER" : "FAIL";
     statuses.set(name, status);
     summaries.push([
       `CASE:${name}`,

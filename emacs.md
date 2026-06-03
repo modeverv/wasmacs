@@ -60,6 +60,45 @@ top-level Emacs loop. If host code calls back into Emacs repeatedly, the current
 thread's stack top/bottom assumptions must be refreshed or GC must be inhibited
 around the callback until a real owner stack exists.
 
+The lower-level implementation in `alloc.c` makes this sharper. `mark_c_stack`
+simply calls `mark_memory(bottom, end)` and assumes the stack is one contiguous
+address range. `SET_STACK_TOP_ADDRESS` is deliberately a macro so that the
+stack-top sentry object lives in the caller's environment. When
+`__builtin_unwind_init` is unavailable, Emacs falls back to `sys_setjmp` to
+spill registers into a `jmp_buf` on the stack, but the source comments warn
+that this must be verified per platform. This is directly relevant to
+Emscripten: wasm linear-memory stack is contiguous, but JS-exported calls are
+not the same dynamic extent as native `main`, so the stack range must be chosen
+from the current exported entrypoint, not from stale startup frames.
+
+`flush_stack_call_func1` is the native pattern to copy: it computes a fresh
+stack top, stores it in `current_thread->stack_top`, then calls the callback.
+It also says the callback must not run Lisp or allocate GC memory. That means
+we should not literally wrap arbitrary host eval in this callback. Instead,
+host entrypoints need a wasmacs-specific equivalent of "refresh root-scan stack
+range before entering Lisp", while keeping Lisp execution outside
+`flush_stack_call_func1`'s no-allocation callback contract.
+
+`record_in_backtrace` in `lisp.h` also writes
+`current_thread->stack_top = specpdl_ptr->bt.args`. This is another hint that
+Emacs treats stack-top maintenance as part of normal Lisp entry/backtrace
+bookkeeping, not as a one-time process-global constant.
+
+The current Asyncify GC blocker is now pinned to this same mechanism.
+`record_in_backtrace` stores a raw `Lisp_Object *args` pointer in
+`SPECPDL_BACKTRACE`; `mark_specpdl` later calls `mark_objects` on that pointer
+and count. A diagnostic scrub that sets non-empty backtrace `args` slots to
+`NULL` / `0` lets post-completion GC pass after both text completion and
+cancel. That scrub is only evidence, not a product design: a real fix must keep
+the backtrace argument roots valid across Asyncify resume or discard/rebase
+stale bootstrap backtrace records at an Emacs-owned boundary.
+
+The first better spike copies those baseline backtrace `args` vectors to
+`xmalloc` storage at the exported Asyncify command boundary. That makes
+ordinary text completion and cancel survive post-completion GC without erasing
+backtrace arguments. The remaining design gap is ownership: copied arrays need
+a principled freeing or retirement policy before this becomes product code.
+
 ## Eval, Conditions, Unwind, And specpdl
 
 `vendor/emacs/src/eval.c` implements Lisp nonlocal control with handler records,
@@ -81,6 +120,16 @@ mark functions. Any wasm host entrypoint that crosses eval must either:
 - catch errors at the boundary and leave `specpdl` balanced, or
 - expose the operation as pending and reject reentrant eval until the stack is
   resumed and unwound.
+
+`mark_specpdl` makes the GC implication explicit. It marks unwind arguments,
+unwind arrays, save-excursion markers/windows, backtrace functions and args,
+let-bound symbols/old values, local binding locations, and `SPECPDL_UNWIND_PTR`
+payloads only when a custom mark function exists. It aborts on unexpected
+entries. Therefore a suspended command is safe only if every live dynamic
+binding/unwind entry either contains ordinary marked Lisp objects, has a custom
+marker, or remains visible through a valid C/wasm stack scan. A host-created
+pointer payload with no mark function is not safe to use as a hidden owner of
+Lisp objects.
 
 ## Command Loop And Input Wait
 
@@ -108,6 +157,19 @@ or process output makes progress possible. The waiting path calls
 This is the main browser mismatch: browser workers cannot synchronously block
 the event loop waiting for DOM input. The Emacs side wants a command-loop wait
 point; the browser side wants a Promise/message boundary.
+
+`Fcall_interactively` in `callint.c` explains why a worker/browser command
+protocol should dispatch real commands instead of only eval strings. It parses
+interactive specs, saves/restores command identity, preserves
+`current-prefix-arg`, and calls minibuffer readers for file names, buffers,
+commands, strings, coding systems, and Lisp expressions. The command loop in
+`keyboard.c` runs `pre-command-hook`, calls `undo-auto--add-boundary`, records
+point/current buffer before the command, executes `command-execute`, then runs
+`post-command-hook` and updates last-command state. Running commands through
+this path gives undo boundaries, prefix handling, hooks, minibuffer argument
+reading, and command history. Calling `wasmacs_eval_string` directly can be a
+diagnostic and maintenance API, but it is not equivalent to Emacs interactive
+editing.
 
 ## Minibuffer
 
@@ -178,6 +240,25 @@ Emacs as ordinary filesystem paths inside the Emscripten FS layer. Browser
 storage is an implementation detail behind that layer, not an Elisp-visible
 replacement for `fileio.c`.
 
+`vendor/emacs/lisp/files.el` adds the higher-level file-visiting contract.
+`find-file-noselect` first reuses an existing buffer visiting the same file or
+truename when possible, checks disk modification state, handles literal vs
+normal visits, and only then creates a new buffer. `find-file-noselect-1`
+erases the buffer, calls `insert-file-contents` with `visit` non-nil, records
+`buffer-file-truename`, `buffer-file-number`, `default-directory`, backup
+policy, coding/local-variable behavior, and calls `after-find-file`.
+`set-visited-file-name` similarly updates `buffer-file-name`, truename,
+default directory, buffer name, backup/autosave state, visited modtime, and
+local write/revert hooks.
+
+`save-buffer` and `basic-save-buffer` are not just `write-region`. They verify
+visited-file modtime, run save hooks, potentially prompt for a filename,
+delegate to VC/write hooks, write through `write-region`, update
+`buffer-file-coding-system`, `buffer-file-number`, auto-save state, and run
+after-save hooks. So the stable browser path must make these normal Elisp
+functions work against MEMFS paths; bypassing them with JS file writes will
+skip real visited-file state.
+
 ## Buffers, Point, Markers, And Undo
 
 `vendor/emacs/src/buffer.c` owns buffer identity and buffer-local state.
@@ -206,15 +287,47 @@ The implication is direct: browser-side textarea undo is not Emacs undo. Real
 undo requires persistent Emacs buffers, command boundaries, live buffer GC
 roots, and command dispatch through Emacs.
 
+`vendor/emacs/src/insdel.c` is the missing lower half of the undo story.
+`insert_1_both` calls `prepare_to_modify_buffer` before moving/growing the gap,
+then `record_insert`, increments modification ticks, adjusts markers, intervals,
+and point. `del_range_2` builds the deleted text when undo is enabled, calls
+`record_delete`, adjusts markers, and updates modification ticks. `replace_range`
+records insertion before deletion so undo can restore marker behavior in the
+right order.
+
+`prepare_to_modify_buffer_1` is especially important for wasm stability. The
+source comment says it runs Lisp, may GC, and may compact buffers, so callers
+must not invoke it while manipulating the gap or another critical text section.
+It also calls `undo-auto--undoable-change`, handles read-only/interval checks,
+locks visited files through `file_truename`, extracts active region text, runs
+`before-change-functions`, and sets `deactivate-mark`. Therefore file-visiting
+buffer + undo stability after explicit GC depends on three things being true:
+
+- the buffer remains live through `Vbuffer_alist` / selected-window / current
+  buffer roots;
+- the current host entrypoint exposes the stack and `specpdl` roots correctly
+  while hooks and modification code run;
+- undo lists are compacted and marked only after live-buffer marking, so a
+  hidden or prematurely killed buffer can lose undo state.
+
+This clarifies the prior crash class: if a file-visiting buffer poisons the next
+host eval around GC, the likely fault is not `find-file` alone. It is the
+combination of host entrypoint stack range, dynamic bindings/hooks, and live
+buffer/undo marking after text/file-visiting state has been established.
+
 ## Wasm-Relevant Conclusions
 
 1. Do not split editor semantics out into browser UI. Buffers, undo, point,
    command state, minibuffer, completion, and file visiting live in Emacs.
 2. Host eval is dangerous unless it preserves stack/GC root assumptions. The
-   safer shape is an owned command protocol with pending/busy state.
+   safer shape is an owned command protocol with pending/busy state and a
+   refreshed stack-root range at every JS-to-Emacs entry.
 3. Minibuffer support should suspend and resume the real Emacs command loop,
    not call a browser prompt and stuff the result back into Lisp.
 4. File persistence should materialize browser user/system images into the
    Emscripten filesystem and let `fileio.c` run normally.
 5. Any Asyncify waitpoint must be placed where Emacs-owned state is already
    valid and reentrant host calls are rejected until unwind completes.
+6. `inhibit_garbage_collection` is justified for forced suspended probes, but
+   the target architecture should shrink its use to narrow pending-command
+   regions and prove explicit GC after completion.

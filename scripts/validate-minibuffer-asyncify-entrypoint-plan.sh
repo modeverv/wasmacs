@@ -51,8 +51,14 @@ rg 'probe-browser-asyncify-minibuffer-input-injection' "${doc}" >/dev/null
 rg 'probe-browser-asyncify-minibuffer-cancel' "${doc}" >/dev/null
 rg -- '--js-library' "${build_script}" >/dev/null
 rg '_wasmacs_eval_string' "${build_script}" >/dev/null
+rg '_wasmacs_garbage_collect' "${build_script}" >/dev/null
+rg '_wasmacs_entrypoint_state' "${build_script}" >/dev/null
 rg '_wasmacs_minibuffer_state' "${build_script}" >/dev/null
 rg '_wasmacs_command_state' "${build_script}" >/dev/null
+rg '_wasmacs_os_lifecycle_phase' "${build_script}" >/dev/null
+rg '_wasmacs_os_root_state_snapshot' "${build_script}" >/dev/null
+rg '_wasmacs_os_gc_permission' "${build_script}" >/dev/null
+rg '_wasmacs_os_pending_command_state' "${build_script}" >/dev/null
 rg '_wasmacs_command_begin_minibuffer_probe' "${build_script}" >/dev/null
 rg '_wasmacs_command_begin_minibuffer_force_probe' "${build_script}" >/dev/null
 rg '_wasmacs_input_text' "${build_script}" >/dev/null
@@ -101,9 +107,15 @@ rg '__wasmacsResolveHostInputWait' "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['callMain'\\] = callMain" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['ccall'\\] = ccall" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_eval_string'\\].*wasmacs_eval_string" "${artifact_dir}/temacs" >/dev/null
+rg "Module\\['_wasmacs_garbage_collect'\\].*wasmacs_garbage_collect" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_last_result'\\].*wasmacs_last_result" "${artifact_dir}/temacs" >/dev/null
+rg "Module\\['_wasmacs_entrypoint_state'\\].*wasmacs_entrypoint_state" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_minibuffer_state'\\].*wasmacs_minibuffer_state" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_command_state'\\].*wasmacs_command_state" "${artifact_dir}/temacs" >/dev/null
+rg "Module\\['_wasmacs_os_lifecycle_phase'\\].*wasmacs_os_lifecycle_phase" "${artifact_dir}/temacs" >/dev/null
+rg "Module\\['_wasmacs_os_root_state_snapshot'\\].*wasmacs_os_root_state_snapshot" "${artifact_dir}/temacs" >/dev/null
+rg "Module\\['_wasmacs_os_gc_permission'\\].*wasmacs_os_gc_permission" "${artifact_dir}/temacs" >/dev/null
+rg "Module\\['_wasmacs_os_pending_command_state'\\].*wasmacs_os_pending_command_state" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_command_begin_minibuffer_probe'\\].*wasmacs_command_begin_minibuffer_probe" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_command_begin_minibuffer_force_probe'\\].*wasmacs_command_begin_minibuffer_force_probe" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_input_text'\\].*wasmacs_input_text" "${artifact_dir}/temacs" >/dev/null

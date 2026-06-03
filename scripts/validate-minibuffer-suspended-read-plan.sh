@@ -42,9 +42,11 @@ rg 'wasm-browser-minibuffer-state-export\.txt' "${doc}" >/dev/null
 rg 'wasm-browser-minibuffer-active-read-boundary\.txt' "${doc}" >/dev/null
 
 rg 'wasmacs_minibuffer_state' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
+rg 'wasmacs_entrypoint_state' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
 rg 'wasmacs_command_begin_minibuffer_probe' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
 rg 'unavailable:busy' "${repo_root}/scripts/patch-emacs-host-entrypoint-spike.sh" >/dev/null
 rg '_wasmacs_minibuffer_state' "${repo_root}/scripts/build-emacs-browser-persistent-spike.sh" >/dev/null
+rg '_wasmacs_entrypoint_state' "${repo_root}/scripts/build-emacs-browser-persistent-spike.sh" >/dev/null
 rg '_wasmacs_command_begin_minibuffer_probe' "${repo_root}/scripts/build-emacs-browser-persistent-spike.sh" >/dev/null
 rg 'wasmacs_minibuffer_state' "${probe}" >/dev/null
 rg 'wasmacs_command_begin_minibuffer_probe' "${active_probe}" >/dev/null

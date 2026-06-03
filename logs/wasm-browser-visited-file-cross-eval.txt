@@ -267,9 +267,9 @@ STEP_2_READBACK:visited-cross.txt
 alpha beta
 
 CASE:set-visited-minimized-cross
-STATUS:PASS
-EXIT_STATUS:0
-TIMEOUT:false
+STATUS:KNOWN_BLOCKER
+EXIT_STATUS:null
+TIMEOUT:true
 READY
 ERR:warning: unsupported syscall: __syscall_prlimit64
 ERR:Warning: arch-dependent data dir '/usr/local/libexec/emacs/30.2/wasm32-unknown-linux-gnu/': No such file or directory
@@ -535,9 +535,9 @@ STEP_2_READBACK:visited-cross
 alpha beta
 
 CASE:set-visited-clear-file-vars-cross
-STATUS:PASS
-EXIT_STATUS:0
-TIMEOUT:false
+STATUS:KNOWN_BLOCKER
+EXIT_STATUS:null
+TIMEOUT:true
 READY
 ERR:warning: unsupported syscall: __syscall_prlimit64
 ERR:Warning: arch-dependent data dir '/usr/local/libexec/emacs/30.2/wasm32-unknown-linux-gnu/': No such file or directory

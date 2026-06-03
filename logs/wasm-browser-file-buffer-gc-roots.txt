@@ -932,8 +932,8 @@ alpha
 
 CASE:find-file-live-buffer-gc
 STATUS:KNOWN_BLOCKER
-EXIT_STATUS:1
-TIMEOUT:false
+EXIT_STATUS:null
+TIMEOUT:true
 READY
 ERR:warning: unsupported syscall: __syscall_prlimit64
 ERR:Warning: arch-dependent data dir '/usr/local/libexec/emacs/30.2/wasm32-unknown-linux-gnu/': No such file or directory
@@ -1063,12 +1063,4 @@ STEP_1_READBACK:/home/user/gc-find-file-live.txt
 alpha
 STEP_2_STATUS:1
 STEP_2_READBACK:(error end-of-file Error reading from stdin)
-file:///Users/seijiro/Sync/sync_work/by-llms/wasmacs/scripts/probe-browser-file-buffer-gc-roots.mjs:261
-    throw new Error(`${label} eval failed with ${status}`);
-          ^
-
-Error: STEP_2 eval failed with 1
-    at file:///Users/seijiro/Sync/sync_work/by-llms/wasmacs/scripts/probe-browser-file-buffer-gc-roots.mjs:261:11
-
-Node.js v24.15.0
 

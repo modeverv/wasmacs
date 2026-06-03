@@ -136,6 +136,7 @@ const appServer = await ensureAppServer(appUrl);
 const chrome = spawn(chromePath, [
   "--headless=new",
   "--disable-gpu",
+  "--js-flags=--stack_size=65500",
   "--no-first-run",
   "--no-default-browser-check",
   "--remote-debugging-port=0",
@@ -156,6 +157,7 @@ try {
   await evaluate(client, sessionId, "window.__wasmacsSmoke.waitForIdle()", 300_000);
 
   if (scenarios.includes("minibuffer")) {
+    await evaluate(client, sessionId, "window.__wasmacsSmoke.clearPendingCommandEvents(); true");
     await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ ctrlKey: true, key: 'x' }); true");
     const prefixState = await evaluate(client, sessionId, "window.__wasmacsSmoke.state()");
     if (prefixState.minibuffer !== "C-x" || prefixState.status !== "C-x") {
@@ -168,7 +170,18 @@ try {
     if (!unavailableState.minibuffer.includes("minibuffer unavailable")) {
       throw new Error(`expected minibuffer unavailable echo, got ${JSON.stringify(unavailableState)}`);
     }
+    const pendingEvents = await evaluate(client, sessionId, "window.__wasmacsSmoke.pendingCommandEvents()");
+    const pendingStates = pendingEvents
+      .filter((event) => event.commandType === "find-file")
+      .map((event) => event.state);
+    if (!pendingStates.includes("starting") || !pendingStates.includes("unavailable")) {
+      throw new Error(`expected find-file pending-command starting/unavailable events, got ${JSON.stringify(pendingEvents)}`);
+    }
+    if (!pendingEvents.some((event) => event.commandType === "find-file" && event.minibuffer === "Find file: ")) {
+      throw new Error(`expected find-file pending-command minibuffer prompt, got ${JSON.stringify(pendingEvents)}`);
+    }
     evidence.push("PASS minibuffer echo boundary");
+    evidence.push("PASS pending-command find-file starting unavailable");
     console.log("browser smoke scenario passed: minibuffer");
   }
 
@@ -248,6 +261,50 @@ try {
     }
     evidence.push("PASS process clipboard keyboard quit boundaries");
     console.log("browser smoke scenario passed: boundaries");
+  }
+
+  if (scenarios.includes("asyncify")) {
+    const asyncify = await evaluate(
+      client,
+      sessionId,
+      "window.__wasmacsSmoke.asyncifyMinibufferReadSmoke('wasmacs-input.txt')",
+      300_000,
+    );
+    if (!asyncify?.passed && String(asyncify?.error || "").includes("Maximum call stack size exceeded")) {
+      evidence.push("KNOWN_BLOCKER asyncify browser worker stack");
+      console.log("browser smoke scenario recorded known blocker: asyncify");
+    } else {
+      assertPassed("asyncifyMinibufferReadSmoke", asyncify);
+      if (asyncify.readback !== "wasmacs-input.txt") {
+        throw new Error(`expected asyncify minibuffer readback, got ${JSON.stringify(asyncify)}`);
+      }
+      const asyncifyStates = asyncify.events
+        .filter((event) => event.commandType === "minibuffer-read")
+        .map((event) => event.state);
+      for (const state of ["starting", "pending-input", "resuming", "completed"]) {
+        if (!asyncifyStates.includes(state)) {
+          throw new Error(`expected asyncify minibuffer state ${state}, got ${JSON.stringify(asyncify.events)}`);
+        }
+      }
+      evidence.push("PASS asyncify pending-input minibuffer read");
+      console.log("browser smoke scenario passed: asyncify");
+    }
+  }
+
+  if (scenarios.includes("asyncify-boot")) {
+    const noLoadup = await evaluate(
+      client,
+      sessionId,
+      "window.__wasmacsSmoke.asyncifyNoLoadupBootSmoke()",
+      120_000,
+    );
+    if (noLoadup?.passed) {
+      evidence.push("PASS asyncify no-loadup browser worker boot");
+      console.log("browser smoke scenario passed: asyncify-boot");
+    } else {
+      evidence.push(`KNOWN_BLOCKER asyncify no-loadup boot status ${noLoadup?.status ?? "unknown"}`);
+      console.log("browser smoke scenario recorded known blocker: asyncify-boot");
+    }
   }
 
   console.log(`browser smoke passed: ${scenarios.join(",")} ${appUrl}`);

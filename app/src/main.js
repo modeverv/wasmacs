@@ -3,7 +3,10 @@ import { isEditorModified } from "./buffer-dirty.js";
 import { coalesceBufferCommand } from "./command-queue.js";
 import { keyEventToBufferCommand, nextPointIndexForCommand, validateBufferCommand } from "./input-protocol.js";
 import { minibufferTextForPrefix, minibufferTextForWorkerError } from "./minibuffer-view.js";
+import { pendingCommandStatusText, validatePendingCommandMessage } from "./pending-command-protocol.js";
 import { textToGridDrawMessage, validateTextGridDrawMessage } from "./redisplay-protocol.js";
+import { createBrowserSmallOsCoordinator } from "./small-os-runtime.js";
+import { SmallOsOperations } from "./small-os-services.js";
 import { userFileLabel, visibleUserFilePaths } from "./user-file-list.js";
 import { normalizeUserPath } from "./user-path.js";
 
@@ -44,12 +47,17 @@ let savedText = "";
 let userImage;
 let commandInFlight = false;
 let commandQueue = [];
+let pendingWorkerSyncFile;
 let pointIndex = 0;
 let bufferPath = defaultBufferPath;
 let keyPrefix;
 let lastRealUndoSmoke;
 let lastRepeatedUndoSmoke;
 let lastRedoSmoke;
+let lastAsyncifyMinibufferReadSmoke;
+let lastAsyncifyNoLoadupBootSmoke;
+let pendingCommandEvents = [];
+const smallOs = createBrowserSmallOsCoordinator();
 const idleWaiters = [];
 
 async function loadUserImage() {
@@ -267,6 +275,8 @@ function runWorkerCommand(command) {
   setStatus("running emacs command");
   setBufferState(commandQueue.length > 0 ? `running command (${commandQueue.length} queued)` : "running command");
   runButton.disabled = true;
+  smallOs.beginCommand(command, SmallOsOperations.filesystemReverseSync.id);
+  pendingWorkerSyncFile = undefined;
 
   if (!worker) {
     worker = new Worker("/app/src/wasm-worker.js", { type: "classic" });
@@ -285,19 +295,16 @@ function handleWorkerMessage(event) {
   if (message.type === "status") setStatus(message.text);
   if (message.type === "stdout") appendLine(message.text);
   if (message.type === "stderr") appendLine(message.text);
+  if (message.type === "pending-command") handlePendingCommandMessage(message);
   if (message.type === "sync-file") {
-    userImage.writeText(message.path, message.text);
-    localStorage.setItem(storageKey, userImage.toBase64());
-    if (message.path === bufferPath) {
-      savedText = message.text;
-      editor.value = message.text;
-      pointIndex = Number.isInteger(message.pointIndex) ? message.pointIndex : message.text.length;
-      renderTextGrid(textToGridDrawMessage({ path: message.path, pointIndex, text: message.text }));
-      renderUserFileList();
-      setBufferState("synced from emacs");
-    }
+    pendingWorkerSyncFile = message;
   }
   if (message.type === "exit") {
+    smallOs.finishCommand({ allowReverseSync: message.code === 0 });
+    if (message.code === 0 && pendingWorkerSyncFile) {
+      applyWorkerSyncFile(pendingWorkerSyncFile);
+      pendingWorkerSyncFile = undefined;
+    }
     setStatus(message.code === 0 ? "emacs command completed" : `emacs command exited ${message.code}`);
     commandInFlight = false;
     runButton.disabled = commandQueue.length > 0;
@@ -314,10 +321,49 @@ function handleWorkerMessage(event) {
     setStatus(undoUnavailable ? "undo unavailable" : clipboardUnavailable ? "clipboard unavailable" : minibufferUnavailable ? "minibuffer unavailable" : processUnavailable ? "process unavailable" : "worker error");
     setBufferState(undoUnavailable ? "undo unavailable" : clipboardUnavailable ? "clipboard unavailable" : minibufferUnavailable ? "minibuffer unavailable" : processUnavailable ? "process unavailable" : "worker error");
     appendLine(message.text);
+    smallOs.failCommand(new Error(message.text));
+    pendingWorkerSyncFile = undefined;
     commandInFlight = false;
     runButton.disabled = false;
     stopWorker();
     notifyIdleWaiters();
+  }
+}
+
+function handlePendingCommandMessage(message) {
+  if (!validatePendingCommandMessage(message)) return;
+  if (message.state === "pending-input") smallOs.enterPendingInput();
+  if (message.state === "resuming") smallOs.resumeCommand();
+  if (["completed", "cancelled", "failed", "unavailable"].includes(message.state)) {
+    smallOs.finishCommand({ allowReverseSync: false, diagnostic: message.error });
+  }
+  pendingCommandEvents.push({
+    id: message.id,
+    commandType: message.commandType,
+    path: message.path,
+    state: message.state,
+    minibuffer: message.minibuffer,
+    result: message.result,
+    error: message.error,
+  });
+  setStatus(pendingCommandStatusText(message));
+  if (message.minibuffer) setMinibuffer(message.minibuffer);
+  if (message.state === "unavailable" && message.error) {
+    setMinibuffer(minibufferTextForWorkerError(message.error));
+  }
+}
+
+function applyWorkerSyncFile(message) {
+  smallOs.assertReverseSyncAllowed();
+  userImage.writeText(message.path, message.text);
+  localStorage.setItem(storageKey, userImage.toBase64());
+  if (message.path === bufferPath) {
+    savedText = message.text;
+    editor.value = message.text;
+    pointIndex = Number.isInteger(message.pointIndex) ? message.pointIndex : message.text.length;
+    renderTextGrid(textToGridDrawMessage({ path: message.path, pointIndex, text: message.text }));
+    renderUserFileList();
+    setBufferState("synced from emacs");
   }
 }
 
@@ -451,6 +497,13 @@ window.__wasmacsSmoke = {
       preventDefault() {},
     });
   },
+  pendingCommandEvents() {
+    return pendingCommandEvents.slice();
+  },
+  clearPendingCommandEvents() {
+    pendingCommandEvents = [];
+    return pendingCommandEvents;
+  },
   async waitForIdle(timeoutMs) {
     await waitForIdle(timeoutMs);
     return this.state();
@@ -533,6 +586,100 @@ window.__wasmacsSmoke = {
     appendLine(`REDO_UI_SMOKE:${lastRedoSmoke.passed ? "PASS" : "FAIL"}`);
     return lastRedoSmoke;
   },
+	  async asyncifyMinibufferReadSmoke(text = "wasmacs-input.txt") {
+	    pendingCommandEvents = [];
+	    setStatus("starting asyncify minibuffer");
+	    setMinibuffer("");
+	    smallOs.beginCommand(
+	      { type: "minibuffer-read", path: bufferPath, pointIndex },
+	      SmallOsOperations.pendingCommandProtocol.id,
+	    );
+	    const asyncifyWorker = new Worker("/app/src/asyncify-minibuffer-worker.js", { type: "classic" });
+	    let inputSent = false;
+    lastAsyncifyMinibufferReadSmoke = await new Promise((resolve) => {
+	      const timeout = setTimeout(() => {
+	        asyncifyWorker.terminate();
+	        smallOs.failCommand(new Error("timed out waiting for asyncify minibuffer read"));
+	        resolve({
+	          passed: false,
+          error: "timed out waiting for asyncify minibuffer read",
+          events: pendingCommandEvents.slice(),
+        });
+      }, 300_000);
+
+      asyncifyWorker.onmessage = (event) => {
+        const message = event.data;
+        if (message.type === "stdout") appendLine(message.text);
+        if (message.type === "stderr") appendLine(message.text);
+        if (message.type === "status") setStatus(message.text);
+        if (message.type === "pending-command") {
+          handlePendingCommandMessage(message);
+          if (message.state === "pending-input" && !inputSent) {
+            inputSent = true;
+            asyncifyWorker.postMessage({ type: "input-text", text });
+          }
+        }
+        if (message.type === "asyncify-minibuffer-result") {
+          clearTimeout(timeout);
+          asyncifyWorker.terminate();
+          resolve({
+            ...message,
+            events: pendingCommandEvents.slice(),
+            state: this.state(),
+          });
+        }
+      };
+
+	      asyncifyWorker.onerror = (event) => {
+	        clearTimeout(timeout);
+	        asyncifyWorker.terminate();
+	        smallOs.failCommand(new Error(event.message));
+	        resolve({
+          passed: false,
+          error: event.message,
+          events: pendingCommandEvents.slice(),
+        });
+      };
+
+      asyncifyWorker.postMessage({
+        type: "start-minibuffer-read",
+        command: { type: "minibuffer-read", path: bufferPath, pointIndex },
+      });
+    });
+    appendLine(`ASYNCIFY_MINIBUFFER_READ_SMOKE:${lastAsyncifyMinibufferReadSmoke.passed ? "PASS" : "FAIL"}`);
+    return lastAsyncifyMinibufferReadSmoke;
+  },
+  async asyncifyNoLoadupBootSmoke() {
+    const asyncifyWorker = new Worker("/app/src/asyncify-minibuffer-worker.js", { type: "classic" });
+    lastAsyncifyNoLoadupBootSmoke = await new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        asyncifyWorker.terminate();
+        resolve({ passed: false, error: "timed out waiting for asyncify no-loadup boot probe" });
+      }, 120_000);
+
+      asyncifyWorker.onmessage = (event) => {
+        const message = event.data;
+        if (message.type === "stdout") appendLine(message.text);
+        if (message.type === "stderr") appendLine(message.text);
+        if (message.type === "status") setStatus(message.text);
+        if (message.type === "asyncify-boot-probe-result") {
+          clearTimeout(timeout);
+          asyncifyWorker.terminate();
+          resolve(message);
+        }
+      };
+
+      asyncifyWorker.onerror = (event) => {
+        clearTimeout(timeout);
+        asyncifyWorker.terminate();
+        resolve({ passed: false, error: event.message });
+      };
+
+      asyncifyWorker.postMessage({ type: "boot-probe", noLoadup: true });
+    });
+    appendLine(`ASYNCIFY_NO_LOADUP_BOOT_SMOKE:${lastAsyncifyNoLoadupBootSmoke.passed ? "PASS" : "FAIL"}`);
+    return lastAsyncifyNoLoadupBootSmoke;
+  },
   lastRealUndoSmoke() {
     return lastRealUndoSmoke;
   },
@@ -542,16 +689,23 @@ window.__wasmacsSmoke = {
   lastRedoSmoke() {
     return lastRedoSmoke;
   },
-  state() {
-    return {
-      path: bufferPath,
-      pointIndex,
-      minibuffer: minibuffer.textContent,
-      state: bufferState.textContent,
-      status: status.textContent,
-      text: editor.value,
-    };
+  lastAsyncifyMinibufferReadSmoke() {
+    return lastAsyncifyMinibufferReadSmoke;
   },
+  lastAsyncifyNoLoadupBootSmoke() {
+    return lastAsyncifyNoLoadupBootSmoke;
+  },
+	  state() {
+	    return {
+	      path: bufferPath,
+	      pointIndex,
+	      minibuffer: minibuffer.textContent,
+	      state: bufferState.textContent,
+	      status: status.textContent,
+	      text: editor.value,
+	      smallOs: smallOs.snapshot(),
+	    };
+	  },
 };
 
 await loadBuffer();

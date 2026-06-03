@@ -5,11 +5,13 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 test -f "${repo_root}/app/index.html"
 test -f "${repo_root}/app/src/main.js"
+test -f "${repo_root}/app/src/asyncify-minibuffer-worker.js"
 test -f "${repo_root}/app/src/wasm-worker.js"
 test -f "${repo_root}/app/src/command-queue.js"
 test -f "${repo_root}/app/src/buffer-dirty.js"
 test -f "${repo_root}/app/src/input-protocol.js"
 test -f "${repo_root}/app/src/minibuffer-view.js"
+test -f "${repo_root}/app/src/pending-command-protocol.js"
 test -f "${repo_root}/app/src/redisplay-protocol.js"
 test -f "${repo_root}/app/src/user-file-list.js"
 test -f "${repo_root}/app/src/user-path.js"
@@ -18,6 +20,7 @@ test -f "${repo_root}/scripts/run-browser-smoke.mjs"
 test -f "${repo_root}/scripts/serve-app.mjs"
 
 rg 'new Worker\("/app/src/wasm-worker\.js", \{ type: "classic" \}\)' "${repo_root}/app/src/main.js" >/dev/null
+rg 'new Worker\("/app/src/asyncify-minibuffer-worker\.js", \{ type: "classic" \}\)' "${repo_root}/app/src/main.js" >/dev/null
 rg 'BrowserUserImage' "${repo_root}/app/src/main.js" >/dev/null
 rg 'isEditorModified' "${repo_root}/app/src/main.js" >/dev/null
 rg 'persistEditorIfModified' "${repo_root}/app/src/main.js" >/dev/null
@@ -56,6 +59,11 @@ rg 'coalesceBufferCommand' "${repo_root}/app/src/main.js" >/dev/null
 rg 'coalesceBufferCommand' "${repo_root}/app/src/command-queue.js" >/dev/null
 rg 'keyEventToBufferCommand' "${repo_root}/app/src/main.js" >/dev/null
 rg 'minibufferTextForWorkerError' "${repo_root}/app/src/main.js" >/dev/null
+rg 'pendingCommandStatusText' "${repo_root}/app/src/main.js" >/dev/null
+rg 'pending-command' "${repo_root}/app/src/pending-command-protocol.js" >/dev/null
+rg 'pendingCommandEvents' "${repo_root}/app/src/main.js" >/dev/null
+rg 'asyncifyMinibufferReadSmoke' "${repo_root}/app/src/main.js" >/dev/null
+rg 'asyncifyNoLoadupBootSmoke' "${repo_root}/app/src/main.js" >/dev/null
 rg 'nextPointIndexForCommand' "${repo_root}/app/src/main.js" >/dev/null
 rg 'validateBufferCommand' "${repo_root}/app/src/input-protocol.js" >/dev/null
 rg 'insert-text' "${repo_root}/app/src/input-protocol.js" >/dev/null
@@ -98,12 +106,29 @@ rg 'forward-char 1' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'host\.process is unavailable' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'clipboard/kill-ring requires GUI clipboard protocol' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'minibuffer requires persistent Emacs command loop' "${repo_root}/app/src/wasm-worker.js" >/dev/null
+rg 'postPendingCommand' "${repo_root}/app/src/wasm-worker.js" >/dev/null
+rg 'postPendingCommand\(command, "unavailable"' "${repo_root}/app/src/wasm-worker.js" >/dev/null
+rg 'wasmacs_command_begin_minibuffer_force_probe' "${repo_root}/app/src/asyncify-minibuffer-worker.js" >/dev/null
+rg '"--no-loadup"' "${repo_root}/app/src/asyncify-minibuffer-worker.js" >/dev/null
+rg 'wasmacs_input_text' "${repo_root}/app/src/asyncify-minibuffer-worker.js" >/dev/null
+rg 'postPendingCommand\(command, "pending-input"' "${repo_root}/app/src/asyncify-minibuffer-worker.js" >/dev/null
+rg 'postPendingCommand\(command, "completed"' "${repo_root}/app/src/asyncify-minibuffer-worker.js" >/dev/null
 rg 'parseReadback' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'command\?\.path' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg '/artifacts/emacs-browser-persistent-spike/' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'importScripts\("/artifacts/emacs-browser-persistent-spike/temacs"\)' "${repo_root}/app/src/wasm-worker.js" >/dev/null
 rg 'basename\(filePath\) === "temacs"' "${repo_root}/scripts/serve-app.mjs" >/dev/null
 rg 'run-browser-smoke\.mjs' "${repo_root}/package.json" >/dev/null
+rg 'pendingCommandEvents' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
+rg 'PASS pending-command find-file starting unavailable' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
+rg 'asyncifyMinibufferReadSmoke' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
+rg 'asyncifyNoLoadupBootSmoke' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
+rg 'PASS asyncify pending-input minibuffer read' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
+rg 'PASS asyncify no-loadup browser worker boot' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
+rg 'KNOWN_BLOCKER asyncify no-loadup boot status' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
+rg 'KNOWN_BLOCKER asyncify browser worker stack' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
+rg -- '--js-flags=--stack_size=65500' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
+rg 'minibuffer editing files boundaries' "${repo_root}/package.json" >/dev/null
 rg 'browser:smoke:editing' "${repo_root}/package.json" >/dev/null
 rg 'browser:smoke:all' "${repo_root}/package.json" >/dev/null
 rg '"dev": "node scripts/serve-app\.mjs"' "${repo_root}/package.json" >/dev/null

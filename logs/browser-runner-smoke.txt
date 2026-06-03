@@ -1,6 +1,7 @@
 URL:http://127.0.0.1:5173/?clear-storage=1&browser-smoke=minibuffer
 SCENARIOS:minibuffer,editing,files,boundaries
 PASS minibuffer echo boundary
+PASS pending-command find-file starting unavailable
 PASS real undo repeated undo redo browser hooks
 PASS project reload file switching textarea autosave
 PASS process clipboard keyboard quit boundaries
