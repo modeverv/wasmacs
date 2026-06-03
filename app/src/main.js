@@ -279,7 +279,7 @@ function runWorkerCommand(command) {
   pendingWorkerSyncFile = undefined;
 
   if (!worker) {
-    worker = new Worker("/app/src/wasm-worker.js", { type: "classic" });
+    worker = new Worker("/app/src/browser-runtime-worker.js", { type: "classic" });
     worker.onmessage = handleWorkerMessage;
     worker.onerror = handleWorkerError;
   }
@@ -300,13 +300,24 @@ function handleWorkerMessage(event) {
     pendingWorkerSyncFile = message;
   }
   if (message.type === "exit") {
-    smallOs.finishCommand({ allowReverseSync: message.code === 0 });
-    if (message.code === 0 && pendingWorkerSyncFile) {
-      applyWorkerSyncFile(pendingWorkerSyncFile);
+    let exitError;
+    let didSync = false;
+    try {
+      smallOs.finishCommand({ allowReverseSync: message.code === 0 });
+      if (message.code === 0 && pendingWorkerSyncFile) {
+        applyWorkerSyncFile(pendingWorkerSyncFile);
+        didSync = true;
+      }
+    } catch (error) {
+      exitError = error;
+      appendLine(`worker exit handling failed: ${error && error.message ? error.message : String(error)}`);
+    } finally {
       pendingWorkerSyncFile = undefined;
+      commandInFlight = false;
     }
-    setStatus(message.code === 0 ? "emacs command completed" : `emacs command exited ${message.code}`);
-    commandInFlight = false;
+    setStatus(exitError ? "worker exit handling failed" : message.code === 0 ? "emacs command completed" : `emacs command exited ${message.code}`);
+    if (exitError) setBufferState("worker exit handling failed");
+    else if (!didSync) setBufferState(message.code === 0 ? "emacs command completed" : `emacs command exited ${message.code}`);
     runButton.disabled = commandQueue.length > 0;
     runNextBufferCommand();
     if (commandQueue.length === 0 && !commandInFlight) runButton.disabled = false;
@@ -594,7 +605,7 @@ window.__wasmacsSmoke = {
 	      { type: "minibuffer-read", path: bufferPath, pointIndex },
 	      SmallOsOperations.pendingCommandProtocol.id,
 	    );
-	    const asyncifyWorker = new Worker("/app/src/asyncify-minibuffer-worker.js", { type: "classic" });
+	    const asyncifyWorker = new Worker("/app/src/asyncify-minibuffer-worker.js");
 	    let inputSent = false;
     lastAsyncifyMinibufferReadSmoke = await new Promise((resolve) => {
 	      const timeout = setTimeout(() => {
@@ -650,7 +661,7 @@ window.__wasmacsSmoke = {
     return lastAsyncifyMinibufferReadSmoke;
   },
   async asyncifyNoLoadupBootSmoke() {
-    const asyncifyWorker = new Worker("/app/src/asyncify-minibuffer-worker.js", { type: "classic" });
+    const asyncifyWorker = new Worker("/app/src/asyncify-minibuffer-worker.js");
     lastAsyncifyNoLoadupBootSmoke = await new Promise((resolve) => {
       const timeout = setTimeout(() => {
         asyncifyWorker.terminate();
@@ -679,6 +690,37 @@ window.__wasmacsSmoke = {
     });
     appendLine(`ASYNCIFY_NO_LOADUP_BOOT_SMOKE:${lastAsyncifyNoLoadupBootSmoke.passed ? "PASS" : "FAIL"}`);
     return lastAsyncifyNoLoadupBootSmoke;
+  },
+  async asyncifyInteractiveLoopProbeSmoke() {
+    const asyncifyWorker = new Worker("/app/src/asyncify-minibuffer-worker.js");
+    const result = await new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        asyncifyWorker.terminate();
+        resolve({ passed: false, error: "timed out waiting for asyncify interactive loop probe" });
+      }, 120_000);
+
+      asyncifyWorker.onmessage = (event) => {
+        const message = event.data;
+        if (message.type === "stdout") appendLine(message.text);
+        if (message.type === "stderr") appendLine(message.text);
+        if (message.type === "status") setStatus(message.text);
+        if (message.type === "asyncify-interactive-loop-probe-result") {
+          clearTimeout(timeout);
+          asyncifyWorker.terminate();
+          resolve(message);
+        }
+      };
+
+      asyncifyWorker.onerror = (event) => {
+        clearTimeout(timeout);
+        asyncifyWorker.terminate();
+        resolve({ passed: false, error: event.message });
+      };
+
+      asyncifyWorker.postMessage({ type: "interactive-loop-probe" });
+    });
+    appendLine(`ASYNCIFY_INTERACTIVE_LOOP_PROBE:${result.passed ? "PASS" : "FAIL"}`);
+    return result;
   },
   lastRealUndoSmoke() {
     return lastRealUndoSmoke;

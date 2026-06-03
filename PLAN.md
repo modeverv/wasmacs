@@ -1331,12 +1331,12 @@ Active blocker classification under `small-os-for-emacs.md`:
 
 | Blocker / evidence | Owning service | Cross-service invariant | Emacs source surface | Current treatment | Acceptance test |
 | --- | --- | --- | --- | --- | --- |
-| Browser-worker Asyncify hits `RangeError: Maximum call stack size exceeded` during cold boot | Lifecycle Service plus Preloaded-State Service | Startup state must be loaded before JS-visible command entrypoints; cold `loadup.el` is not product boot | `vendor/emacs/lisp/loadup.el`, `vendor/emacs/src/emacs.c`, `vendor/emacs/src/pdumper.c`, `vendor/emacs/src/Makefile.in` | Diagnostic blocker; stop tuning browser stack flags as primary fix | A worker starts from post-loadup/preloaded state, reaches `initialized`, then runs a simple eval and explicit GC |
-| Pdump Node path reaches `Loading bindings (source)` and exits 139 | Preloaded-State Service plus Memory And Root Service | Preloaded-state generation must preserve pure space, object layout, static roots, relocation, and GC roots | `vendor/emacs/src/pdumper.c`, `vendor/emacs/src/alloc.c`, `vendor/emacs/src/puresize.h`, `vendor/emacs/lisp/loadup.el`, `vendor/emacs/lisp/bindings.el` | Diagnostic blocker in generated/copied-source artifact lane | Node-first `.pdmp` or pdumper-class artifact is generated, loaded before `initialized`, and survives explicit GC |
-| `bindings.el` mode-line keymap `purecopy` repeatedly re-enters the same closure/vector graph | Memory And Root Service plus Preloaded-State Service | Dump-time `purecopy` and hash-consing/cycle handling must match native Emacs before a preloaded artifact is trusted | `vendor/emacs/src/alloc.c`, `vendor/emacs/src/fns.c`, `vendor/emacs/lisp/bindings.el` | Diagnostic source probe; no broad `loadup.el` patch | Native-vs-wasm comparison for the exact keymap graph explains whether wasm needs provisional cycle handling, closure layout repair, or artifact setup change |
+| Browser-worker pdmp-free `--nw` startup exits before `read_char` / `wasmacs_host_wait_for_input` | Terminal/Tty Service plus Lifecycle Service | Emacs must see a valid text terminal before terminal startup can enter `command_loop` | `vendor/emacs/src/emacs.c`, `vendor/emacs/src/dispnew.c`, `vendor/emacs/src/term.c`, `vendor/emacs/src/keyboard.c`, `vendor/emacs/src/sysdep.c` | Active product blocker; implement minimal fake tty before returning to pdmp or GUI redisplay work | `emacs --quick --no-splash --nw` reaches `command_loop`, emits terminal bytes, and suspends at the real input waitpoint |
+| Browser-worker Asyncify previously hit `RangeError: Maximum call stack size exceeded` during cold/pdump startup | Lifecycle Service plus Preloaded-State Service | Startup state must not be confused with terminal availability or command-loop ownership | `vendor/emacs/lisp/loadup.el`, `vendor/emacs/src/emacs.c`, `vendor/emacs/src/pdumper.c`, `vendor/emacs/src/Makefile.in` | Historical diagnostic; pdmp is demoted from the active product route | Keep evidence, but do not resume pdmp unless fake tty fails with source-backed evidence or the user explicitly asks |
+| Pdump/purecopy probes produced a wasm/Node `bootstrap-emacs.pdmp` and purecopy fixes | Preloaded-State Service plus Memory And Root Service | Preloaded-state generation must preserve pure space, object layout, static roots, relocation, and GC roots | `vendor/emacs/src/pdumper.c`, `vendor/emacs/src/alloc.c`, `vendor/emacs/src/puresize.h`, `vendor/emacs/lisp/loadup.el`, `vendor/emacs/lisp/bindings.el` | Diagnostic evidence only; not the next normal browser runtime path | If resumed, generated `.pdmp` or pdumper-class artifact loads before `initialized` and survives explicit GC |
 | Asyncify post-completion GC originally crashed in `mark_specpdl`; copied backtrace pin now passes probes | Memory And Root Service plus Control-Flow Service | Backtrace args, `specpdl`, stack-top hints, and GC permission must remain valid across Asyncify suspension/resume | `vendor/emacs/src/eval.c`, `vendor/emacs/src/lisp.h`, `vendor/emacs/src/thread.c`, `vendor/emacs/src/alloc.c` | Diagnostic/product-candidate split: pin shape is evidence, but no freeing policy means not final product behavior | Text and cancel completion return to idle, unwind GC inhibit, preserve backtrace info, and pass explicit GC from a fresh entrypoint |
 | MEMFS / `.wasifs` reverse sync can conflict with live visited buffers if run mid-command | Filesystem And Persistence Service plus Lifecycle Service | Reverse sync runs only after command completion or explicit save; browser storage is not editor semantics | `vendor/emacs/src/fileio.c`, `vendor/emacs/src/buffer.c`, `vendor/emacs/lisp/files.el`, `vendor/emacs/src/insdel.c` | Product behavior only at Emacs-owned boundaries; poison direct-write cases remain diagnostic | Real `find-file` / `save-buffer` / undo / redo across one and two visited buffers survive explicit GC and reverse sync |
-| Browser UI unavailable boundary and pending-command scaffold exist, but real Asyncify command cannot productize before preloaded state | Blocking Input Scheduler plus Browser GUI Boundary plus Preloaded-State Service | Pending command is single-owner, UI renders state only, and command protocol is not exposed before lifecycle/preloaded-state is valid | `vendor/emacs/src/keyboard.c`, `vendor/emacs/src/minibuf.c`, `vendor/emacs/src/callint.c`, `vendor/emacs/lisp/minibuffer.el` | Product scaffold with diagnostic backend blocker | Worker protocol emits `starting`, `pending-input`, `completed`/`cancelled`/`failed` over a preloaded runtime without browser-side minibuffer semantics |
+| Browser UI unavailable boundary and pending-command scaffold exist, but real input should now travel through tty first | Blocking Input Scheduler plus Terminal/Tty Service plus Browser GUI Boundary | Pending command is single-owner, UI renders terminal/protocol state only, and JS does not own Emacs minibuffer semantics | `vendor/emacs/src/keyboard.c`, `vendor/emacs/src/term.c`, `vendor/emacs/src/minibuf.c`, `vendor/emacs/src/callint.c`, `vendor/emacs/lisp/minibuffer.el` | Product scaffold with active tty backend blocker | Worker reaches terminal input wait, JS injects bytes, xterm.js renders output, and Emacs owns minibuffer/command semantics |
 
 Already proven and kept:
 
@@ -1670,34 +1670,28 @@ Implementation phases, now organized by small-OS service:
    - Keep direct `write-region` poison cases as diagnostics only; the product
      path is `save-buffer`.
 
-7. Preloaded-State Service: avoid cold browser-worker loadup before productizing
-   pending input.
-   - Treat the browser-worker Asyncify stack overflow as a lifecycle/preloaded
-     state blocker, not as a standalone Asyncify flag problem.
-   - Continue pdump/preloaded-state work only in generated/copied-source lanes.
-   - For each pdump/purecopy probe, record the owner service, violated
-     invariant, relevant source surface, diagnostic/product status, and
-     acceptance test before changing generated artifacts.
-   - First compare native/pdump behavior for the failing `bindings.el` keymap
-     closure graph, then decide whether the wasm side needs provisional
-     purecopy cycle handling, a closure/object-layout fix, or a generated
-     artifact setup change.
-   - Separately track the compiled-Lisp artifact blocker exposed after bypassing
-     the keymap `purecopy` blocker; do not merge it into the purecopy/root
-     diagnosis.
+7. Terminal/Tty Service: get the real `--nw` command loop to a waitpoint.
+   - Add the smallest browser fake tty surface required by Emacs startup:
+     `isatty`, raw-mode attr calls, window size, stdin read, stdout/stderr
+     write, and deterministic `TERM` / `TERMCAP`.
+   - Classify each missing tty behavior against `emacs.c`, `dispnew.c`,
+     `term.c`, `keyboard.c`, and `sysdep.c` before patching.
+   - Treat xterm.js as the first renderer after terminal bytes are observable;
+     do not start custom `xdisp.c`/text-grid work before the tty MVP passes.
+   - Keep pdmp/pbootstrap in the diagnostic lane. It is not the next normal
+     browser runtime route.
 
-8. Blocking Input Scheduler x Browser GUI Boundary: move from forced
-   minibuffer probe to worker/browser command protocol.
+8. Blocking Input Scheduler x Terminal/Tty Service x Browser GUI Boundary:
+   move from forced minibuffer probe to terminal-owned input.
    - Define worker messages for:
      command start, command state read, minibuffer state read, input text,
      input key, cancel, command completion, command failure, and command
      unavailable.
-   - The browser can render prompt/state and collect input, but the worker is
-     the only owner of pending command state and the Emacs core is the only
+   - For the terminal MVP, browser input becomes terminal bytes first. The
+     worker remains the owner of pending command state, and Emacs remains the
      owner of command semantics.
-   - First protocol command can still be a narrow diagnostic minibuffer read,
-     but it must travel through the same worker/browser command protocol that
-     later `C-x C-f` and `M-x` will use.
+   - First protocol command should prove ordinary terminal input and `C-g`
+     before exposing full minibuffer commands.
    - Once the protocol is passing, demote
      `wasmacs_command_begin_minibuffer_force_probe` to a non-product
      diagnostic helper.
@@ -1730,15 +1724,17 @@ Expected deliverables:
   acceptance tests before new shims are added.
 - A C/wasm facade plan that keeps JS as coordinator/mirror/harness and names
   lifecycle state, entrypoint root refresh, GC permission, pending command
-  guard, backtrace/root ownership, preloaded-state/pdump, and
-  segment/root/relocation facade placeholders.
+  guard, backtrace/root ownership, terminal/tty ownership, and diagnostic
+  preloaded-state/pdump placeholders.
 - A GC-after-completion browser/worker probe for Asyncify text completion.
 - A GC-after-completion browser/worker probe for Asyncify cancel.
 - A live file-visiting buffer plus undo-list explicit-GC probe.
 - A two-file file-switch plus undo-list explicit-GC probe.
 - Worker protocol changes that represent pending Emacs commands explicitly.
-- Browser smoke coverage proving the protocol path can be exercised without
-  browser-side minibuffer semantics.
+- A minimal fake tty implementation or spike plan with source references.
+- Browser/worker smoke proving `--nw` reaches the real input waitpoint.
+- xterm.js smoke proving terminal output bytes render without browser-side
+  minibuffer or editor semantics.
 - Updated `emacs.md`, `p.md`, `PLAN.md`, and `LOG.md` evidence after each
   completed phase.
 
@@ -2099,205 +2095,93 @@ Validation notes:
 
 ## Current Next Step
 
-Milestone 13.5 Phase 7-10 and Milestone 14 entry point.
+Milestone 13.5 now pivots to a minimal Terminal/Tty Service and xterm.js
+renderer as the active product route.
 
-The Preloaded-State Service and Memory/Root Service are now unblocked:
-- `alloc.c` purecopy cycle fix: `bindings.el` mode-line keymap closure cycle
-  broken by provisional `Fputhash` before recursive slot copy.
-- `pdumper.c` heap-mapping fix: `dump_mmap_contiguous_heap` forced under
-  `__EMSCRIPTEN__` since POSIX anonymous mmap does not work in wasm.
-- `pbootstrap` pdump generation: `bootstrap-emacs.pdmp` (25MB) generated under
-  Node using the pre-load prerequisites for `files.el` eval-when-compile.
-- `bootstrap-emacs.pdmp` loads under Node: `VERSION:30.2`, `GC:PASS`,
-  `PDUMP:loaded`. Evidence in `logs/emacs-pdump-node-load-pass.txt`.
-- C/wasm OS compat kernel complete: `wasmacs_os_release_backtrace_args`,
-  `wasmacs_os_push_gc_guard`, `wasmacs_os_pop_gc_guard`,
-  `wasmacs_os_begin_command`, `wasmacs_os_finish_command`,
-  `wasmacs_os_cancel_command` all exported and tested. Evidence in
-  `logs/wasm-browser-os-compat-kernel.txt`.
-- 512MB fixed-memory pdump browser profile: `artifacts/emacs-browser-pdump-profile/`
-  bundles `bootstrap-emacs.pdmp`. Browser workers boot with
-  `--dump-file=/bootstrap-emacs.pdmp` to skip cold `loadup.el` and eliminate
-  the `RangeError: Maximum call stack size exceeded` blocker. Build evidence
-  in `logs/emacs-browser-pdump-profile-build.txt`.
+The previous pdump/pbootstrap lane produced valuable evidence, but it is no
+longer the next normal browser runtime path. Keep the pdump artifacts and logs
+as diagnostics for preloaded-state, purecopy, relocation, and loadup behavior.
+Do not continue pdmp work unless the fake tty path fails with source-backed
+evidence or the user explicitly asks for a preloaded-state experiment.
 
-The architectural path `wasm linear memory (512MB fixed) ← C/wasm OS compat
-kernel ← Emacs C core` is now in place. The next work is to wire the new pdump
-profile into the browser worker and prove the full interactive command loop:
+Why this pivot:
 
-1. **Update `app/src/wasm-worker.js`** to use the pdump profile:
-   - Boot with `callMain(["--dump-file=/bootstrap-emacs.pdmp", "--batch", ...])`
-   - Subsequent commands use `wasmacs_os_begin_command` / `wasmacs_os_finish_command`
-   - Drop dependency on the old persistent spike profile for interactive paths
+- The project is already close on the ordinary editing baseline: real
+  file-visiting buffers, `save-buffer`, undo/redo, file switching, `.wasifs`
+  persistence, explicit unavailable boundaries, and browser smoke coverage all
+  have evidence in the Milestone 12-13 notes.
+- The next fidelity gap is not a custom browser GUI renderer. It is getting
+  real Emacs interactive startup into `command_loop` in a browser worker.
+- A terminal-backed MVP lets Emacs keep ownership of command loop, keymaps,
+  minibuffer, redisplay, mode line, undo, windows, and buffers while JS only
+  transports terminal bytes.
+- This avoids diving directly into `xdisp.c` internals for a custom
+  `text-grid-draw` renderer. Emacs can use its existing
+  `xdisp.c -> term.c -> tty output` path, and the browser can render that
+  stream with xterm.js.
 
-2. **Prove browser Asyncify pending-input without stack overflow**:
-   - Boot from pdump (no cold loadup)
-   - Start interactive command via `wasmacs_os_begin_command("find-file")`
-   - `wasmacs_host_wait_for_input` suspends via Asyncify
-   - Inject text via `wasmacs_input_text`
-   - Finish with `wasmacs_os_finish_command`
-   - This should now pass where it previously hit `RangeError`
+Current source-backed blocker:
 
-3. **Filesystem And Persistence**: keep `.wasifs` reverse sync at
-   `wasmacs_os_finish_command` boundary.
+- `scripts/build-emacs-browser-interactive.sh` now builds a pdmp-free
+  system-Lisp-tree Asyncify artifact.
+- `asyncify-minibuffer-worker.js` starts
+  `callMain(["--quick", "--no-splash", "--nw"])`.
+- This avoids the previous browser-worker cold-start `RangeError`; standard
+  Lisp loads through `Finding pointers to doc strings`.
+- The current failure is that `callMain` returns status `1` before
+  `read_char` / `wasmacs_host_wait_for_input`; exported state reports
+  `command-loop-level:0`, `commandState:"idle"`, and minibuffer inactive.
+- The next investigation should stay on the terminal startup path, especially
+  `vendor/emacs/src/emacs.c`, `vendor/emacs/src/dispnew.c`,
+  `vendor/emacs/src/term.c`, `vendor/emacs/src/keyboard.c`, and
+  `vendor/emacs/src/sysdep.c`. Do not return to pdmp or forced minibuffer
+  probes as the first response.
 
-4. **Browser GUI Boundary**: update the minibuffer UI to show pending-input
-   state from the new OS protocol rather than the forced probe.
+Next implementation slice:
 
-- 2026-06-03: completed the c-emacs → c-os-compat → js → browser path.
-  `scripts/build-emacs-browser-runtime.sh` builds a unified browser runtime
-  that has pdumper, alloc.c purecopy fix, pdumper.c mmap fix, lread.c
-  `EMACSLOADPATH` fix, and emacs.c `Vload_path` prepend. Four critical C
-  patches were needed for pbootstrap in Emscripten MEMFS: (1) alloc.c
-  provisional Fputhash; (2) pdumper.c heap-mapping; (3) lread.c
-  `use_loadpath=true` under `__EMSCRIPTEN__`; (4) emacs.c direct
-  `Vload_path` prepend after `init_lread` because `getenv("EMACSLOADPATH")`
-  is not picked up during `will_dump_p()` mode due to `getEnvStrings`
-  caching. `scripts/generate-browser-runtime-pdump.mjs` runs pbootstrap via
-  the browser binary under Node.js, extracts `bootstrap-emacs.pdmp` from
-  virtual MEMFS, and verifies load. `app/src/browser-runtime-worker.js`
-  manages the OPFS lifecycle: first boot generates pdmp (~60s) and saves to
-  OPFS; subsequent boots load from OPFS and call `callMain(["--dump-file=..."])`
-  for fast init. End-to-end evidence in `logs/emacs-browser-runtime-e2e.txt`:
-  `BOOT_CODE:0`, `OS_PHASE:initialized`, `EVAL_STATUS:0` (find-file + insert
-  + save), `BEGIN/CANCEL/FINISH_COMMAND:0`. The fingerprint is always valid
-  because the SAME binary generates and loads the pdmp.
+1. Add `Terminal/Tty Service` to the small OS implementation and validation
+   gates.
+   - Owner: OS compatibility layer.
+   - Product goal: let Emacs `--nw` reach `command_loop`.
+   - Non-goal: full POSIX pty, job control, process groups, or subprocess
+     shell.
 
-The c-emacs → c-os-compat → js → browser architecture is now fully proven
-at the Node/probe level. The next work is to connect `browser-runtime-worker.js`
-to `app/src/main.js` so the browser app uses the new runtime, and to prove
-the full OPFS lifecycle in an actual browser worker (OPFS API requires
-browser context). After that, the Asyncify pending-input path can be
-re-evaluated: with pdump boot eliminating cold loadup stack overflow, the
-Asyncify interactive command loop becomes feasible again.
+2. Implement the smallest fake tty surface Emacs proves it needs.
+   - `isatty(0/1/2)` returns true for the browser terminal profile.
+   - `tcgetattr` / `tcsetattr` succeed with a raw-ish fake state.
+   - `ioctl(TIOCGWINSZ)` returns browser-provided rows and columns.
+   - `read(0, ...)` suspends via the existing Asyncify wait path until JS has
+     input bytes.
+   - `write(1/2, ...)` posts terminal bytes to JS.
+   - `TERM` / `TERMCAP` are deterministic. Start with `TERM=dumb` if it gets
+     to the waitpoint fastest; move to `xterm-256color` when xterm.js is wired.
 
-The browser app already stores a serialized `.wasifs` payload, forward-mounts
-`/home/user` into the browser-hosted Emacs core, buffers Emacs-written
-`/home/user` reverse sync until command completion, and preserves direct
-textarea edits before file switches. Start from these evidence files:
+3. Prove the terminal MVP before adding more editor features.
+   - `emacs --quick --no-splash --nw` reaches `command_loop`.
+   - The worker reaches `read_char` / `tty_read_avail_input` /
+     `wasmacs_host_wait_for_input`.
+   - Initial tty output bytes are visible in JS logs.
+   - A printable key byte injected from JS mutates the selected Emacs buffer
+     through the real command loop.
+   - `C-g` is delivered as Emacs terminal input, not a browser-side fake.
 
-```sh
-logs/wasm-batch-eval.txt
-logs/wasm-browser-profile-batch.txt
-logs/browser-worker-smoke.txt
-logs/browser-single-buffer-smoke.txt
-logs/emacs-file-bridge-node.txt
-logs/emacs-file-bridge-browser.txt
-logs/emacs-mounted-user-image-browser.txt
-logs/emacs-reverse-sync-browser.txt
-logs/browser-editing-session-smoke.txt
-logs/browser-textarea-autosave-smoke.txt
-logs/runtime-host.txt
-docs/host-abi.md
-docs/browser-mvp-plan.md
-```
+4. Wire xterm.js only after byte-level tty I/O is proven.
+   - stdout/stderr bytes flow into xterm.js.
+   - xterm.js is only a renderer and input collector.
+   - Browser code must not implement minibuffer, undo, kill-ring, region, or
+     buffer/window semantics.
 
-Next, continue adding ordinary editing coverage around expected Emacs-ish
-editing behavior: isolate the high-level `undo` crash after
-`undo-start`/`undo-more` succeeds, especially redo bookkeeping and
-`undo-equiv-table`; design an actual minibuffer UI slice; and add a repo-local
-browser automation runner for
-key sequences that the current in-app browser safety layer blocks such as
-`C-x`. When the browser automation dependency is made repo-local, turn the
-in-app browser smoke flow itself into a fully repeatable runner. Project file
-open/edit/save/reload, file switching, direct-textarea autosave, `Ctrl+S`,
-`C-g`, deterministic real Emacs undo through the persistent worker, explicit
-clipboard-unavailable reporting, explicit minibuffer-unavailable reporting,
-movement/backspace regression, recovery after worker recreation, and visible
-disabled process errors now work through the persistent Emacs worker or browser
-user-image state as appropriate. The worker's ordinary editing bridge now
-opens the active user file through real Emacs `find-file`, saves modified
-file-visiting buffers through real `save-buffer`, and dispatches `C-/` to real
-Emacs `(undo)` after command-loop-shaped `undo-boundary` insertion; it no
-longer uses direct `write-region` on the live file-buffer path. Kill-ring and
-minibuffer fidelity remain explicitly blocked on stable Emacs window/region/
-minibuffer state and GC-safe host entrypoint usage.
-The latest cross-eval probe proves a named Emacs buffer can survive across
-separate host calls and write `alpha beta`, but `find-file` file-visiting
-buffers and undo-list state still crash during GC marking when carried across
-host eval calls. The file-buffer GC roots probe shows that host eval must
-refresh the C stack-scan bottom and inhibit GC during the eval call; with that
-temporary boundary, boot-only GC forms, temp buffers, named buffers, manual
-`buffer-file-name`, `set-visited-file-name`, `insert-file-contents`, and
-`find-file` buffers killed before returning pass. Live `find-file` buffers
-can cross host eval calls if merely opened, switched to, or edited in memory.
-The remaining crash is narrower: direct `write-region` against a live
-file-visiting buffer poisons the next host eval, while `save-buffer` passes.
-The new browser worker live `find-file`/`save-buffer` path passed the full
-browser probe suite. The host eval entrypoint now catches Lisp signals and
-returns safe `EVAL_STATUS:1` readbacks instead of wasm traps for uncaught
-`user-error` paths. The undo tail probe now shows the key command-loop
-requirement: high-level `undo` fails with `No further undo information` when
-the synthetic setup lacks a post-edit `undo-boundary`, but passes for both
-file-visiting and named buffers when the edit is followed by that boundary.
-The browser worker now adds `undo-boundary` after edit commands and dispatches
-`C-/` to real Emacs `undo-only`. The real-undo deterministic probe has now
-been promoted to a browser UI smoke in
-`logs/browser-real-undo-ui-smoke.txt`. The UI smoke exposed an important
-ownership rule: after a file is live in Emacs, the worker must not rematerialize
-that active path from the browser image before each command, or `save-buffer`
-sees an externally changed visited file and attempts to read confirmation from
-stdin. Multiple edits followed by repeated real Emacs `undo-only` now pass in
-both the worker-shaped probe and browser UI smoke. Explicit redo now has the
-same shape: `C-?` maps to real Emacs `undo-redo 1`, with worker-shaped and
-browser UI evidence. The multi-edit redo blocker was narrowed to an important
-host sync rule: undo/redo commands must not call `save-buffer` immediately
-after changing the buffer, because that shifts the `buffer-undo-list` head away
-from the `undo-equiv-table` redo mapping. With undo/redo treated as Emacs
-buffer-state commands and browser persistence handled through the worker
-readback, `A`, `B`, `undo-only`, `undo-redo` now passes in
-`logs/wasm-browser-worker-redo-interleaving.txt`. Point movement now has
-worker-shaped coverage in `logs/wasm-browser-worker-point-undo-redo.txt`:
-`AB`, move-left, middle insert `X`, `undo-only`, and `undo-redo` all pass
-against the same live file-visiting buffer. File switching now has
-worker-shaped coverage in `logs/wasm-browser-worker-file-switch-undo.txt`: two
-live file-visiting buffers retain separate undo/redo state across `find-file`
-switches. The repo-local browser runner now exists as
-`npm run browser:smoke`, and `npm run browser:smoke:all` now covers the
-minibuffer echo check, real undo/repeated undo/redo UI smoke hooks, project
-open/reload, file switching, textarea autosave, process-unavailable recovery,
-clipboard-unavailable, and keyboard quit. Runner evidence is recorded in
-`logs/browser-runner-smoke.txt` and checked by the browser editing evidence
-validator. The runner now starts the app server on demand. Continue by either
-retiring the older static browser smoke logs or keeping them as historical
-fixtures, then continue the interactive/suspended command entrypoint described
-in `docs/minibuffer-suspended-read-plan.md` and
-`docs/minibuffer-asyncify-entrypoint-plan.md`: the first gated
-`wasmacs_host_wait_for_input` Asyncify import now exists near the Emacs input
-wait path, and non-batch asyncify startup now survives TERM/termcap
-initialization until timeout. The forced `read-from-minibuffer` probe reaches
-the host waitpoint, and the Asyncify advisory summary shows the expected
-reader/command-loop functions in the propagated set. With
-`WASMACS_ASYNCIFY_WAITPOINT_MODE=minibuf-setup`, the browser/worker side can
-now observe a real suspended minibuffer command with `active:true` /
-`depth:1` and `wasmacs_command_state` as `pending`. The next slice is
-therefore to turn this into an owned suspended command protocol. Reentrant
-eval and a second command begin are now rejected as `unavailable:busy` while
-the forced minibuffer read is pending. The asyncify artifact also exports
-`_wasmacs_input_text` and `_wasmacs_input_cancel`, and the host wait import now
-uses an explicitly resolved pending Promise so a browser/worker operation can
-own the suspension. The current input-injection probe records
-`STATUS:PASS`: the real waitpoint is reached, `_wasmacs_input_text` returns
-`0`, `WAIT_RESOLVED:true` is recorded, and the forced minibuffer read completes
-with `wasmacs-input.txt`. The crucial fix was to inhibit GC for the lifetime of
-the suspended exported command; without that, resuming after host input reached
-Emacs GC marking and crashed in `mark_specpdl` / stack-root scanning. Cancel
-now also passes, but only after changing `_wasmacs_input_cancel` to append
-`quit_char` to `Vunread_command_events`; directly calling
-`kbd_buffer_store_event` for C-g from the host-call side triggered
-`handle_interrupt` outside the suspended read and left the command pending.
-Keep process and pty unavailable. The next slice is to turn the forced
-minibuffer probe into an owned worker/browser command protocol and add
-GC-after-completion coverage before exposing it through the app.
+5. Keep existing ordinary editing and `.wasifs` gates green.
+   - `npm test`
+   - `npm run browser:smoke:all`
+   - targeted terminal/interactive smoke once added
 
-Do not fake Emacs-owned editor semantics in the browser UI. In particular,
-real undo, kill-ring, region, minibuffer, and file-visiting buffer behavior
-must come from stable Emacs-side buffer/window/command-loop state. Until that
-state is safe, keep the current explicit unavailable boundaries rather than
-adding browser-side substitutes that would diverge from Emacs. The next
-debugging pass should treat the latest evidence as the starting point: named
-buffers survive across `wasmacs_eval_string` calls, direct `primitive-undo` and
-`undo-start`/`undo-more` pass, but `find-file` file-visiting buffers and
-undo-list state crash during GC marking across host eval calls. Prioritize
-host-entrypoint stack/GC root safety and file-visiting buffer lifetime before
-enabling real undo/kill-ring/minibuffer fidelity.
+Validation notes:
+
+- 2026-06-03: pdmp/pbootstrap is demoted from active product route to
+  diagnostic preloaded-state evidence. The active route is pdmp-free fake tty
+  startup with xterm.js as the first renderer.
+- 2026-06-03: `small-os-for-emacs.md` now defines `Terminal/Tty Service`,
+  cross-service checks for terminal lifecycle/input/browser GUI, and a
+  recommended order that places fake tty before xterm.js and before custom
+  redisplay work.

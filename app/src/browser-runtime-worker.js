@@ -1,435 +1,274 @@
-// Browser runtime worker — two-file layered architecture:
-//
-//  bootstrap-emacs.pdmp  (OPFS) → Emacs 初期化済み状態
-//  user-home.wasifs      (OPFS) → /home/user/* だけ、ポータブル tar 形式
-//
-// 起動シーケンス:
-//   1. OPFS から pdmp を読む（なければ pbootstrap で生成）
-//   2. OPFS から user-home.wasifs を読む（なければ空を生成）
-//   3. pdmp と wasifs を MEMFS に展開（ブート時に一度だけ）
-//   4. callMain(["--dump-file=..."]) → 高速起動
-//   5. コマンド完了後: /home/user/ MEMFS を wasifs に serialize → OPFS 保存
-//
-// 再マテリアライズは行わない。MEMFS が /home/user/ の唯一の真実。
-// visited buffer の外部変更検出エラーが起きない。
+const ARTIFACT_DIR = "/artifacts/emacs-browser-pdump-profile";
 
-const ARTIFACT_DIR = "/artifacts/emacs-browser-runtime";
-const OPFS_PDMP      = "wasmacs-bootstrap.pdmp";
-const OPFS_USERHOME  = "wasmacs-user-home.wasifs";
-
-// ---- OPFS helpers ----
-
-async function opfsLoad(filename) {
-  try {
-    const root = await navigator.storage.getDirectory();
-    const fh   = await root.getFileHandle(filename);
-    const file = await fh.getFile();
-    return new Uint8Array(await file.arrayBuffer());
-  } catch { return null; }
-}
-
-async function opfsSave(filename, bytes) {
-  const root = await navigator.storage.getDirectory();
-  const fh   = await root.getFileHandle(filename, { create: true });
-  const w    = await fh.createWritable();
-  await w.write(bytes);
-  await w.close();
-}
-
-// ---- wasifs (tar) ---- inlined from browser-wasifs.js ----
-
-const _blockSize   = 512;
-const _textDec     = new TextDecoder();
-const _textEnc     = new TextEncoder();
-
-function _trimNulls(bytes) {
-  const z = bytes.indexOf(0);
-  return _textDec.decode(bytes.subarray(0, z === -1 ? bytes.length : z)).trim();
-}
-function _parseOctal(bytes) {
-  const t = _trimNulls(bytes).trim();
-  return t.length === 0 ? 0 : parseInt(t, 8);
-}
-function _padLen(n) { return Math.ceil(n / _blockSize) * _blockSize; }
-function _writeAscii(buf, off, len, val) {
-  buf.fill(0, off, off + len);
-  buf.set(_textEnc.encode(val.slice(0, len)).subarray(0, len), off);
-}
-function _writeOctal(buf, off, len, val) {
-  _writeAscii(buf, off, len, val.toString(8).padStart(len - 1, "0").slice(-(len - 1)));
-}
-function _tarPath(p) { return p.replace(/^\/+/, "").replace(/\/+/g, "/"); }
-function _mountPath(entryPath) {
-  const c = entryPath.replace(/\/$/, "");
-  if (c === "home/user")           return "/home/user";
-  if (c.startsWith("home/user/"))  return `/${c}`;
-  return null;
-}
-
-function _parseWasifs(bytes) {
-  const nodes = new Map();
-  nodes.set("/home/user", { kind: "directory" });
-  let off = 0;
-  while (off + _blockSize <= bytes.length) {
-    const hdr = bytes.subarray(off, off + _blockSize);
-    if (hdr.every((b) => b === 0)) break;
-    const name   = _trimNulls(hdr.subarray(0, 100));
-    const prefix = _trimNulls(hdr.subarray(345, 500));
-    const entry  = prefix ? `${prefix}/${name}` : name;
-    const path   = _mountPath(entry);
-    const size   = _parseOctal(hdr.subarray(124, 136));
-    const flag   = String.fromCharCode(hdr[156] || 48);
-    const dStart = off + _blockSize;
-    if (path) {
-      const isDir = flag === "5" || entry.endsWith("/");
-      nodes.set(path, {
-        kind:  isDir ? "directory" : "file",
-        bytes: isDir ? undefined : bytes.slice(dStart, dStart + size),
-      });
-    }
-    off = dStart + _padLen(size);
+class BrowserWorkerHost {
+  constructor({ fs, env = {}, cwd = "/home/user", postMessage }) {
+    this.fs = fs;
+    this.env = { ...env };
+    this.currentDirectory = cwd;
+    this.postMessage = postMessage;
+    this.textDecoder = new TextDecoder();
   }
-  return nodes;
-}
 
-function _createWasifs(nodes) {
-  const chunks = [];
-  const paths  = [...nodes.keys()]
-    .filter((p) => p === "/home/user" || p.startsWith("/home/user/"))
-    .sort();
-  for (const path of paths) {
-    const node    = nodes.get(path);
-    const isDir   = node.kind === "directory";
-    const name    = isDir ? `${_tarPath(path)}/` : _tarPath(path);
-    const content = isDir ? new Uint8Array() : (node.bytes ?? new Uint8Array());
-    const hdr     = new Uint8Array(_blockSize);
-    _writeAscii(hdr,   0, 100, name);
-    _writeOctal(hdr, 100,   8, isDir ? 0o755 : 0o644);
-    _writeOctal(hdr, 108,   8, 0);
-    _writeOctal(hdr, 116,   8, 0);
-    _writeOctal(hdr, 124,  12, content.length);
-    _writeOctal(hdr, 136,  12, Math.floor(Date.now() / 1000));
-    hdr.fill(32, 148, 156);
-    hdr[156] = isDir ? 53 : 48; // '5' or '0'
-    _writeAscii(hdr, 257, 6, "ustar");
-    _writeAscii(hdr, 263, 2, "00");
-    const csum = hdr.reduce((s, b) => s + b, 0);
-    _writeOctal(hdr, 148, 7, csum);
-    hdr[155] = 0;
-    chunks.push(hdr);
-    if (!isDir) {
-      chunks.push(content);
-      const pad = _padLen(content.length) - content.length;
-      if (pad > 0) chunks.push(new Uint8Array(pad));
-    }
+  wallNowMs() { return Date.now(); }
+  monotonicNowMs() { return Math.floor(performance.now()); }
+  randomBytes(length) {
+    const bytes = new Uint8Array(length);
+    self.crypto.getRandomValues(bytes);
+    return bytes;
   }
-  chunks.push(new Uint8Array(_blockSize * 2));
-  const total = chunks.reduce((s, c) => s + c.length, 0);
-  const out   = new Uint8Array(total);
-  let off = 0;
-  for (const c of chunks) { out.set(c, off); off += c.length; }
-  return out;
-}
-
-// ---- MEMFS ↔ wasifs bridge ----
-
-function _wasifsToMemfs(module, wasifsBytes) {
-  const nodes = _parseWasifs(wasifsBytes);
-  // directories first
-  for (const [path, node] of nodes)
-    if (node.kind === "directory") { try { module.FS.mkdir(path); } catch {} }
-  // files
-  for (const [path, node] of nodes)
-    if (node.kind === "file" && node.bytes) module.FS.writeFile(path, node.bytes);
-}
-
-function _memfsToWasifs(module) {
-  const nodes = new Map();
-  nodes.set("/home/user", { kind: "directory" });
-  function walk(dir) {
-    let entries;
-    try { entries = module.FS.readdir(dir); } catch { return; }
-    for (const e of entries) {
-      if (e === "." || e === "..") continue;
-      const path = `${dir}/${e}`;
-      let stat;
-      try { stat = module.FS.stat(path); } catch { continue; }
-      if (module.FS.isDir(stat.mode)) {
-        nodes.set(path, { kind: "directory" });
-        walk(path);
-      } else {
-        let bytes;
-        try { bytes = module.FS.readFile(path); } catch { continue; }
-        nodes.set(path, { kind: "file", bytes });
-      }
-    }
+  getenv(name) { return this.env[name]; }
+  environ() { return Object.entries(this.env).map(([name, value]) => ({ name, value })); }
+  cwd() { return this.currentDirectory; }
+  setCwd(path) { this.fs.stat(path); this.currentDirectory = path; }
+  stdout(bytes) {
+    const text = typeof bytes === "string" ? bytes : this.textDecoder.decode(bytes);
+    this.postMessage({ type: "stdout", text });
   }
-  walk("/home/user");
-  return _createWasifs(nodes);
+  stderr(bytes) {
+    const text = typeof bytes === "string" ? bytes : this.textDecoder.decode(bytes);
+    this.postMessage({ type: "stderr", text });
+  }
+  debugLog(level, message) { this.postMessage({ type: "debug-log", level, message }); }
+  processUnavailable() { return "host.process is unavailable in the browser MVP"; }
 }
-
-// ---- worker state ----
 
 let emacsModule = null;
-let emacsBooted = false;
+let emacsReady;
+let emacsBootReady;
+let host = null;
 
 function post(type, payload = {}) {
   self.postMessage({ type, ...payload });
 }
 
-// ---- Emacs module lifecycle ----
+function postPendingCommand(command, state, details = {}) {
+  post("pending-command", {
+    id: details.id ?? `${command?.type ?? "command"}:${command?.path ?? ""}`,
+    commandType: command?.type ?? "unknown",
+    path: command?.path,
+    pointIndex: command?.pointIndex,
+    state,
+    minibuffer: details.minibuffer ?? "",
+    result: details.result,
+    error: details.error,
+  });
+}
 
-async function loadModule(pdmpBytes, userWasifsBytes) {
-  return new Promise((resolve, reject) => {
+self.onmessage = async (event) => {
+  const { type, command, text, entries } = event.data || {};
+  if (type === "run-buffer-command") {
+    await runCommand(command, entries);
+  }
+  if (type === "input-text") {
+    injectInputText(text);
+  }
+  if (type === "emacs-waiting") {
+    checkMinibufferState();
+  }
+};
+
+function parentPath(path) {
+  if (path === "/") return "/";
+  const index = path.lastIndexOf("/");
+  return index === 0 ? "/" : path.slice(0, index);
+}
+
+function ensureDirectory(module, path) {
+  if (path === "/") return;
+  ensureDirectory(module, parentPath(path));
+  try {
+    module.FS_createPath(parentPath(path), path.slice(path.lastIndexOf("/") + 1), true, true);
+  } catch {}
+}
+
+function materializeUserImage(module, entries, options = {}) {
+  const skipFilePaths = new Set(options.skipFilePaths || []);
+  for (const entry of entries.filter((candidate) => candidate.kind === "directory")) {
+    ensureDirectory(module, entry.path);
+  }
+  for (const entry of entries.filter((candidate) => candidate.kind === "file")) {
+    if (skipFilePaths.has(entry.path)) continue;
+    ensureDirectory(module, parentPath(entry.path));
+    try { module.FS.unlink(entry.path); } catch {}
+    try {
+      module.FS_createDataFile(parentPath(entry.path), entry.path.slice(entry.path.lastIndexOf("/") + 1), entry.bytes, true, true, true);
+    } catch {
+      module.FS.writeFile(entry.path, entry.bytes);
+    }
+  }
+}
+
+async function ensureEmacs(entries) {
+  if (emacsBootReady) {
+    await emacsBootReady;
+    if (entries) materializeUserImage(emacsModule, entries);
+    return emacsModule;
+  }
+
+  post("status", { text: "loading emacs package" });
+  
+  host = new BrowserWorkerHost({
+    fs: { stat: () => {} }, // Mock FS for MVP
+    env: { HOME: "/home/user" },
+    postMessage: (msg) => {
+      self.postMessage(msg);
+      if (msg.type === "emacs-waiting") {
+        checkMinibufferState();
+      }
+    },
+  });
+
+  emacsReady = new Promise((resolve, reject) => {
     var Module = {
       noInitialRun: true,
       thisProgram: "temacs",
       locateFile(path) { return `${ARTIFACT_DIR}/${path}`; },
-      print(text) { post("stdout", { text }); },
-      printErr(text) { post("stderr", { text }); },
-      onRuntimeInitialized() { resolve(Module); },
-      preRun: [() => {
-        // System layer: pdmp
-        if (pdmpBytes) Module.FS.writeFile("/bootstrap-emacs.pdmp", pdmpBytes);
-
-        // User layer: expand wasifs into /home/user (one time only)
-        try { Module.FS.mkdir("/home"); } catch {}
-        try { Module.FS.mkdir("/home/user"); } catch {}
-        if (userWasifsBytes) {
-          _wasifsToMemfs(Module, userWasifsBytes);
-        } else {
-          // 空の wasifs でも /home/user は作成済み
-          try { Module.FS.mkdir("/home/user/projects"); } catch {}
-        }
-      }],
+      print(text) { host.stdout(text); },
+      printErr(text) { host.stderr(text); },
+      onRuntimeInitialized() {
+        emacsModule = Module;
+        post("status", { text: "emacs runtime initialized" });
+        resolve(Module);
+      },
     };
     self.Module = Module;
-    try { importScripts(`${ARTIFACT_DIR}/temacs`); }
-    catch (e) { reject(e); }
+    try {
+      importScripts(`${ARTIFACT_DIR}/temacs`);
+    } catch (error) {
+      reject(error);
+    }
   });
-}
 
-async function generatePdmp(module) {
-  post("status", { text: "初回起動: 事前ロード状態を生成中 (約60秒)..." });
-  module.callMain(["--batch", "-l", "loadup", "--temacs=pbootstrap"]);
-  let bytes;
-  try { bytes = module.FS.readFile("/bootstrap-emacs.pdmp"); } catch {
-    throw new Error("pbootstrap 完了したが /bootstrap-emacs.pdmp が見つかりません");
-  }
-  await opfsSave(OPFS_PDMP, bytes);
-  post("status", { text: "事前ロード状態を OPFS に保存しました" });
-  post("pdmp-generated", { size: bytes.byteLength });
-  return bytes;
-}
-
-async function bootFromPdmp(module) {
-  const code = module.callMain([
-    "--dump-file=/bootstrap-emacs.pdmp",
-    "--batch",
-    "--eval", '(princ "ready\n")',
-  ]);
-  if (code !== 0) throw new Error(`pdmp ブート失敗 (exit ${code})`);
-  emacsBooted = true;
-  post("status", { text: "Emacs 起動完了 (事前ロード状態から)" });
-}
-
-async function syncUserHome(module) {
-  try {
-    const wasifsBytes = _memfsToWasifs(module);
-    await opfsSave(OPFS_USERHOME, wasifsBytes);
-  } catch (e) {
-    post("stderr", { text: `user-home sync 失敗: ${e}` });
-  }
-}
-
-// ---- worker main init ----
-
-(async () => {
-  try {
-    post("status", { text: "ストレージを確認中..." });
-
-    let pdmpBytes     = await opfsLoad(OPFS_PDMP);
-    let userWasifs    = await opfsLoad(OPFS_USERHOME);
-    const needPdmp    = !pdmpBytes;
-
-    post("status", { text: needPdmp ? "初回起動です..." : "保存済み状態を読み込み中..." });
-
-    if (needPdmp) {
-      // First boot phase 1: load module without pdmp to run pbootstrap
-      const tmpModule = await loadModule(null, null);
-      pdmpBytes = await generatePdmp(tmpModule);
-      // pbootstrap が終わったら module は使えないので再ロード
-      // (EXIT_RUNTIME=0 なので runtime は生きているが Emacs は exit 済み)
-      // 新しい module インスタンスで pdmp ブートする
-    }
-
-    if (!userWasifs) {
-      // 空の user-home.wasifs を OPFS に作成
-      const emptyNodes = new Map([
-        ["/home/user", { kind: "directory" }],
-        ["/home/user/projects", { kind: "directory" }],
+  const module = await emacsReady;
+  
+  if (entries) materializeUserImage(module, entries);
+  
+  emacsBootReady = (async () => {
+    post("status", { text: "booting emacs..." });
+    const bootCode = await module.callMain([
+        "--dump-file=/bootstrap-emacs.pdmp",
+        "--batch",
+        "--eval", '(princ "boot\\n")'
       ]);
-      userWasifs = _createWasifs(emptyNodes);
-      await opfsSave(OPFS_USERHOME, userWasifs);
-    }
-
-    // Full boot: pdmp + user.wasifs を MEMFS に展開してブート
-    emacsModule = await loadModule(pdmpBytes, userWasifs);
-    await bootFromPdmp(emacsModule);
-
-    post("ready", {});
-    post("user-home-files", { entries: _userFileList(emacsModule) });
-
-  } catch (e) {
-    post("error", { text: `起動エラー: ${e}` });
-  }
-})();
-
-// ---- message handler ----
-
-self.onmessage = async (event) => {
-  const { type, command, wasifsBytes, filename } = event.data || {};
-
-  if (type === "run-buffer-command") {
-    await runCommand(command);
-    return;
-  }
-
-  if (type === "export-user-home") {
-    // /home/user MEMFS → wasifs bytes をメインスレッドに返す
-    if (!emacsModule) { post("error", { text: "Emacs 未起動" }); return; }
-    const bytes = _memfsToWasifs(emacsModule);
-    post("export-data", { bytes });
-    return;
-  }
-
-  if (type === "import-user-home") {
-    // 新しい wasifs でユーザーホームを置き換える
-    if (!emacsModule) { post("error", { text: "Emacs 未起動" }); return; }
-    _wasifsToMemfs(emacsModule, new Uint8Array(wasifsBytes));
-    await opfsSave(OPFS_USERHOME, new Uint8Array(wasifsBytes));
-    post("user-home-files", { entries: _userFileList(emacsModule) });
-    return;
-  }
-
-  if (type === "list-user-files") {
-    if (!emacsModule) return;
-    post("user-home-files", { entries: _userFileList(emacsModule) });
-    return;
-  }
-};
-
-// ---- command execution ----
-
-async function runCommand(command) {
-  if (!emacsModule || !emacsBooted) {
-    post("error", { text: "Emacs 未起動" });
-    return;
-  }
-
+    if (bootCode !== 0) throw new Error(`emacs boot exited ${bootCode}`);
+    post("status", { text: "emacs booted in batch mode" });
+  })();
   try {
-    if (command?.type === "process-probe") {
-      throw new Error("host.process はブラウザ MVP では利用できません");
-    }
-    if (["clipboard-copy", "clipboard-cut", "clipboard-yank"].includes(command?.type)) {
-      throw new Error("clipboard/kill-ring は GUI clipboard プロトコルが必要です");
-    }
-    if (["find-file", "switch-buffer"].includes(command?.type)) {
-      const msg = "minibuffer は persistent Emacs command loop が必要です";
-      post("pending-command", { commandType: command.type, state: "unavailable", error: msg });
-      throw new Error(msg);
-    }
+    await emacsBootReady;
+  } catch (err) {
+    post("error", { text: `boot failed: ${err}` });
+    throw err;
+  }
 
-    // Emacs に eval — MEMFS が /home/user/ の真実なので再マテリアライズ不要
-    const evalStatus = emacsModule.ccall(
-      "wasmacs_eval_string", "number", ["string"], [buildEval(command)],
-    );
+  return module;
+}
 
-    if (evalStatus !== 0) {
-      const last = emacsModule.ccall("wasmacs_last_result", "string", [], []);
-      throw new Error(`wasmacs_eval_string returned ${evalStatus}: ${last}`);
-    }
-
-    const readback = emacsModule.ccall("wasmacs_last_result", "string", [], []);
-    const parsed   = parseReadback(readback);
-
-    // コマンド完了後: /home/user MEMFS → wasifs → OPFS (真の source of truth が一か所)
-    await syncUserHome(emacsModule);
-
-    post("sync-file", parsed);
+function checkMinibufferState() {
+  if (!emacsModule) return;
+  const minibufferState = emacsModule.ccall("wasmacs_minibuffer_state", "string", [], []);
+  const commandState = emacsModule.ccall("wasmacs_command_state", "string", [], []);
+  
+  if (minibufferState.includes("active:true")) {
+    const promptMatch = minibufferState.match(/prompt:(.*?)\n/);
+    const inputMatch = minibufferState.match(/input:(.*?)\n/);
+    const prompt = promptMatch ? promptMatch[1] : "";
+    const input = inputMatch ? inputMatch[1] : "";
+    post("pending-command", {
+      state: "pending-input",
+      minibuffer: prompt + input,
+      commandType: "minibuffer-read"
+    });
+  } else if (commandState === "idle") {
+    fetchBufferState();
     post("exit", { code: 0 });
-    post("user-home-files", { entries: _userFileList(emacsModule) });
-
-  } catch (e) {
-    post("error", { text: e?.stack ?? String(e) });
   }
 }
 
-// ---- user file list helper ----
-
-function _userFileList(module) {
-  const files = [];
-  function walk(dir) {
-    let entries;
-    try { entries = module.FS.readdir(dir); } catch { return; }
-    for (const e of entries) {
-      if (e === "." || e === "..") continue;
-      const path = `${dir}/${e}`;
-      let stat;
-      try { stat = module.FS.stat(path); } catch { continue; }
-      if (!module.FS.isDir(stat.mode)) files.push(path);
-      else walk(path);
+function fetchBufferState() {
+  if (!emacsModule) return;
+  const code = `
+    (concat (or (buffer-file-name) "unknown") "\\n"
+            (number-to-string (1- (point))) "\\n"
+            (buffer-string))
+  `;
+  const status = emacsModule.ccall("wasmacs_eval_string", "number", ["string"], [code]);
+  if (status === 0) {
+    const readback = emacsModule.ccall("wasmacs_last_result", "string", [], []);
+    const a = readback.indexOf("\n");
+    const b = readback.indexOf("\n", a + 1);
+    if (a >= 0 && b >= 0) {
+      const path = readback.slice(0, a);
+      if (!path.startsWith("/home/user/")) return;
+      post("sync-file", {
+        path,
+        pointIndex: parseInt(readback.slice(a + 1, b), 10),
+        text: readback.slice(b + 1)
+      });
     }
   }
-  walk("/home/user");
-  return files;
 }
 
-// ---- Emacs eval form builder (same logic as wasm-worker.js) ----
-
-function buildEval(command = { type: "ensure-marker", path: "/home/user/notes.txt" }) {
-  const path        = command?.path ?? "/home/user/notes.txt";
-  const commandForm = buildCommandForm(command);
-  const boundary    = needsUndoBoundary(command) ? "    (undo-boundary)" : "";
-  const save        = shouldSaveBuffer(command)  ? "    (when (buffer-modified-p) (save-buffer))" : "";
-  return [
-    `(let ((path ${q(path)}))`,
-    "  (find-file path)",
-    commandForm, boundary, save,
-    "    (concat path", `            ${q("\n")}`,
-    "            (number-to-string (1- (point)))", `            ${q("\n")}`,
-    "            (buffer-string))))",
-  ].filter(Boolean).join(" ");
+function injectInputText(text = "") {
+  if (!emacsModule) return;
+  const status = emacsModule.ccall(
+    "wasmacs_input_text",
+    "number",
+    ["string"],
+    [text]
+  );
+  if (status === 0 && typeof self.__wasmacsResolveHostInputWait === "function") {
+    self.__wasmacsResolveHostInputWait();
+  } else if (status !== 0) {
+    post("error", { text: `wasmacs_input_text returned ${status}` });
+  }
 }
 
-function buildCommandForm(c) {
-  const pt = `(goto-char (min (point-max) (+ (point-min) ${Math.max(0, Number(c?.pointIndex) || 0)})))`;
-  if (c?.type === "insert-text")                         return `${pt} (insert ${q(c.text)})`;
-  if (c?.type === "backspace")                           return `${pt} (unless (bobp) (delete-char -1))`;
-  if (c?.type === "move-point" && c.direction === "left")  return `${pt} (unless (bobp) (backward-char 1))`;
-  if (c?.type === "move-point" && c.direction === "right") return `${pt} (unless (eobp) (forward-char 1))`;
-  if (c?.type === "save-buffer")                         return `${pt} (save-buffer)`;
-  if (c?.type === "undo")                                return `${pt} (undo-only 1)`;
-  if (c?.type === "redo")                                return `${pt} (undo-redo 1)`;
-  return [
-    "(goto-char (point-min))",
-    `(unless (search-forward ${q("Saved by Emacs core.")} nil t)`,
-    "  (goto-char (point-max))",
-    `  (insert ${q("\nSaved by Emacs core.\n")}))`,
-  ].join(" ");
-}
-
-function needsUndoBoundary(c) {
-  return ["insert-text","backspace","undo","redo","ensure-marker"].includes(c?.type);
-}
-function shouldSaveBuffer(c) {
-  return !["move-point","undo","redo"].includes(c?.type);
-}
-function q(v) {
-  return `"${String(v).replace(/\\/g,"\\\\").replace(/"/g,'\\"').replace(/\n/g,"\\n")}"`;
-}
-function parseReadback(text) {
-  const a = text.indexOf("\n"), b = text.indexOf("\n", a + 1);
-  if (a < 0 || b < 0) throw new Error("invalid emacs readback");
-  return { path: text.slice(0, a), pointIndex: parseInt(text.slice(a+1, b), 10), text: text.slice(b+1) };
+async function runCommand(command, entries) {
+  try {
+    await ensureEmacs(entries);
+    
+    if (command?.type === "process-probe") {
+      throw new Error("host.process is unavailable in the browser MVP");
+    }
+    if (
+      command?.type === "clipboard-copy" ||
+      command?.type === "clipboard-cut" ||
+      command?.type === "clipboard-yank"
+    ) {
+      throw new Error("clipboard/kill-ring requires GUI clipboard protocol");
+    }
+    if (command?.type === "find-file" || command?.type === "switch-buffer") {
+      const error = "minibuffer requires persistent Emacs command loop";
+      postPendingCommand(command, "starting", {
+        minibuffer: command.type === "find-file" ? "Find file: " : "Switch to buffer: "
+      });
+      postPendingCommand(command, "unavailable", { error });
+      throw new Error(error);
+    }
+    
+    if (command?.type === "ensure-marker") {
+      fetchBufferState();
+      post("exit", { code: 0 });
+      return;
+    }
+    
+    let code = "";
+    const pt = `(goto-char (min (point-max) (+ (point-min) ${Math.max(0, Number(command?.pointIndex) || 0)})))`;
+    if (command?.type === "insert-text") code = `(progn ${pt} (insert "${command.text.replace(/"/g, '\\"').replace(/\n/g, "\\n")}"))`;
+    else if (command?.type === "backspace") code = `(progn ${pt} (unless (bobp) (delete-char -1)))`;
+    else if (command?.type === "move-point" && command.direction === "left") code = `(progn ${pt} (unless (bobp) (backward-char 1)))`;
+    else if (command?.type === "move-point" && command.direction === "right") code = `(progn ${pt} (unless (eobp) (forward-char 1)))`;
+    else if (command?.type === "save-buffer") code = `(progn ${pt} (save-buffer))`;
+    else if (command?.type === "undo") code = `(progn ${pt} (undo-only 1))`;
+    
+    if (code) {
+      emacsModule.ccall("wasmacs_eval_string", "number", ["string"], [code]);
+      fetchBufferState();
+      post("exit", { code: 0 });
+    } else {
+      post("error", { text: `unsupported command ${command?.type}` });
+    }
+  } catch (error) {
+    post("error", { text: error && error.stack ? error.stack : String(error) });
+  }
 }

@@ -62,9 +62,12 @@ rg 'Source-backed boot diagnosis' "${doc}" >/dev/null
 rg 'loadup\.el' "${doc}" >/dev/null
 rg 'preloaded Emacs Lisp-machine state|post-loadup snapshot' "${doc}" >/dev/null
 rg 'cold `loadup\.el`' "${plan}" >/dev/null
-rg 'Explicitly pause pdump, purecopy, and preloaded-state' "${plan}" >/dev/null
-rg 'C/wasm facade plan|non-preloaded small OS substrate' "${plan}" >/dev/null
-rg 'asyncify no-loadup boot status -1' "${plan}" >/dev/null
+rg 'Terminal/Tty Service' "${plan}" >/dev/null
+rg 'pdmp-free fake tty|fake tty startup' "${plan}" >/dev/null
+rg 'xterm\.js' "${plan}" >/dev/null
+rg 'fake tty path fails|source-backed evidence' "${plan}" >/dev/null
+rg 'C/wasm facade plan' "${plan}" >/dev/null
+rg 'real input waitpoint|command loop to a waitpoint' "${plan}" >/dev/null
 rg 'pdumper-specific source memo' "${plan}" >/dev/null
 rg 'pdump/preloaded-state probe result' "${plan}" >/dev/null
 rg 'pdumper_load' "${plan}" >/dev/null

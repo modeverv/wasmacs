@@ -87,7 +87,8 @@ Emacs C core
        memory/root safety
        lifecycle state
        GC permission
-       preloaded-state / pdump adapter
+       terminal / tty facade
+       preloaded-state / pdump adapter (diagnostic only for now)
        control-flow and command guards
        low-level input injection helpers
   -> Emscripten / wasm runtime
@@ -95,6 +96,7 @@ Emacs C core
        browser event loop
        Promise / Asyncify wait resolution
        worker messages
+       terminal byte rendering
        UI rendering
        OPFS / IndexedDB / import-export orchestration
        debug and smoke harnesses
@@ -110,7 +112,9 @@ Rules:
 - JS-visible state should be copied bytes, status codes, structured snapshots,
   and protocol messages.
 - C/wasm should own entrypoint root refresh, GC permission state, backtrace arg
-  ownership, preloaded-state loading, and low-level command guards.
+  ownership, terminal/tty compatibility state, and low-level command guards.
+  Preloaded-state loading remains a diagnostic lane, not the current product
+  boot plan.
 - The first C implementation may be intentionally simple: large fixed wasm
   linear memory, no memory growth, oversized stack, simple segment tables,
   logical read-only regions, slow relocation, and conservative root tables are
@@ -162,11 +166,12 @@ mirror the state in JS if the browser needs to observe it.
    explicit save/maintenance operations. It must not rematerialize the active
    visited file in the middle of command execution.
 
-6. Startup state is a lifecycle contract, not an optimization.
-   Cold `loadup.el` is a bootstrap construction path. The browser runtime
-   should eventually start from a post-loadup/preloaded Lisp-machine state,
-   such as pdump or a pdumper-class snapshot, rather than replaying cold loadup
-   in an Asyncify worker.
+6. Terminal availability is a lifecycle contract.
+   The current product direction is to let Emacs enter its normal `--nw`
+   command loop through a minimal wasm fake tty, then attach browser I/O to
+   that terminal stream. A failed `--nw` startup should be treated as a
+   Terminal/Tty Service blocker before returning to pdump or custom GUI
+   redisplay work.
 
 7. Diagnostic paths do not become product paths by accident.
    Forced minibuffer probes, `specpdl` scrubs, direct eval strings, no-loadup
@@ -363,10 +368,20 @@ Open questions:
 
 ### 6. Preloaded-State Service
 
+Current status:
+
+- Diagnostic and historical for the active product path.
+- The project is deliberately dropping pdmp as the next normal browser runtime
+  route. Pdump/pbootstrap evidence remains valuable source grounding for
+  object layout, purecopy, relocation, and loadup behavior, but it should not
+  drive the next MVP loop.
+- Do not resume pdmp work unless the minimal Terminal/Tty Service proves
+  insufficient or the user explicitly asks for a preloaded-state experiment.
+
 Responsibilities:
 
 - Produce or load an initialized Emacs Lisp-machine state without replaying
-  cold loadup in the browser worker.
+  cold loadup in the browser worker, if this lane is explicitly resumed.
 - Preserve pdumper-class requirements: object layout, pure space, static roots,
   relocation, fingerprint compatibility, and early-before-initialized load.
 - Keep generated artifacts release-pinned and separate from source checkout.
@@ -386,7 +401,8 @@ Acceptance tests:
 - Fingerprint handling targets the wasm payload, not only the JS launcher.
 - `loadup.el --temacs=pdump` gets past early purecopy/pure-space structures.
 - A generated preloaded artifact loads in Node and survives explicit GC.
-- Browser worker starts from preloaded state without cold loadup stack failure.
+- If this lane is resumed, browser worker starts from preloaded state without
+  cold loadup stack failure.
 
 Open questions:
 
@@ -396,7 +412,62 @@ Open questions:
 - Do `.elc` and generated Lisp artifacts need to be bundled before a full
   wasm pdump can complete?
 
-### 7. Host Capability Service
+### 7. Terminal/Tty Service
+
+Responsibilities:
+
+- Provide the minimum tty surface needed for `emacs --quick --no-splash --nw`
+  to reach the real command loop.
+- Make stdin/stdout/stderr look like a text terminal to Emacs without
+  implementing a full POSIX pty, job control, process groups, or subprocess
+  shell.
+- Route terminal output bytes from wasm to JS, then to a terminal renderer such
+  as xterm.js for the first browser-facing MVP.
+- Route browser key bytes back into Emacs through the same terminal input path
+  that `keyboard.c` / `term.c` expect.
+- Keep the terminal stream as a compatibility layer. It is not the final
+  browser GUI protocol, and it must not move Emacs editor semantics into JS.
+
+Emacs source surfaces:
+
+- `vendor/emacs/src/emacs.c`
+- `vendor/emacs/src/dispnew.c`
+- `vendor/emacs/src/term.c`
+- `vendor/emacs/src/keyboard.c`
+- `vendor/emacs/src/sysdep.c`
+
+Minimum implementation surface:
+
+- `isatty(0/1/2)` returns true for the browser terminal profile.
+- `tcgetattr` / `tcsetattr` return success with a raw-ish fake terminal state.
+- `ioctl(TIOCGWINSZ)` returns browser-provided rows and columns.
+- `read(0, ...)` suspends through the existing Asyncify wait path until JS has
+  input bytes.
+- `write(1/2, ...)` posts bytes to the worker/main thread for xterm.js.
+- `TERM` / `TERMCAP` are deterministic and release-pinned for the profile.
+
+Acceptance tests:
+
+- `emacs --quick --no-splash --nw` no longer exits before `command_loop`.
+- The browser worker reaches `read_char` / `tty_read_avail_input` /
+  `wasmacs_host_wait_for_input`.
+- Initial redisplay bytes are observed on stdout/stderr and can be rendered by
+  xterm.js or logged as ANSI output.
+- Injecting a printable key byte mutates the selected Emacs buffer through the
+  real command loop.
+- `C-g` travels as terminal input and is handled by Emacs, not by a host-side
+  fake interrupt.
+
+Open questions:
+
+- Is `TERM=dumb` sufficient for the first proof, or should the profile start
+  with `xterm-256color` and xterm.js from the beginning?
+- Which tty syscalls are required by Emacs startup, and which can remain
+  harmless stubs?
+- Should the terminal backend be an Emscripten device, direct libc syscall
+  shims, or a narrower copied-source `wasmacs_tty_*` facade first?
+
+### 8. Host Capability Service
 
 Responsibilities:
 
@@ -428,7 +499,7 @@ Open questions:
   shims?
 - Which future process-like operations should become remote services?
 
-### 8. Browser GUI Boundary
+### 9. Browser GUI Boundary
 
 Responsibilities:
 
@@ -436,6 +507,8 @@ Responsibilities:
 - Convert browser input into protocol messages.
 - Never become the owner of Emacs editor semantics.
 - Keep debug controls separate from the ordinary editor surface.
+- For the first terminal MVP, render terminal bytes through xterm.js before
+  attempting a custom text-grid renderer from Emacs redisplay internals.
 
 Emacs source surfaces:
 
@@ -448,6 +521,7 @@ Acceptance tests:
 
 - Browser smoke observes pending-command protocol messages.
 - UI reports unavailable boundaries without faking behavior.
+- xterm.js smoke renders tty output bytes from Emacs.
 - Future frame/minibuffer rendering consumes Emacs-owned state.
 
 Open questions:
@@ -495,6 +569,31 @@ These checks prevent services from contradicting each other.
 - Does a loaded preloaded state still see the mounted user filesystem?
 - Are release fingerprints tied to the exact wasm/core/system image pair?
 
+### Terminal x Lifecycle
+
+- Does the browser terminal profile make stdin/stdout/stderr look like a tty
+  before `init_display` / terminal startup decide to exit?
+- Does Emacs reach `command_loop` and a real input waitpoint without relying on
+  pdmp, daemon/server mode, or a forced minibuffer probe?
+- Are terminal dimensions, TERM/TERMCAP, and raw-mode calls stable before the
+  first redisplay?
+
+### Terminal x Input Scheduler
+
+- Does terminal input reach `read_char` / `tty_read_avail_input` through the
+  same path as ordinary Emacs key input?
+- Does Asyncify suspend only at the terminal read boundary and resume after JS
+  provides bytes?
+- Are `C-g`, ESC prefixes, and ordinary printable bytes delivered as Emacs
+  input rather than browser-owned command semantics?
+
+### Terminal x Browser GUI
+
+- Are stdout/stderr terminal bytes copied to JS without JS interpreting
+  Emacs buffer/window state?
+- Does xterm.js remain a renderer for terminal bytes, not an editor model?
+- Is the later custom text-grid renderer kept separate from the tty MVP?
+
 ### Host Capability x Browser GUI
 
 - Are unsupported process/clipboard/pty paths surfaced as explicit unavailable
@@ -514,29 +613,35 @@ These checks prevent services from contradicting each other.
    and live file/undo GC probes as the first proof that the compatibility OS can
    keep Emacs objects alive.
 
-3. Stabilize preloaded-state boot in Node first.
-   Do not fight browser worker stack limits with flags alone. Prove the
-   post-loadup/preloaded-state boundary under Node, then carry that artifact to
-   browser.
+3. Add the minimal Terminal/Tty Service.
+   This is the active product route. Do not continue pdmp as the next normal
+   runtime path. Make `isatty`, raw-mode calls, terminal size, stdin read, and
+   stdout/stderr write good enough for Emacs `--nw` to reach `command_loop`.
 
-4. Productize pending-command protocol on top of preloaded state.
-   Once Emacs can start without cold loadup, run the Asyncify pending-input path
-   through the real worker/browser protocol and compare it to the Node/VM
-   probes.
+4. Render the tty stream through xterm.js.
+   Use xterm.js as the first browser-facing renderer so Emacs' existing
+   `xdisp.c` -> `term.c` redisplay path can carry the early UI. Do not build a
+   custom text-grid bridge until the terminal MVP proves real command-loop
+   input and output.
 
-5. Connect filesystem and command lifecycle.
+5. Productize pending-command/input protocol on top of the tty path.
+   Once the tty profile reaches `read_char` / `wasmacs_host_wait_for_input`,
+   inject key bytes and compare the browser worker path to the Node/VM probes.
+
+6. Connect filesystem and command lifecycle.
    Use the protocol path to run file-visiting commands, save through
    `save-buffer`, reverse-sync after completion, then verify undo and explicit
    GC.
 
-6. Decide durable waitpoint and narrow Asyncify imports.
-   Compare `minibuf-setup` and `read-char` / `kbd_buffer_get_event` with the
-   same root, input, cancel, and file/undo probes. Promote only the smallest
-   stable waitpoint.
+7. Decide durable waitpoint and narrow Asyncify imports.
+   Prefer the natural terminal `read-char` / `kbd_buffer_get_event` path if the
+   tty MVP validates it. Keep `minibuf-setup` and forced minibuffer probes as
+   diagnostics only.
 
-7. Hide diagnostics and build the first normal UI.
+8. Hide diagnostics and build the first normal UI.
    After the substrate is stable, demote debug panels and expose a simple frame,
-   mode line, minibuffer, and command/status surface.
+   mode line, minibuffer, and command/status surface. The first normal UI may
+   be terminal-backed; a custom GUI renderer can follow later.
 
 ## What Not To Do
 
@@ -547,8 +652,13 @@ These checks prevent services from contradicting each other.
   root-safety policy.
 - Do not make cold `loadup.el` in a browser Asyncify worker the product boot
   path.
+- Do not resume pdmp/pbootstrap as the next normal browser runtime route unless
+  the Terminal/Tty Service path fails with source-backed evidence or the user
+  explicitly asks for a preloaded-state experiment.
 - Do not design a custom snapshot that ignores pdumper-class relocation and
-  static-root requirements.
+  static-root requirements if the preloaded-state lane is resumed.
+- Do not implement a full POSIX pty/job-control/process layer for the MVP.
+  Build only the fake tty surface Emacs proves it needs.
 - Do not patch `vendor/emacs` for product work without an explicit experiment.
 
 ## Working Rule For Future LLM Turns

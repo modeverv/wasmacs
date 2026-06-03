@@ -19,8 +19,8 @@ test -f "${repo_root}/app/src/styles.css"
 test -f "${repo_root}/scripts/run-browser-smoke.mjs"
 test -f "${repo_root}/scripts/serve-app.mjs"
 
-rg 'new Worker\("/app/src/wasm-worker\.js", \{ type: "classic" \}\)' "${repo_root}/app/src/main.js" >/dev/null
-rg 'new Worker\("/app/src/asyncify-minibuffer-worker\.js", \{ type: "classic" \}\)' "${repo_root}/app/src/main.js" >/dev/null
+rg 'new Worker\("/app/src/browser-runtime-worker\.js", \{ type: "classic" \}\)' "${repo_root}/app/src/main.js" >/dev/null
+rg 'new Worker\("/app/src/asyncify-minibuffer-worker\.js"\)' "${repo_root}/app/src/main.js" >/dev/null
 rg 'BrowserUserImage' "${repo_root}/app/src/main.js" >/dev/null
 rg 'isEditorModified' "${repo_root}/app/src/main.js" >/dev/null
 rg 'persistEditorIfModified' "${repo_root}/app/src/main.js" >/dev/null
@@ -64,6 +64,7 @@ rg 'pending-command' "${repo_root}/app/src/pending-command-protocol.js" >/dev/nu
 rg 'pendingCommandEvents' "${repo_root}/app/src/main.js" >/dev/null
 rg 'asyncifyMinibufferReadSmoke' "${repo_root}/app/src/main.js" >/dev/null
 rg 'asyncifyNoLoadupBootSmoke' "${repo_root}/app/src/main.js" >/dev/null
+rg 'asyncifyInteractiveLoopProbeSmoke' "${repo_root}/app/src/main.js" >/dev/null
 rg 'nextPointIndexForCommand' "${repo_root}/app/src/main.js" >/dev/null
 rg 'validateBufferCommand' "${repo_root}/app/src/input-protocol.js" >/dev/null
 rg 'insert-text' "${repo_root}/app/src/input-protocol.js" >/dev/null
@@ -123,10 +124,12 @@ rg 'pendingCommandEvents' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/nul
 rg 'PASS pending-command find-file starting unavailable' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'asyncifyMinibufferReadSmoke' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'asyncifyNoLoadupBootSmoke' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
+rg 'asyncifyInteractiveLoopProbeSmoke' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'PASS asyncify pending-input minibuffer read' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'PASS asyncify no-loadup browser worker boot' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'KNOWN_BLOCKER asyncify no-loadup boot status' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'KNOWN_BLOCKER asyncify browser worker stack' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
+rg 'KNOWN_BLOCKER asyncify interactive command-loop waitpoint' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg -- '--js-flags=--stack_size=65500' "${repo_root}/scripts/run-browser-smoke.mjs" >/dev/null
 rg 'minibuffer editing files boundaries' "${repo_root}/package.json" >/dev/null
 rg 'browser:smoke:editing' "${repo_root}/package.json" >/dev/null

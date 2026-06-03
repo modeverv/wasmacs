@@ -21,6 +21,8 @@ if (!artifactDir || !outputPdmpPath) {
 }
 
 const require = createRequire(import.meta.url);
+const dumpMode = process.env.WASMACS_DUMP_MODE || "pbootstrap";
+const dumpFileName = dumpMode === "pdump" ? "emacs.pdmp" : "bootstrap-emacs.pdmp";
 
 async function makeModule(extraSetup) {
   const code = await readFile(`${artifactDir}/temacs`, "utf8");
@@ -62,7 +64,7 @@ process.stderr.write("pbootstrap: loading browser runtime...\n");
 const { mod: M1, lines: l1 } = await makeModule(null);
 
 process.stderr.write("pbootstrap: running loadup.el (this takes ~60s)...\n");
-M1.callMain(["--batch", "-l", "loadup", "--temacs=pbootstrap"]);
+M1.callMain(["--batch", "-l", "loadup", `--temacs=${dumpMode}`]);
 
 // Print loadup progress markers
 const progress = l1.filter((l) => l.startsWith("OUT:Loading") || l.startsWith("OUT:Dump"));
@@ -70,7 +72,7 @@ progress.slice(-5).forEach((l) => process.stderr.write(l.slice(4) + "\n"));
 
 // Extract pdmp from virtual MEMFS — invocation-directory is "" so pdmp is at /
 let pdmpBytes;
-for (const path of ["/bootstrap-emacs.pdmp", "bootstrap-emacs.pdmp"]) {
+for (const path of [`/${dumpFileName}`, dumpFileName]) {
   try {
     pdmpBytes = M1.FS.readFile(path);
     process.stderr.write(`pdmp found at ${path}\n`);

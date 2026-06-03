@@ -1,3 +1,6 @@
+const ARTIFACT_DIR = "/artifacts/emacs-browser-interactive";
+const DUMP_FILE = "bootstrap-emacs.pdmp";
+
 function post(type, payload = {}) {
   self.postMessage({ type, ...payload });
 }
@@ -21,10 +24,15 @@ let booted = false;
 let pendingCommand;
 let pendingInputResolver;
 let recentOutput = [];
+let bootstrapPdumpInfo;
 
 self.onmessage = async (event) => {
   if (event.data?.type === "boot-probe") {
     await runBootProbe(event.data);
+    return;
+  }
+  if (event.data?.type === "interactive-loop-probe") {
+    await runInteractiveLoopProbe(event.data);
     return;
   }
   if (event.data?.type === "start-minibuffer-read") {
@@ -46,9 +54,9 @@ async function ensureAsyncifyEmacs() {
   emacsReady = new Promise((resolve, reject) => {
     var Module = {
       noInitialRun: true,
-      thisProgram: "temacs",
+      thisProgram: "emacs",
       locateFile(path) {
-        return `/artifacts/emacs-browser-asyncify-spike/${path}`;
+        return `${ARTIFACT_DIR}/${path}`;
       },
       print(text) {
         recentOutput.push(`OUT:${text}`);
@@ -68,7 +76,7 @@ async function ensureAsyncifyEmacs() {
     self.Module = Module;
 
     try {
-      importScripts("/artifacts/emacs-browser-asyncify-spike/temacs");
+      importScripts(`${ARTIFACT_DIR}/temacs`);
     } catch (error) {
       reject(error);
     }
@@ -76,12 +84,35 @@ async function ensureAsyncifyEmacs() {
 
   const module = await emacsReady;
   if (!booted) {
-    const bootCode = module.callMain(["--batch", "--eval", '(princ "boot\\n")']);
-    if (bootCode !== 0) throw new Error(`asyncify emacs boot exited ${bootCode}`);
+    await ensureBootstrapPdump(module);
+    const bootCode = module.callMain(["--dump-file", `/${DUMP_FILE}`, "--no-loadup", "--batch", "--eval", '(princ "boot\\n")']);
+    if (bootCode !== 0) {
+      post("status", { text: `asyncify bootstrap boot exited ${bootCode}; continuing diagnostic` });
+    }
     booted = true;
     post("status", { text: "asyncify emacs booted" });
   }
   return module;
+}
+
+async function ensureBootstrapPdump(module) {
+  try {
+    const stat = module.FS.stat(`/${DUMP_FILE}`);
+    bootstrapPdumpInfo = { bytes: stat.size, mode: stat.mode, size: stat.size, existing: true };
+    return;
+  } catch {}
+  const response = await fetch(`${ARTIFACT_DIR}/${DUMP_FILE}`);
+  if (!response.ok) {
+    throw new Error(`failed to fetch ${DUMP_FILE}: ${response.status}`);
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  module.preRun = module.preRun || [];
+  module.preRun.push(() => {
+    module.FS.writeFile(`/${DUMP_FILE}`, bytes);
+  });
+  module.FS.writeFile(`/${DUMP_FILE}`, bytes);
+  const stat = module.FS.stat(`/${DUMP_FILE}`);
+  bootstrapPdumpInfo = { bytes: bytes.length, mode: stat.mode, size: stat.size };
 }
 
 async function runBootProbe(options = {}) {
@@ -108,6 +139,84 @@ async function runBootProbe(options = {}) {
   }
 }
 
+async function runInteractiveLoopProbe() {
+  try {
+    recentOutput = [];
+    const module = await ensureAsyncifyRuntimeOnly();
+    const args = ["--quick", "--no-splash", "--nw"];
+    post("status", { text: "starting pdmp-free interactive command loop probe", args });
+
+    const pending = module.callMain(args);
+    if (!(pending && typeof pending.then === "function")) {
+      post("asyncify-interactive-loop-probe-result", {
+        passed: false,
+        error: `callMain returned synchronously before command loop waitpoint: ${pending}`,
+        args,
+        entrypointState: module.ccall("wasmacs_entrypoint_state", "string", [], []),
+        commandState: module.ccall("wasmacs_command_state", "string", [], []),
+        minibufferState: module.ccall("wasmacs_minibuffer_state", "string", [], []),
+        output: recentOutput.slice(-80),
+      });
+      return;
+    }
+
+    await waitForHostInput(3000);
+    const initialMinibufferState = module.ccall("wasmacs_minibuffer_state", "string", [], []);
+    const initialCommandState = module.ccall("wasmacs_command_state", "string", [], []);
+    const inputStatus = module.ccall(
+      "wasmacs_input_text",
+      "number",
+      ["string"],
+      [String.fromCharCode(24, 6)],
+    );
+    if (inputStatus !== 0) {
+      post("asyncify-interactive-loop-probe-result", {
+        passed: false,
+        error: `wasmacs_input_text returned ${inputStatus}`,
+        args,
+        initialMinibufferState,
+        initialCommandState,
+        output: recentOutput.slice(-80),
+      });
+      return;
+    }
+    if (typeof self.__wasmacsResolveHostInputWait !== "function") {
+      post("asyncify-interactive-loop-probe-result", {
+        passed: false,
+        error: "host input wait resolver missing after first waitpoint",
+        args,
+        initialMinibufferState,
+        initialCommandState,
+        output: recentOutput.slice(-80),
+      });
+      return;
+    }
+    self.__wasmacsResolveHostInputWait();
+
+    await waitForHostInput(3000);
+    const afterKeyMinibufferState = module.ccall("wasmacs_minibuffer_state", "string", [], []);
+    const afterKeyCommandState = module.ccall("wasmacs_command_state", "string", [], []);
+    post("asyncify-interactive-loop-probe-result", {
+      passed: afterKeyMinibufferState.includes("active:true"),
+      args,
+      initialWaitpoint: true,
+      inputStatus,
+      initialMinibufferState,
+      initialCommandState,
+      afterKeyMinibufferState,
+      afterKeyCommandState,
+      output: recentOutput.slice(-80),
+      note: "pdmp-free startup reached command-loop waitpoint and accepted C-x C-f",
+    });
+  } catch (error) {
+    post("asyncify-interactive-loop-probe-result", {
+      passed: false,
+      error: error && error.stack ? error.stack : String(error),
+      output: recentOutput.slice(-80),
+    });
+  }
+}
+
 async function ensureAsyncifyRuntimeOnly() {
   if (emacsReady) {
     await emacsReady;
@@ -118,9 +227,9 @@ async function ensureAsyncifyRuntimeOnly() {
   emacsReady = new Promise((resolve, reject) => {
     var Module = {
       noInitialRun: true,
-      thisProgram: "temacs",
+      thisProgram: "emacs",
       locateFile(path) {
-        return `/artifacts/emacs-browser-asyncify-spike/${path}`;
+        return `${ARTIFACT_DIR}/${path}`;
       },
       print(text) {
         recentOutput.push(`OUT:${text}`);
@@ -140,7 +249,7 @@ async function ensureAsyncifyRuntimeOnly() {
     self.Module = Module;
 
     try {
-      importScripts("/artifacts/emacs-browser-asyncify-spike/temacs");
+      importScripts(`${ARTIFACT_DIR}/temacs`);
     } catch (error) {
       reject(error);
     }
@@ -208,8 +317,8 @@ async function startMinibufferRead(command = { type: "minibuffer-read" }) {
   }
 }
 
-async function waitForHostInput() {
-  for (let attempt = 0; attempt < 500; attempt += 1) {
+async function waitForHostInput(attempts = 500) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (self.__wasmacsHostWaitForInputPending) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }

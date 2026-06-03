@@ -40,6 +40,7 @@ int wasmacs_os_finish_command (void);
 int wasmacs_os_cancel_command (void);
 static char const *wasmacs_os_phase_name (void);
 static Lisp_Object wasmacs_eval_error_handler (Lisp_Object error);
+static Lisp_Object wasmacs_recursive_edit_body (Lisp_Object ignored);
 static void wasmacs_append_text (char **buffer, ptrdiff_t *length,
                                  ptrdiff_t *capacity, const char *text);
 static void wasmacs_store_c_string_result (const char *value);
@@ -524,6 +525,12 @@ wasmacs_read_minibuffer_probe_body (Lisp_Object prompt)
   return call1 (intern_c_string ("read-from-minibuffer"), prompt);
 }
 
+static Lisp_Object
+wasmacs_recursive_edit_body (Lisp_Object ignored)
+{
+  return call0 (intern_c_string ("recursive-edit"));
+}
+
 __attribute__ ((used, visibility ("default")))
 int
 wasmacs_command_begin_minibuffer_force_probe (void)
@@ -553,6 +560,41 @@ wasmacs_command_begin_minibuffer_force_probe (void)
   wasmacs_pending_gc_inhibit_depth--;
   unbind_to (gc_count, Qnil);
   WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  noninteractive = saved_noninteractive;
+  wasmacs_command_busy = 0;
+  return wasmacs_eval_had_error ? 1 : 0;
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_command_begin_bare_recursive_edit_probe (void)
+{
+  if (wasmacs_command_busy)
+    {
+      wasmacs_store_c_string_result ("unavailable:busy");
+      return 3;
+    }
+
+  wasmacs_command_busy = 1;
+  bool saved_noninteractive = noninteractive;
+  Lisp_Object saved_top_level = Vtop_level;
+  noninteractive = false;
+  Vtop_level = Qnil;
+  wasmacs_eval_had_error = 0;
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  specpdl_ref gc_count = inhibit_garbage_collection ();
+  wasmacs_pending_gc_inhibit_depth++;
+
+  Lisp_Object result = internal_condition_case_1 (wasmacs_recursive_edit_body,
+                                                 Qnil,
+                                                 Qt,
+                                                 wasmacs_eval_error_handler);
+  wasmacs_store_result (result);
+
+  wasmacs_pending_gc_inhibit_depth--;
+  unbind_to (gc_count, Qnil);
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  Vtop_level = saved_top_level;
   noninteractive = saved_noninteractive;
   wasmacs_command_busy = 0;
   return wasmacs_eval_had_error ? 1 : 0;
@@ -781,25 +823,35 @@ __attribute__ ((used, visibility ("default")))
 int
 wasmacs_os_begin_command (const char *kind)
 {
-  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
-
   if (wasmacs_command_busy)
     {
       wasmacs_store_c_string_result ("unavailable:busy");
-      WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
       return 3;
     }
 
   wasmacs_command_busy = 1;
-  /* Pin baseline backtrace args before the Asyncify suspend path runs.  */
-  wasmacs_pin_specpdl_backtrace_args ();
+  bool saved_noninteractive = noninteractive;
+  noninteractive = false;
+  wasmacs_eval_had_error = 0;
+  if (!wasmacs_backtrace_args_pinned)
+    wasmacs_pin_specpdl_backtrace_args ();
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  specpdl_ref gc_count = inhibit_garbage_collection ();
+  wasmacs_pending_gc_inhibit_depth++;
 
-  char result[128];
-  snprintf (result, sizeof result,
-            "command-begun:kind=%s", kind ? kind : "unknown");
-  wasmacs_store_c_string_result (result);
+  char code[128];
+  snprintf(code, sizeof code, "(call-interactively '%s)", kind ? kind : "ignore");
+  Lisp_Object source = build_string (code);
+  Lisp_Object result = internal_condition_case_1 (wasmacs_eval_body, source,
+                                                 Qerror, wasmacs_eval_error_handler);
+
+  wasmacs_pending_gc_inhibit_depth--;
+  unbind_to (gc_count, Qnil);
   WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
-  return 0;
+  noninteractive = saved_noninteractive;
+  wasmacs_command_busy = 0;
+
+  return wasmacs_eval_had_error ? 1 : 0;
 }
 
 __attribute__ ((used, visibility ("default")))
@@ -933,9 +985,10 @@ perl -0pi -e 'BEGIN { $block = $ENV{"WASMACS_INPUT_BLOCK"} } s#void\nkbd_buffer_
 if [ "${WASMACS_ENABLE_ASYNCIFY_WAITPOINT:-0}" = "1" ]; then
   case "${waitpoint_mode}" in
     read-char)
+      perl -0pi -e 's#\n      /\* wasmacs asyncify input waitpoint spike:.*?\n\n      c = read_decoded_event_from_main_queue#\n      c = read_decoded_event_from_main_queue#sg' "${keyboard_file}"
       perl -0pi -e 's#/\* Read a character from the keyboard; call the redisplay if needed\.  \*/#/\* wasmacs asyncify input waitpoint spike. \*/\nextern int wasmacs_host_wait_for_input (void);\n\n/\* Read a character from the keyboard; call the redisplay if needed.  \*/#' "${keyboard_file}"
 
-      perl -0pi -e 's#  if \(NILP \(c\)\)\n    \{\n      c = read_decoded_event_from_main_queue \(end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu\);#  if (NILP (c))\n    {\n      /* wasmacs asyncify input waitpoint spike: yield only while an\n         active minibuffer read is waiting for real input.  The JS import is\n         currently a no-op probe hook; later input-event work must make this\n         the suspension point that browser input resumes.  */\n      if (minibuf_level > 0 && !end_time && !input_pending\n          && !detect_input_pending_run_timers (0))\n        wasmacs_host_wait_for_input ();\n\n      c = read_decoded_event_from_main_queue (end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu);#' "${keyboard_file}"
+      perl -0pi -e 's#  if \(NILP \(c\)\)\n    \{\n      c = read_decoded_event_from_main_queue \(end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu\);#  if (NILP (c))\n    {\n      /* wasmacs asyncify input waitpoint spike: yield when an interactive\n         command loop would otherwise block for real browser input.  In the\n         browser host, stdin readiness can look like input_pending without a\n         real Emacs key event, so JS owns the actual wait/resume boundary. */\n      if (!noninteractive && !end_time)\n        wasmacs_host_wait_for_input ();\n\n      c = read_decoded_event_from_main_queue (end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu);#' "${keyboard_file}"
       ;;
     minibuf-setup)
       perl -0pi -e 's#static Lisp_Object\nread_minibuf #/\* wasmacs asyncify minibuffer setup waitpoint spike. \*/\nextern int wasmacs_host_wait_for_input (void);\n\nstatic Lisp_Object\nread_minibuf #' "${minibuf_file}"

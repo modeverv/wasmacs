@@ -83,7 +83,7 @@ loadup_el="${pdump_src}/lisp/loadup.el"
 if ! grep -q "Wasm browser runtime: pre-load macro dependencies" "${loadup_el}"; then
   echo "=== Applying loadup.el prereqs (permanent) ==="
   perl -0pi -e '
-    s/(\(load "files"\))/;; Wasm browser runtime: pre-load macro dependencies so files.el\n;; eval-when-compile does not fail with "require while preparing to dump".\n(load "emacs-lisp\/macroexp")\n(let ((macroexp--pending-eager-loads (quote (skip)))) (load "emacs-lisp\/pcase"))\n(let ((macroexp--pending-eager-loads (quote (skip)))) (load "emacs-lisp\/easy-mmode"))\n$1/m
+    s/(\(load "files"\))/;; Wasm browser runtime: pre-load macro dependencies so files.el\n;; eval-when-compile does not fail with "require while preparing to dump".\n(load "emacs-lisp\/macroexp")\n(let ((macroexp--pending-eager-loads (quote (skip)))) (load "emacs-lisp\/pcase"))\n(let ((macroexp--pending-eager-loads (quote (skip)))) (load "emacs-lisp\/easy-mmode"))\n(let ((macroexp--pending-eager-loads (quote (skip)))) (load "emacs-lisp\/rx"))\n(let ((macroexp--pending-eager-loads (quote (skip)))) (load "emacs-lisp\/regexp-opt"))\n(let ((macroexp--pending-eager-loads (quote (skip)))) (load "emacs-lisp\/gv"))\n(let ((macroexp--pending-eager-loads (quote (skip)))) (load "emacs-lisp\/cl-preloaded"))\n(let ((macroexp--pending-eager-loads (quote (skip)))) (load "emacs-lisp\/cl-macs"))\n(let ((macroexp--pending-eager-loads (quote (skip)))) (load "emacs-lisp\/cl-lib"))\n$1/m
   ' "${loadup_el}"
   echo "loadup.el prereqs applied."
 else
