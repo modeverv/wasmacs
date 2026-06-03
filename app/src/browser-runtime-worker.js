@@ -1,3 +1,23 @@
+/**
+ * browser-runtime-worker.js — LEGACY old command bridge (pdump-profile artifact)
+ *
+ * STATUS: legacy / diagnostic-only
+ *   - Uses emacs-browser-pdump-profile artifact
+ *   - JS builds Lisp eval strings per editing command (JS owns command semantics)
+ *   - Calls wasmacs_eval_string() for insert/delete/move/save/undo
+ *   - Calls wasmacs_last_result() for buffer readback
+ *   - checkMinibufferState() / fetchBufferState() are JS-driven state polling
+ *
+ * This path is NOT the product editing path.
+ * Product editing path: asyncify-minibuffer-worker.js + xterm.js (emacs-input-bytes / terminal-output-bytes)
+ *
+ * main.js routes frame-grid keydown → this worker for the legacy textarea editor UI.
+ * The xterm pane routes keydown → asyncify-minibuffer-worker.js (new path).
+ *
+ * wasmacs_eval_string / wasmacs_last_result are retained in this file for legacy compatibility.
+ * Do NOT add new product editing commands here.
+ */
+
 const ARTIFACT_DIR = "/artifacts/emacs-browser-pdump-profile";
 
 class BrowserWorkerHost {

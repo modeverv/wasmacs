@@ -1,0 +1,87 @@
+CASE:browser-xterm-manual-app-smoke
+t=122ms  checkpoint=runtime-initialized
+t=31809ms  checkpoint=callMain-returned  callMainIsPromise=false
+t=31809ms  checkpoint=first-wait-reached  sessionReachesWait=true  termBytes=11064
+t=61829ms  checkpoint=step-insert-a  label=insert-a  outputAdvanced=true  lastCommand=self-insert-command  buffer="a"
+t=91832ms  checkpoint=step-insert-b  label=insert-b  outputAdvanced=true  lastCommand=self-insert-command  buffer="ab"
+t=121833ms  checkpoint=step-insert-c  label=insert-c  outputAdvanced=true  lastCommand=self-insert-command  buffer="abc"
+t=121833ms  checkpoint=editing-complete
+EXIT_STATUS:0
+SIGNAL:null
+TIMEOUT:false
+STDOUT_BEGIN
+
+STDOUT_END
+STDERR_BEGIN
+
+STDERR_END
+SUMMARY_BEGIN
+{
+  "status": "PASS",
+  "timedOut": false,
+  "exitStatus": 0,
+  "signal": null,
+  "checkpoints": [
+    "runtime-initialized",
+    "callMain-returned",
+    "first-wait-reached",
+    "step-insert-a",
+    "step-insert-b",
+    "step-insert-c",
+    "editing-complete"
+  ],
+  "callMainIsPromise": false,
+  "callMainSyncValue": 0,
+  "bugFixed": false,
+  "bugDescription": "emacs-browser-interactive callMain returns sync number 0 → session ends immediately",
+  "fixApplied": "startXtermSession uses XTERM_ARTIFACT_DIR=emacs-browser-asyncify-spike",
+  "sessionReachesWait": true,
+  "terminalBytesPresent": true,
+  "initialTerminalBytes": 11064,
+  "sessionNotImmediatelyEnded": true,
+  "finalTerminalBytes": 11159,
+  "terminalBytesFlowed": true,
+  "heapu8NotAccessed": true,
+  "envNotAccessed": true,
+  "heapu8TrapTriggered": false,
+  "envTrapTriggered": false,
+  "bufferAbc": true,
+  "allSteps": [
+    {
+      "label": "insert-a",
+      "bytes": [
+        97
+      ],
+      "outputAdvanced": true,
+      "lastCommand": "self-insert-command",
+      "bufferString": "a",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "insert-b",
+      "bytes": [
+        98
+      ],
+      "outputAdvanced": true,
+      "lastCommand": "self-insert-command",
+      "bufferString": "ab",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "insert-c",
+      "bytes": [
+        99
+      ],
+      "outputAdvanced": true,
+      "lastCommand": "self-insert-command",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true
+    }
+  ],
+  "artifact": "/Users/seijiro/Sync/sync_work/by-llms/wasmacs//artifacts/emacs-browser-asyncify-spike",
+  "note": "Simulates browser app startXtermSession flow. callMainIsPromise=true means the session stays alive (Asyncify working). For visual browser UI confirmation: npm run dev → http://localhost:5173 → Start Interactive Session. Expected: status 'interactive', Emacs *scratch* visible in xterm pane."
+}
+SUMMARY_END

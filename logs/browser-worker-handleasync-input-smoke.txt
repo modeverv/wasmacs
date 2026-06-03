@@ -1,70 +1,7 @@
 CASE:browser-worker-handleasync-input-smoke
-t=24ms  checkpoint=waiting-for-boot
-t=35957ms  checkpoint=boot-complete
-t=35957ms  checkpoint=first-wait-active  waitCount=1
-t=66044ms  checkpoint=round-a-complete  waitCount=3  roundtripMs=30086
-t=96129ms  checkpoint=round-b-complete  waitCount=5  roundtripMs=30085
-t=126222ms  checkpoint=round-c-complete  waitCount=7  roundtripMs=30092
-t=126423ms  checkpoint=no-input-observation
-t=126525ms  checkpoint=final-state
-SUMMARY_BEGIN
-{
-  "status": "PASS",
-  "description": "worker_threads-based correctness smoke for handleAsync blocking-input",
-  "probeNote": "vm.runInContext latency (~30s/round) is a Node.js probe artifact; real browser Web Worker roundtrip < 5ms",
-  "defaultHandleAsyncUsed": true,
-  "bootMs": 35821,
-  "rounds": [
-    {
-      "label": "round-a",
-      "input": [
-        97
-      ],
-      "waitCount": 3,
-      "cResumed": true,
-      "bytesDequeued": true,
-      "resolverCleared": true,
-      "noByteResidue": true,
-      "roundRoundtripMs": 30086,
-      "promiseThenFired": true
-    },
-    {
-      "label": "round-b",
-      "input": [
-        98
-      ],
-      "waitCount": 5,
-      "cResumed": true,
-      "bytesDequeued": true,
-      "resolverCleared": true,
-      "noByteResidue": true,
-      "roundRoundtripMs": 30085,
-      "promiseThenFired": true
-    },
-    {
-      "label": "round-c",
-      "input": [
-        99
-      ],
-      "waitCount": 7,
-      "cResumed": true,
-      "bytesDequeued": true,
-      "resolverCleared": true,
-      "noByteResidue": true,
-      "roundRoundtripMs": 30092,
-      "promiseThenFired": true
-    }
-  ],
-  "allRoundsCResumed": true,
-  "allRoundsConsumedBytes": true,
-  "allRoundsResolverCleared": true,
-  "allRoundsNoResidue": true,
-  "allRoundsWaitCountIncreased": true,
-  "maxRoundtripMs": 30092,
-  "finalGuardDepth": 0,
-  "noInputObservation": {
-    "waitStillActive": true,
-    "resolverRetained": true
-  }
-}
-SUMMARY_END
+t=19ms  checkpoint=waiting-for-boot
+t=6279ms  checkpoint=boot-complete
+t=6279ms  checkpoint=first-wait-active  waitCount=1
+ERROR: Error: Timed out (90000ms) waiting for worker message type=c-resumed
+    at waitForWorkerMessage (file:///Users/seijiro/Sync/sync_work/by-llms/wasmacs/scripts/probe-browser-worker-handleasync-input-smoke.mjs:115:15)
+    at async file:///Users/seijiro/Sync/sync_work/by-llms/wasmacs/scripts/probe-browser-worker-handleasync-input-smoke.mjs:154:23

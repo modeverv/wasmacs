@@ -1,0 +1,187 @@
+CASE:browser-xterm-product-editing-smoke
+t=113ms  checkpoint=after-boot
+t=29723ms  checkpoint=initial-display  termBytes=11064
+t=59743ms  checkpoint=step-insert-a  label=insert-a  termBytes=11157  +93  outputAdvanced=true  lastCommand=self-insert-command  buffer="a"  bytePath=true
+t=89745ms  checkpoint=step-insert-b  label=insert-b  termBytes=11158  +1  outputAdvanced=true  lastCommand=self-insert-command  buffer="ab"  bytePath=true
+t=119747ms  checkpoint=step-insert-c  label=insert-c  termBytes=11159  +1  outputAdvanced=true  lastCommand=self-insert-command  buffer="abc"  bytePath=true
+t=149749ms  checkpoint=step-enter  label=enter  termBytes=11174  +15  outputAdvanced=true  lastCommand=newline  buffer="abc\n"  bytePath=true
+t=179750ms  checkpoint=step-backspace  label=backspace  termBytes=11189  +15  outputAdvanced=true  lastCommand=delete-backward-char  buffer="abc"  bytePath=true
+t=209755ms  checkpoint=step-ctrl-l  label=ctrl-l  termBytes=13291  +2102  outputAdvanced=true  lastCommand=recenter-top-bottom  buffer="abc"  bytePath=true
+t=270765ms  checkpoint=step-split-window  label=split-window  termBytes=13551  +260  outputAdvanced=true  lastCommand=split-window-below  buffer="abc"  bytePath=true
+t=331770ms  checkpoint=step-unsplit-window  label=unsplit-window  termBytes=13829  +278  outputAdvanced=true  lastCommand=delete-other-windows  buffer="abc"  bytePath=true
+t=331771ms  checkpoint=all-steps-complete  termBytes=13829  bytePath=true  evalDuringEdit=0
+t=331771ms  checkpoint=diagnostic-readback  lastCommand=delete-other-windows  buffer="abc"
+EXIT_STATUS:0
+SIGNAL:null
+TIMEOUT:false
+STDOUT_BEGIN
+[host-lib WAIT] waitId=1 inputQueue=0 termOut=11064 t=29722
+[host-lib WAIT] waitId=3 inputQueue=0 termOut=11157 t=59741
+[host-lib WAIT] waitId=5 inputQueue=0 termOut=11158 t=89745
+[host-lib WAIT] waitId=7 inputQueue=0 termOut=11159 t=119746
+[host-lib WAIT] waitId=9 inputQueue=0 termOut=11174 t=149748
+[host-lib WAIT] waitId=11 inputQueue=0 termOut=11189 t=179750
+[host-lib WAIT] waitId=13 inputQueue=0 termOut=13291 t=209754
+[host-lib WAIT] waitId=15 inputQueue=0 termOut=13336 t=240758
+[host-lib WAIT] waitId=17 inputQueue=0 termOut=13551 t=270764
+[host-lib WAIT] waitId=19 inputQueue=0 termOut=13614 t=301766
+[host-lib WAIT] waitId=21 inputQueue=0 termOut=13829 t=331769
+STDOUT_END
+STDERR_BEGIN
+
+STDERR_END
+SUMMARY_BEGIN
+{
+  "status": "PASS",
+  "timedOut": false,
+  "exitStatus": 0,
+  "signal": null,
+  "checkpoints": [
+    "after-boot",
+    "initial-display",
+    "step-insert-a",
+    "step-insert-b",
+    "step-insert-c",
+    "step-enter",
+    "step-backspace",
+    "step-ctrl-l",
+    "step-split-window",
+    "step-unsplit-window",
+    "all-steps-complete",
+    "diagnostic-readback"
+  ],
+  "editingViaBytePath": true,
+  "oldCommandBridgeCalled": false,
+  "evalStringCallsDuringEditing": 0,
+  "evalStringUsedForEditing": false,
+  "evalStringUsedForReadback": true,
+  "initialTerminalBytes": 11064,
+  "finalTerminalBytes": 13829,
+  "terminalBytesFlowed": true,
+  "allPrintableOutputAdvanced": true,
+  "bufferAbc": true,
+  "enterNewline": true,
+  "backspaceWorks": true,
+  "ctrlLRedrawWorks": true,
+  "splitWindowWorks": true,
+  "unsplitWindowWorks": true,
+  "finalWaitCount": 21,
+  "allSteps": [
+    {
+      "label": "insert-a",
+      "bytes": [
+        97
+      ],
+      "editedViaBytePath": true,
+      "outputAdvanced": true,
+      "newByteCount": 93,
+      "lastCommand": "self-insert-command",
+      "bufferString": "a",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "insert-b",
+      "bytes": [
+        98
+      ],
+      "editedViaBytePath": true,
+      "outputAdvanced": true,
+      "newByteCount": 1,
+      "lastCommand": "self-insert-command",
+      "bufferString": "ab",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "insert-c",
+      "bytes": [
+        99
+      ],
+      "editedViaBytePath": true,
+      "outputAdvanced": true,
+      "newByteCount": 1,
+      "lastCommand": "self-insert-command",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "enter",
+      "bytes": [
+        13
+      ],
+      "editedViaBytePath": true,
+      "outputAdvanced": true,
+      "newByteCount": 15,
+      "lastCommand": "newline",
+      "bufferString": "abc\n",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "backspace",
+      "bytes": [
+        127
+      ],
+      "editedViaBytePath": true,
+      "outputAdvanced": true,
+      "newByteCount": 15,
+      "lastCommand": "delete-backward-char",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "ctrl-l",
+      "bytes": [
+        12
+      ],
+      "editedViaBytePath": true,
+      "outputAdvanced": true,
+      "newByteCount": 2102,
+      "lastCommand": "recenter-top-bottom",
+      "bufferString": "abc",
+      "bufferMatches": null,
+      "commandMatches": true
+    },
+    {
+      "label": "split-window",
+      "bytes": [
+        24,
+        50
+      ],
+      "editedViaBytePath": true,
+      "outputAdvanced": true,
+      "newByteCount": 260,
+      "lastCommand": "split-window-below",
+      "bufferString": "abc",
+      "commandMatches": true
+    },
+    {
+      "label": "unsplit-window",
+      "bytes": [
+        24,
+        49
+      ],
+      "editedViaBytePath": true,
+      "outputAdvanced": true,
+      "newByteCount": 278,
+      "lastCommand": "delete-other-windows",
+      "bufferString": "abc",
+      "commandMatches": true
+    }
+  ],
+  "inputPath": "__wasmacsQueueTerminalInput → handleAsync → Emacs command loop",
+  "outputPath": "__wasmacsTerminalOutputBytes → terminal-output-bytes → xterm.write()",
+  "readbackPath": "wasmacs_eval_string (diagnostic only, post-edit)",
+  "legacyPath": "browser-runtime-worker.js / wasm-worker.js (NOT called in this smoke)",
+  "deferred": [
+    "GUI frame route (C-x 5 2)",
+    "Clipboard Service",
+    "terminal resize",
+    "mouse"
+  ],
+  "note": "JS owns NO editor semantics; all editing dispatched as bytes; Emacs command loop handles all commands"
+}
+SUMMARY_END

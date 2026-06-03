@@ -1,0 +1,47 @@
+CASE:browser-xterm-boot-loadup-smoke
+t=119ms  checkpoint=runtime-initialized
+t=127ms  checkpoint=pdmp-loaded  pdmpBytes=26023288
+t=35578ms  checkpoint=callMain-fired
+t=35579ms  checkpoint=interactive-wait-reached  termBytes=11064  waitCount=1
+t=65613ms  checkpoint=step-key-a  lastCommand=self-insert-command  buffer="a"
+t=65613ms  checkpoint=session-confirmed-interactive
+EXIT_STATUS:0
+SIGNAL:null
+TIMEOUT:false
+STDOUT_BEGIN
+
+STDOUT_END
+STDERR_BEGIN
+
+STDERR_END
+SUMMARY_BEGIN
+{
+  "status": "PASS",
+  "timedOut": false,
+  "exitStatus": 0,
+  "signal": null,
+  "checkpoints": [
+    "runtime-initialized",
+    "pdmp-loaded",
+    "callMain-fired",
+    "interactive-wait-reached",
+    "step-key-a",
+    "session-confirmed-interactive"
+  ],
+  "bootStrategy": "pdump",
+  "pdmpLoaded": true,
+  "pdmpBytes": 26023288,
+  "interactiveWaitReached": true,
+  "initialTerminalBytes": 11064,
+  "waitCount": 1,
+  "terminalBytesPresent": true,
+  "keyAAccepted": true,
+  "keyAOutputAdvanced": true,
+  "keyALastCommand": "self-insert-command",
+  "rootCause": "eval_sub loadup recursion → JS call stack overflow in browser Worker (1-4MB)",
+  "fix": "--dump-file /bootstrap-emacs.pdmp skips loadup, reaches interactive wait without recursion",
+  "artifactPath": "/Users/seijiro/Sync/sync_work/by-llms/wasmacs//artifacts/emacs-browser-asyncify-spike",
+  "pdmpPath": "/Users/seijiro/Sync/sync_work/by-llms/wasmacs//artifacts/emacs-browser-asyncify-pdump/bootstrap-emacs.pdmp",
+  "note": "pdump from emacs-browser-asyncify-pdump reusable with emacs-browser-asyncify-spike (same Emacs source, same Lisp memory layout, different Asyncify flags)"
+}
+SUMMARY_END

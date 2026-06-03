@@ -1,0 +1,172 @@
+CASE:browser-product-input-smoke
+t=120ms  checkpoint=after-boot
+t=35299ms  checkpoint=first-wait
+t=65320ms  checkpoint=key-printable-a  label=printable-a  bytes=[97]  lastCommand=self-insert-command  buffer="a"
+t=95322ms  checkpoint=key-printable-b  label=printable-b  bytes=[98]  lastCommand=self-insert-command  buffer="ab"
+t=125324ms  checkpoint=key-printable-c  label=printable-c  bytes=[99]  lastCommand=self-insert-command  buffer="abc"
+t=155327ms  checkpoint=key-enter  label=enter  bytes=[13]  lastCommand=newline  buffer="abc\n"
+t=185329ms  checkpoint=key-backspace  label=backspace  bytes=[127]  lastCommand=delete-backward-char  buffer="abc"
+t=215332ms  checkpoint=key-ctrl-g  label=ctrl-g  bytes=[7]  lastCommand=keyboard-quit  buffer="abc"
+t=215334ms  checkpoint=key-alt-x  label=alt-x  bytes=[27,120]  lastCommand=keyboard-quit  buffer="abc"
+t=215334ms  checkpoint=all-keys-complete
+EXIT_STATUS:0
+SIGNAL:null
+TIMEOUT:false
+STDOUT_BEGIN
+
+STDOUT_END
+STDERR_BEGIN
+
+STDERR_END
+SUMMARY_BEGIN
+{
+  "status": "PASS",
+  "timedOut": false,
+  "exitStatus": 0,
+  "signal": null,
+  "checkpoints": [
+    "after-boot",
+    "first-wait",
+    "key-printable-a",
+    "key-printable-b",
+    "key-printable-c",
+    "key-enter",
+    "key-backspace",
+    "key-ctrl-g",
+    "key-alt-x",
+    "all-keys-complete"
+  ],
+  "byteMappingCorrect": true,
+  "evalWorked": true,
+  "printableADequeued": true,
+  "printableAResumed": true,
+  "printableANextWait": true,
+  "bufferAbc": true,
+  "enterNewline": true,
+  "backspaceDelete": true,
+  "ctrlGQuit": true,
+  "altXExecute": false,
+  "cgLoopSurvived": true,
+  "allKeys": [
+    {
+      "label": "printable-a",
+      "event": {
+        "key": "a"
+      },
+      "bytes": [
+        97
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "lastCommand": "self-insert-command",
+      "bufferString": "a",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "printable-b",
+      "event": {
+        "key": "b"
+      },
+      "bytes": [
+        98
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "lastCommand": "self-insert-command",
+      "bufferString": "ab",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "printable-c",
+      "event": {
+        "key": "c"
+      },
+      "bytes": [
+        99
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "lastCommand": "self-insert-command",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "enter",
+      "event": {
+        "key": "Enter"
+      },
+      "bytes": [
+        13
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "lastCommand": "newline",
+      "bufferString": "abc\n",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "backspace",
+      "event": {
+        "key": "Backspace"
+      },
+      "bytes": [
+        127
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "lastCommand": "delete-backward-char",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "ctrl-g",
+      "event": {
+        "key": "g",
+        "ctrlKey": true
+      },
+      "bytes": [
+        7
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "lastCommand": "keyboard-quit",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "alt-x",
+      "event": {
+        "key": "x",
+        "altKey": true
+      },
+      "bytes": [
+        27,
+        120
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "lastCommand": "keyboard-quit",
+      "bufferString": "abc",
+      "bufferMatches": null,
+      "commandMatches": false
+    }
+  ],
+  "finalWaitCount": 15,
+  "finalGuardDepth": 0,
+  "inputPath": "browserKeyEventToEmacsBytes → __wasmacsQueueTerminalInput → handleAsync",
+  "note": "JS owns no command semantics; all dispatch is Emacs-internal"
+}
+SUMMARY_END

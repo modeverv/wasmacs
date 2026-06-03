@@ -1,0 +1,4 @@
+CASE:browser-xterm-terminal-smoke
+t=90ms  checkpoint=after-boot
+t=25736ms  checkpoint=first-wait  initTermBytes=11064
+t=55742ms  checkpoint=key-printable-a  label=printable-a  bytes=[97]  termBytes=11157  outputAdvanced=true  lastCommand=self-insert-command  buffer="a"

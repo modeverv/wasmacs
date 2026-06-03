@@ -1,3 +1,4 @@
+import { createXtermEmacsTerminal, xtermDataToBytes } from "./xterm-emacs-terminal.js";
 import { BrowserUserImage } from "./browser-wasifs.js";
 import { isEditorModified } from "./buffer-dirty.js";
 import { coalesceBufferCommand } from "./command-queue.js";
@@ -26,6 +27,76 @@ const bufferState = document.querySelector("#buffer-state");
 const fileList = document.querySelector("#file-list");
 const frameGrid = document.querySelector("#frame-grid");
 const minibuffer = document.querySelector("#minibuffer");
+
+const xtermContainer = document.querySelector("#xterm-container");
+const xtermStatusEl = document.querySelector("#xterm-status");
+const startXtermSessionButton = document.querySelector("#start-xterm-session");
+
+let xtermWorker = null;
+let xtermTerminal = null;
+
+function setXtermStatus(text) {
+  if (xtermStatusEl) xtermStatusEl.textContent = text;
+}
+
+function startXtermSession() {
+  if (xtermWorker) return;
+  if (!xtermTerminal) {
+    try {
+      xtermTerminal = createXtermEmacsTerminal(xtermContainer);
+      xtermTerminal.onData((data) => {
+        if (!xtermWorker) return;
+        xtermWorker.postMessage({ type: "emacs-input-bytes", bytes: xtermDataToBytes(data) });
+      });
+    } catch (err) {
+      setXtermStatus(`xterm init failed: ${err.message}`);
+      return;
+    }
+  }
+
+  xtermWorker = new Worker("/app/src/asyncify-minibuffer-worker.js");
+  setXtermStatus("loading…");
+
+  xtermWorker.onmessage = (event) => {
+    const msg = event.data;
+    if (msg.type === "terminal-output-bytes" && xtermTerminal) {
+      xtermTerminal.writeBytes(msg.bytes);
+      // First output bytes → session is live; update status if not yet interactive
+      const cur = xtermStatusEl?.textContent ?? "";
+      if (cur.startsWith("loading") || cur.startsWith("starting Emacs") || cur.startsWith("loadup:")) {
+        setXtermStatus("running");
+      }
+    }
+    if (msg.type === "status") setXtermStatus(msg.text);
+    if (msg.type === "xterm-session-started") setXtermStatus("loading…");
+    if (msg.type === "xterm-session-at-wait") setXtermStatus("interactive");
+    if (msg.type === "stderr" && /^Loading /.test(msg.text ?? "")) {
+      setXtermStatus(`loadup: ${(msg.text ?? "").slice(8, 60)}`);
+    }
+    if (msg.type === "xterm-session-returned") {
+      const err = msg.error ? ` — ${msg.error.slice(0, 80)}` : "";
+      setXtermStatus(`session ended (status ${msg.status ?? "?"}${err}`);
+      xtermWorker = null;
+      if (startXtermSessionButton) startXtermSessionButton.disabled = false;
+    }
+    if (msg.type === "xterm-session-error") {
+      setXtermStatus(`session error: ${(msg.error ?? "unknown").slice(0, 80)}`);
+    }
+  };
+
+  xtermWorker.onerror = (event) => {
+    setXtermStatus(`worker error: ${event.message}`);
+    xtermWorker = null;
+    if (startXtermSessionButton) startXtermSessionButton.disabled = false;
+  };
+
+  xtermWorker.postMessage({ type: "start-xterm-session" });
+  if (startXtermSessionButton) startXtermSessionButton.disabled = true;
+}
+
+if (startXtermSessionButton) {
+  startXtermSessionButton.addEventListener("click", startXtermSession);
+}
 
 const defaultBufferPath = "/home/user/notes.txt";
 const storageKey = "wasmacs:user-filesystem.wasifs:v1";
@@ -269,6 +340,9 @@ function runNextBufferCommand() {
   runWorkerCommand(command);
 }
 
+// [LEGACY] runWorkerCommand uses browser-runtime-worker.js (old command bridge).
+// JS constructs Lisp command forms; this path is retained for the textarea/frame-grid legacy UI.
+// Product editing: use the xterm pane (startXtermSession → asyncify-minibuffer-worker.js).
 function runWorkerCommand(command) {
   output.textContent = "";
   if (command.type !== "key-prefix") setMinibuffer("");

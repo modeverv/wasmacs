@@ -1,3 +1,19 @@
+/**
+ * wasm-worker.js — LEGACY old command bridge (persistent-spike artifact)
+ *
+ * STATUS: legacy / diagnostic-only
+ *   - Uses emacs-browser-persistent-spike artifact (batch --eval mode)
+ *   - JS constructs Lisp command forms via buildEval() / buildCommandForm()
+ *   - Calls wasmacs_eval_string() per editing command (JS owns command semantics)
+ *   - wasmacs_last_result() for readback
+ *
+ * This path is NOT the product editing path.
+ * Product editing path: asyncify-minibuffer-worker.js + xterm.js (emacs-input-bytes / terminal-output-bytes)
+ *
+ * Do NOT call this worker for product input. Use asyncify-minibuffer-worker.js.
+ * wasmacs_eval_string / wasmacs_last_result may be retained for diagnostic readback only.
+ */
+
 function post(type, payload = {}) {
   self.postMessage({ type, ...payload });
 }

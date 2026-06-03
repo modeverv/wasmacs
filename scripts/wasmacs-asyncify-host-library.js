@@ -263,6 +263,17 @@ mergeInto(LibraryManager.library, {
               self instanceof WorkerGlobalScope) {
             self.postMessage({ type: "emacs-waiting" });
           }
+          // Drain: if bytes were queued while Emacs was processing (between wait points),
+          // resolve immediately now that the new resolver is set.
+          var _q = (globalThis.__wasmacsTerminalInputBytes || []).length;
+          var _termOut = (globalThis.__wasmacsTerminalOutputBytes || []).length;
+          var _t = (typeof performance !== "undefined") ? Math.round(performance.now()) : "?";
+          if (_q > 0 && typeof globalThis.__wasmacsResolveHostInputWait === "function") {
+            console.log("[host-lib DRAIN] waitId=" + waitId + " inputQueue=" + _q + " termOut=" + _termOut + " t=" + _t + " → resolving immediately");
+            globalThis.__wasmacsResolveHostInputWait();
+          } else {
+            console.log("[host-lib WAIT] waitId=" + waitId + " inputQueue=" + _q + " termOut=" + _termOut + " t=" + _t);
+          }
         });
         var thenPromiseId = ++globalThis.__wasmacsPromiseSeq;
         globalThis.__wasmacsWaitPromiseState[waitId].thenPromiseId = thenPromiseId;
@@ -361,12 +372,16 @@ mergeInto(LibraryManager.library, {
         });
 
       // In a browser Web Worker, notify the main thread that Emacs is waiting.
-      // The main thread forwards the next key event back as { type: "inject-key" }.
       if (typeof self !== "undefined" &&
           typeof self.postMessage === "function" &&
           typeof WorkerGlobalScope !== "undefined" &&
           self instanceof WorkerGlobalScope) {
         self.postMessage({ type: "emacs-waiting" });
+      }
+      // Drain queued bytes immediately if available.
+      if ((globalThis.__wasmacsTerminalInputBytes || []).length > 0 &&
+          typeof globalThis.__wasmacsResolveHostInputWait === "function") {
+        globalThis.__wasmacsResolveHostInputWait();
       }
     });
     var thenPromiseId = ++globalThis.__wasmacsPromiseSeq;

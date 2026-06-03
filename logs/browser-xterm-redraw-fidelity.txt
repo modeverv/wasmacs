@@ -1,0 +1,568 @@
+CASE:browser-xterm-redraw-fidelity
+t=122ms  checkpoint=after-boot
+t=61849ms  checkpoint=step-insert-a  label=insert-a  termBytes=11157  +93  outputAdvanced=true  lastCommand=self-insert-command  buffer="a"  modeLineText=true  rv=false
+t=31613ms  checkpoint=initial-display  termBytes=11064  ansi=591  modeLineText=true  rv=false
+t=91852ms  checkpoint=step-insert-b  label=insert-b  termBytes=11158  +1  outputAdvanced=true  lastCommand=self-insert-command  buffer="ab"  modeLineText=true  rv=false
+t=61634ms  checkpoint=step-insert-a  label=insert-a  termBytes=11157  +93  outputAdvanced=true  lastCommand=self-insert-command  buffer="a"  modeLineText=true  rv=false
+t=121854ms  checkpoint=step-insert-c  label=insert-c  termBytes=11159  +1  outputAdvanced=true  lastCommand=self-insert-command  buffer="abc"  modeLineText=true  rv=false
+t=91636ms  checkpoint=step-insert-b  label=insert-b  termBytes=11158  +1  outputAdvanced=true  lastCommand=self-insert-command  buffer="ab"  modeLineText=true  rv=false
+t=151857ms  checkpoint=step-enter  label=enter  termBytes=11174  +15  outputAdvanced=true  lastCommand=newline  buffer="abc\n"  modeLineText=true  rv=false
+t=121638ms  checkpoint=step-insert-c  label=insert-c  termBytes=11159  +1  outputAdvanced=true  lastCommand=self-insert-command  buffer="abc"  modeLineText=true  rv=false
+t=181860ms  checkpoint=step-backspace  label=backspace  termBytes=11189  +15  outputAdvanced=true  lastCommand=delete-backward-char  buffer="abc"  modeLineText=true  rv=false
+t=151641ms  checkpoint=step-enter  label=enter  termBytes=11174  +15  outputAdvanced=true  lastCommand=newline  buffer="abc\n"  modeLineText=true  rv=false
+t=211866ms  checkpoint=step-ctrl-l  label=ctrl-l  termBytes=13291  +2102  outputAdvanced=true  lastCommand=recenter-top-bottom  buffer="abc"  modeLineText=true  rv=false
+t=181643ms  checkpoint=step-backspace  label=backspace  termBytes=11189  +15  outputAdvanced=true  lastCommand=delete-backward-char  buffer="abc"  modeLineText=true  rv=false
+t=211649ms  checkpoint=step-ctrl-l  label=ctrl-l  termBytes=13291  +2102  outputAdvanced=true  lastCommand=recenter-top-bottom  buffer="abc"  modeLineText=true  rv=false
+t=272878ms  checkpoint=step-split-window  label=split-window  termBytes=13551  +260  outputAdvanced=true  lastCommand=split-window-below  buffer="abc"  modeLineText=true
+t=272661ms  checkpoint=step-split-window  label=split-window  termBytes=13551  +260  outputAdvanced=true  lastCommand=split-window-below  buffer="abc"  modeLineText=true
+t=333887ms  checkpoint=step-unsplit-window  label=unsplit-window  termBytes=13829  +278  outputAdvanced=true  lastCommand=delete-other-windows  buffer="abc"  modeLineText=true
+t=333887ms  checkpoint=all-steps-complete  termBytes=13829  ansi=652  modeLineText=true  rv=false
+EXIT_STATUS:0
+SIGNAL:null
+TIMEOUT:false
+STDOUT_BEGIN
+
+STDOUT_END
+STDERR_BEGIN
+
+STDERR_END
+SUMMARY_BEGIN
+{
+  "status": "PASS",
+  "timedOut": false,
+  "exitStatus": 0,
+  "signal": null,
+  "checkpoints": [
+    "after-boot",
+    "step-insert-a",
+    "initial-display",
+    "step-insert-b",
+    "step-insert-a",
+    "step-insert-c",
+    "step-insert-b",
+    "step-enter",
+    "step-insert-c",
+    "step-backspace",
+    "step-enter",
+    "step-ctrl-l",
+    "step-backspace",
+    "step-ctrl-l",
+    "step-split-window",
+    "step-split-window",
+    "step-unsplit-window",
+    "all-steps-complete"
+  ],
+  "hasInitialOutput": true,
+  "initialByteCount": 11064,
+  "hasAnsiInInitialOutput": true,
+  "totalAnsiSequences": 591,
+  "hasCursorPositioning": true,
+  "cursorPositionCount": 468,
+  "hasEraseEol": false,
+  "eraseEolCount": 0,
+  "hasModeLineText": true,
+  "modeLineDetectedBy": "initial-display",
+  "hasModeLineReverseVideo": false,
+  "modeLineTextSample": "=--:---  F1  *scratch*      All    (Fundamental)                                ",
+  "termEnv": {
+    "note": "ENV not exported; terminal size is Emacs --nw default (80x24)"
+  },
+  "allPrintableOutputAdvanced": true,
+  "bufferAbc": true,
+  "enterNewline": true,
+  "backspaceWorks": true,
+  "ctrlLRedrawWorks": true,
+  "splitWindowWorks": true,
+  "unsplitWindowWorks": true,
+  "splitWindowWindowCount": null,
+  "finalByteCount": 13829,
+  "finalWaitCount": 21,
+  "allSteps": [
+    {
+      "label": "insert-a",
+      "bytes": [
+        97
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 93,
+      "lastCommand": "self-insert-command",
+      "bufferString": "a",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 4
+    },
+    {
+      "label": "insert-b",
+      "bytes": [
+        98
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 1,
+      "lastCommand": "self-insert-command",
+      "bufferString": "ab",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 0
+    },
+    {
+      "label": "insert-a",
+      "bytes": [
+        97
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 93,
+      "lastCommand": "self-insert-command",
+      "bufferString": "a",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 4
+    },
+    {
+      "label": "insert-c",
+      "bytes": [
+        99
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 1,
+      "lastCommand": "self-insert-command",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 0
+    },
+    {
+      "label": "insert-b",
+      "bytes": [
+        98
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 1,
+      "lastCommand": "self-insert-command",
+      "bufferString": "ab",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 0
+    },
+    {
+      "label": "enter",
+      "bytes": [
+        13
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 15,
+      "lastCommand": "newline",
+      "bufferString": "abc\n",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 2
+    },
+    {
+      "label": "insert-c",
+      "bytes": [
+        99
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 1,
+      "lastCommand": "self-insert-command",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 0
+    },
+    {
+      "label": "backspace",
+      "bytes": [
+        127
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 15,
+      "lastCommand": "delete-backward-char",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 2
+    },
+    {
+      "label": "enter",
+      "bytes": [
+        13
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 15,
+      "lastCommand": "newline",
+      "bufferString": "abc\n",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 2
+    },
+    {
+      "label": "ctrl-l",
+      "bytes": [
+        12
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 2102,
+      "lastCommand": "recenter-top-bottom",
+      "bufferString": "abc",
+      "bufferMatches": null,
+      "commandMatches": true,
+      "newChunkAnsi": 29
+    },
+    {
+      "label": "backspace",
+      "bytes": [
+        127
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 15,
+      "lastCommand": "delete-backward-char",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 2
+    },
+    {
+      "label": "ctrl-l",
+      "bytes": [
+        12
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 2102,
+      "lastCommand": "recenter-top-bottom",
+      "bufferString": "abc",
+      "bufferMatches": null,
+      "commandMatches": true,
+      "newChunkAnsi": 29
+    },
+    {
+      "label": "split-window",
+      "bytes": [
+        24,
+        50
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 260,
+      "lastCommand": "split-window-below",
+      "bufferString": "abc",
+      "commandMatches": true,
+      "newChunkAnsi": 11
+    },
+    {
+      "label": "split-window",
+      "bytes": [
+        24,
+        50
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 260,
+      "lastCommand": "split-window-below",
+      "bufferString": "abc",
+      "commandMatches": true,
+      "newChunkAnsi": 11
+    },
+    {
+      "label": "unsplit-window",
+      "bytes": [
+        24,
+        49
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 278,
+      "lastCommand": "delete-other-windows",
+      "bufferString": "abc",
+      "commandMatches": true,
+      "newChunkAnsi": 13
+    }
+  ],
+  "deferred": [
+    "GUI frame route (make-frame / C-x 5 2)",
+    "terminal resize (SIGWINCH equivalent)",
+    "Clipboard Service",
+    "mouse support"
+  ],
+  "note": "Emacs produces ANSI/VT sequences; JS is byte transport only; xterm.js is renderer only"
+}
+SUMMARY_END
+t=333669ms  checkpoint=step-unsplit-window  label=unsplit-window  termBytes=13829  +278  outputAdvanced=true  lastCommand=delete-other-windows  buffer="abc"  modeLineText=true
+t=333670ms  checkpoint=all-steps-complete  termBytes=13829  ansi=652  modeLineText=true  rv=false
+EXIT_STATUS:0
+SIGNAL:null
+TIMEOUT:false
+STDOUT_BEGIN
+
+STDOUT_END
+STDERR_BEGIN
+
+STDERR_END
+SUMMARY_BEGIN
+{
+  "status": "PASS",
+  "timedOut": false,
+  "exitStatus": 0,
+  "signal": null,
+  "checkpoints": [
+    "after-boot",
+    "step-insert-a",
+    "initial-display",
+    "step-insert-b",
+    "step-insert-a",
+    "step-insert-c",
+    "step-insert-b",
+    "step-enter",
+    "step-insert-c",
+    "step-backspace",
+    "step-enter",
+    "step-ctrl-l",
+    "step-backspace",
+    "step-ctrl-l",
+    "step-split-window",
+    "step-split-window",
+    "step-unsplit-window",
+    "all-steps-complete",
+    "step-unsplit-window",
+    "all-steps-complete"
+  ],
+  "hasInitialOutput": true,
+  "initialByteCount": 11064,
+  "hasAnsiInInitialOutput": true,
+  "totalAnsiSequences": 591,
+  "hasCursorPositioning": true,
+  "cursorPositionCount": 468,
+  "hasEraseEol": false,
+  "eraseEolCount": 0,
+  "hasModeLineText": true,
+  "modeLineDetectedBy": "initial-display",
+  "hasModeLineReverseVideo": false,
+  "modeLineTextSample": "=--:---  F1  *scratch*      All    (Fundamental)                                ",
+  "termEnv": {
+    "note": "ENV not exported; terminal size is Emacs --nw default (80x24)"
+  },
+  "allPrintableOutputAdvanced": true,
+  "bufferAbc": true,
+  "enterNewline": true,
+  "backspaceWorks": true,
+  "ctrlLRedrawWorks": true,
+  "splitWindowWorks": true,
+  "unsplitWindowWorks": true,
+  "splitWindowWindowCount": null,
+  "finalByteCount": 13829,
+  "finalWaitCount": 21,
+  "allSteps": [
+    {
+      "label": "insert-a",
+      "bytes": [
+        97
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 93,
+      "lastCommand": "self-insert-command",
+      "bufferString": "a",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 4
+    },
+    {
+      "label": "insert-b",
+      "bytes": [
+        98
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 1,
+      "lastCommand": "self-insert-command",
+      "bufferString": "ab",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 0
+    },
+    {
+      "label": "insert-a",
+      "bytes": [
+        97
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 93,
+      "lastCommand": "self-insert-command",
+      "bufferString": "a",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 4
+    },
+    {
+      "label": "insert-c",
+      "bytes": [
+        99
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 1,
+      "lastCommand": "self-insert-command",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 0
+    },
+    {
+      "label": "insert-b",
+      "bytes": [
+        98
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 1,
+      "lastCommand": "self-insert-command",
+      "bufferString": "ab",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 0
+    },
+    {
+      "label": "enter",
+      "bytes": [
+        13
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 15,
+      "lastCommand": "newline",
+      "bufferString": "abc\n",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 2
+    },
+    {
+      "label": "insert-c",
+      "bytes": [
+        99
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 1,
+      "lastCommand": "self-insert-command",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 0
+    },
+    {
+      "label": "backspace",
+      "bytes": [
+        127
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 15,
+      "lastCommand": "delete-backward-char",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 2
+    },
+    {
+      "label": "enter",
+      "bytes": [
+        13
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 15,
+      "lastCommand": "newline",
+      "bufferString": "abc\n",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 2
+    },
+    {
+      "label": "ctrl-l",
+      "bytes": [
+        12
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 2102,
+      "lastCommand": "recenter-top-bottom",
+      "bufferString": "abc",
+      "bufferMatches": null,
+      "commandMatches": true,
+      "newChunkAnsi": 29
+    },
+    {
+      "label": "backspace",
+      "bytes": [
+        127
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 15,
+      "lastCommand": "delete-backward-char",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true,
+      "newChunkAnsi": 2
+    },
+    {
+      "label": "ctrl-l",
+      "bytes": [
+        12
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 2102,
+      "lastCommand": "recenter-top-bottom",
+      "bufferString": "abc",
+      "bufferMatches": null,
+      "commandMatches": true,
+      "newChunkAnsi": 29
+    },
+    {
+      "label": "split-window",
+      "bytes": [
+        24,
+        50
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 260,
+      "lastCommand": "split-window-below",
+      "bufferString": "abc",
+      "commandMatches": true,
+      "newChunkAnsi": 11
+    },
+    {
+      "label": "split-window",
+      "bytes": [
+        24,
+        50
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 260,
+      "lastCommand": "split-window-below",
+      "bufferString": "abc",
+      "commandMatches": true,
+      "newChunkAnsi": 11
+    },
+    {
+      "label": "unsplit-window",
+      "bytes": [
+        24,
+        49
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 278,
+      "lastCommand": "delete-other-windows",
+      "bufferString": "abc",
+      "commandMatches": true,
+      "newChunkAnsi": 13
+    },
+    {
+      "label": "unsplit-window",
+      "bytes": [
+        24,
+        49
+      ],
+      "outputAdvanced": true,
+      "newByteCount": 278,
+      "lastCommand": "delete-other-windows",
+      "bufferString": "abc",
+      "commandMatches": true,
+      "newChunkAnsi": 13
+    }
+  ],
+  "deferred": [
+    "GUI frame route (make-frame / C-x 5 2)",
+    "terminal resize (SIGWINCH equivalent)",
+    "Clipboard Service",
+    "mouse support"
+  ],
+  "note": "Emacs produces ANSI/VT sequences; JS is byte transport only; xterm.js is renderer only"
+}
+SUMMARY_END

@@ -1,0 +1,48 @@
+CASE:browser-xterm-input-latency-smoke
+t=29516ms  checkpoint=boot-complete
+t=29694ms  checkpoint=key-a  resolverToWait=27ms  resolverToTermOut=27ms  termBytes+=93
+t=36249ms  checkpoint=key-b  resolverToWait=6402ms  resolverToTermOut=nullms  termBytes+=0
+t=36407ms  checkpoint=key-c  resolverToWait=8ms  resolverToTermOut=8ms  termBytes+=1
+t=36408ms  checkpoint=all-keys-done
+EXIT_STATUS:null
+SIGNAL:SIGTERM
+STDOUT_BEGIN
+[host-lib WAIT] waitId=1 inputQueue=0 termOut=11064 t=29514
+[host-lib WAIT] waitId=3 inputQueue=0 termOut=11157 t=29845
+[host-lib WAIT] waitId=5 inputQueue=0 termOut=11158 t=36406
+STDOUT_END
+STDERR_BEGIN
+
+STDERR_END
+SUMMARY_BEGIN
+{
+  "status": "FAIL",
+  "timedOut": true,
+  "exitStatus": null,
+  "artifactDir": "/Users/seijiro/Sync/sync_work/by-llms/wasmacs//artifacts/emacs-browser-asyncify-spike",
+  "bootTermBytes": 11064,
+  "avgResolverToNextWaitMs": 2146,
+  "latencies": [
+    {
+      "key": "a",
+      "resolverToNextWaitMs": 27,
+      "resolverToTermOutputMs": 27,
+      "termBytesGenerated": 93
+    },
+    {
+      "key": "b",
+      "resolverToNextWaitMs": 6402,
+      "resolverToTermOutputMs": null,
+      "termBytesGenerated": 0
+    },
+    {
+      "key": "c",
+      "resolverToNextWaitMs": 8,
+      "resolverToTermOutputMs": 8,
+      "termBytesGenerated": 1
+    }
+  ],
+  "blockerNote": null,
+  "note": "Measures wasm execution time from resolver call to next wait. Browser Worker adds ~0ms overhead on top of this. Node.js uses --stack-size=65500 (65MB) — not representative of browser 1-4MB stack. Latency should ideally be < 500ms for responsive editing."
+}
+SUMMARY_END

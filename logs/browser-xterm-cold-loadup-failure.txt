@@ -1,0 +1,36 @@
+CASE:browser-xterm-cold-loadup-failure
+t=121ms  checkpoint=runtime-initialized
+t=31660ms  checkpoint=unexpected-success
+EXIT_STATUS:0
+SIGNAL:null
+TIMEOUT:false
+STDOUT_BEGIN
+
+STDOUT_END
+STDERR_BEGIN
+
+STDERR_END
+SUMMARY_BEGIN
+{
+  "status": "RESOLVED",
+  "timedOut": false,
+  "exitStatus": 0,
+  "signal": null,
+  "checkpoints": [
+    "runtime-initialized",
+    "unexpected-success"
+  ],
+  "blockerReproduced": false,
+  "unexpectedSuccess": true,
+  "coldLoadupFailed": false,
+  "errorName": null,
+  "errorMessage": null,
+  "isStackOverflow": false,
+  "hasDumpFile": false,
+  "productRoute": "['--quick','--no-splash','--nw'] (no --dump-file, no pdump)",
+  "lastLoadupFile": null,
+  "artifactDir": "/Users/seijiro/Sync/sync_work/by-llms/wasmacs//artifacts/emacs-browser-asyncify-spike",
+  "stackSizeKb": 1500,
+  "note": "PASS = blocker confirmed (cold loadup fails with small stack as expected in browser). RESOLVED = cold loadup unexpectedly succeeded (blocker may be fixed). hasDumpFile=false confirms this is the product cold loadup route. Browser Workers use ~1-4MB JS stack; this probe uses --stack-size=1500."
+}
+SUMMARY_END

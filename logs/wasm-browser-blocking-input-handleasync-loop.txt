@@ -1,19 +1,7 @@
 CASE:blocking-input-handleasync-loop
 READY
-CHECKPOINT:after-boot
-ERR:warning: unsupported syscall: __syscall_prlimit64
-ERR:warning: unsupported syscall: __syscall_prlimit64
-ERR:warning: unsupported syscall: __syscall_prlimit64
-CHECKPOINT:first-wait
-CHECKPOINT:round-1-round-1-a
-CHECKPOINT:round-2-round-2-b
-CHECKPOINT:round-3-round-3-c
-CHECKPOINT:round-4-round-4-xy-multi
-CHECKPOINT:round-5-round-5-cg-boundary
-CHECKPOINT:no-input-timeout-observation
-CHECKPOINT:all-rounds-complete
-EXIT_STATUS:0
-SIGNAL:null
+EXIT_STATUS:null
+SIGNAL:SIGSEGV
 TIMEOUT:false
 STDOUT_BEGIN
 
@@ -23,41 +11,24 @@ STDERR_BEGIN
 STDERR_END
 SUMMARY_BEGIN
 {
-  "status": "PASS",
-  "exitStatus": 0,
-  "signal": null,
+  "status": "FAIL",
+  "exitStatus": null,
+  "signal": "SIGSEGV",
   "timedOut": false,
-  "checkpoints": [
-    "after-boot",
-    "first-wait",
-    "round-1-round-1-a",
-    "round-2-round-2-b",
-    "round-3-round-3-c",
-    "round-4-round-4-xy-multi",
-    "round-5-round-5-cg-boundary",
-    "no-input-timeout-observation",
-    "all-rounds-complete"
-  ],
-  "snapshotCount": 9,
-  "lastCheckpoint": "all-rounds-complete",
-  "hasAllRounds": true,
+  "checkpoints": [],
+  "snapshotCount": 0,
+  "hasAllRounds": false,
   "allRoundsConsumedBytes": true,
   "allRoundsResolverCleared": true,
   "allRoundsWaitCountIncreased": true,
-  "waitCountMonotone": true,
+  "waitCountMonotone": false,
   "allRoundsCResumed": true,
   "allRoundsPromiseThenFired": true,
   "allRoundsByteDequeued": true,
-  "waitCountAtEnd": 13,
-  "finalGuardDepth": 0,
+  "finalGuardDepth": null,
   "finalLifecyclePhase": null,
   "finalGcAllowed": null,
   "finalRootSafetyAllowed": null,
-  "timeoutObservation": {
-    "waitStillActiveAfterDelay": true,
-    "waitIdUnchangedDuringDelay": true,
-    "resolverRetainedDuringDelay": true,
-    "cleanedUp": true
-  }
+  "timeoutObservation": null
 }
 SUMMARY_END

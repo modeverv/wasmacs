@@ -257,6 +257,34 @@ h1 {
   white-space: pre-wrap;
 }
 
+.xterm-section {
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  min-height: 300px;
+  padding: 0;
+}
+
+.xterm-header {
+  align-items: center;
+  background: var(--bg-alt);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 12px;
+  padding: 6px 12px;
+}
+
+.xterm-status {
+  color: var(--fg-muted, #888);
+  font-size: 12px;
+}
+
+.xterm-container {
+  flex: 1;
+  overflow: hidden;
+  padding: 8px;
+}
+
 @media (max-width: 900px) {
   .workspace {
     grid-template-columns: 1fr;

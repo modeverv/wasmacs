@@ -1595,3 +1595,440 @@ finalWaitCount=17, finalGuardDepth=0, evalWorked=true, cgLoopSurvived=true.
 **Next:** product editor input integration — wire handleAsync into the browser
 app's command loop so real keystrokes (from keyboard events → postMessage) reach
 Emacs in the Web Worker.
+
+## 2026-06-03 — Product Editor Input Integration
+
+**Objective:** Wire browser keydown events to Emacs byte queue via handleAsync.
+
+**Changes:**
+
+- `app/src/emacs-key-bytes.js` (NEW): pure `browserKeyEventToEmacsBytes()` helper.
+  Converts browser KeyboardEvent fields to Emacs byte sequences.
+  No DOM dependency. Covers printable, Enter, Backspace, Escape, Tab,
+  Ctrl+letter, Alt+letter (ESC prefix), Arrow keys (VT100).
+- `tests/runtime/emacs-key-bytes.test.js` (NEW): 8 unit test groups, 19 cases.
+  All pass (`npm test`).
+- `app/src/asyncify-minibuffer-worker.js`: added `emacs-input-bytes` message
+  handler (explicit product name; same effect as `terminal-input`) and
+  `emacs-read-state` request/response for state readback from main thread.
+- `scripts/probe-browser-product-input-smoke.mjs` (NEW):
+  End-to-end smoke: synthetic key events → browserKeyEventToEmacsBytes →
+  byte queue → handleAsync → Emacs command loop → readback.
+  Keys: a, b, c, Enter, Backspace, C-g, Alt+x.
+  Logs: `logs/browser-product-input-smoke.{txt,jsonl}`.
+- `package.json`: added `test:product-input-smoke`.
+- `docs/os-compatibility-boundary.md`: added Product Editor Input Integration section.
+
+**Results (PASS):**
+
+| Key | Bytes | Buffer after | last-command | result |
+|---|---|---|---|---|
+| a | [97] | "a" | self-insert-command | ✓ |
+| b | [98] | "ab" | self-insert-command | ✓ |
+| c | [99] | "abc" | self-insert-command | ✓ |
+| Enter | [13] | "abc\n" | newline | ✓ |
+| Backspace | [127] | "abc" | delete-backward-char | ✓ |
+| C-g | [7] | "abc" | keyboard-quit | ✓ (loop survives) |
+| Alt+x (batch) | [27,120] | "abc" | keyboard-quit (prev) | observed: batch ESC+x after C-g stays in *scratch* |
+
+finalWaitCount=15, finalGuardDepth=0, evalWorked=true, byteMappingCorrect=true.
+
+**Path boundary:**
+
+- OLD path: `wasm-worker.js` + `emacs-browser-persistent-spike` + `wasmacs_eval_string` (JS builds Lisp) — unchanged
+- NEW path: asyncify worker + `emacs-browser-asyncify-spike` + `__wasmacsQueueTerminalInput` + handleAsync (JS is byte transport only) — confirmed
+
+**vendor/emacs unchanged. OLD product command bridge unchanged.**
+
+**Next:** Replace OLD command bridge with NEW byte path in the production worker,
+update rendering/readback, or proceed to memory/root stress smoke as separate milestone.
+
+## 2026-06-03 xterm.js terminal output path
+
+Goal: route Emacs terminal output bytes to xterm.js; add Start Interactive Session UI.
+
+### Changes
+
+**asyncify-minibuffer-worker.js:**
+- Added `flushTerminalOutputBytes()` + `startTerminalOutputStream()` (16ms setInterval)
+- `startTerminalOutputStream()` called from both `onRuntimeInitialized` hooks
+- Added `start-xterm-session` message handler → `startXtermSession()`
+- Worker now posts `{ type: "terminal-output-bytes", bytes }` continuously during interactive session
+
+**app/src/xterm-emacs-terminal.js (new):**
+- `createXtermEmacsTerminal(container)` — wraps xterm.js Terminal, exposes `writeBytes` / `onData` / `dispose`
+- `xtermDataToBytes(data)` — TextEncoder.encode for xterm `onData` → emacs-input-bytes
+
+**app/index.html:**
+- Added `@xterm/xterm@5` CDN (CSS + JS)
+- Added `#xterm-container` + `#start-xterm-session` button + `#xterm-status` span
+
+**app/src/main.js:**
+- Imports `createXtermEmacsTerminal`, `xtermDataToBytes`
+- `startXtermSession()`: creates xtermWorker + xterm Terminal, wires `terminal-output-bytes` → `term.writeBytes()`, `onData` → `emacs-input-bytes`
+
+**app/src/styles.css:**
+- Added `.xterm-section`, `.xterm-header`, `.xterm-status`, `.xterm-container` styles
+
+**scripts/probe-browser-xterm-terminal-smoke.mjs (new):**
+- Node.js vm-based smoke; verifies `__wasmacsTerminalOutputBytes` flow
+- Checks: initial terminal output present, ANSI sequences present, output advances after a/b/c input, buffer-string = "abc", C-g survived
+
+**docs/os-compatibility-boundary.md:**
+- Added "xterm.js Terminal Service (2026-06-03)" section
+- Documents output path, input path, clipboard deferred, GUI frame deferred
+
+**package.json:**
+- Added `test:xterm-terminal-smoke` script
+- Added `@xterm/xterm: ^5.5.0` dependency
+
+### Results
+
+- `npm test` PASS (all existing tests pass)
+- `test:xterm-terminal-smoke` PASS — `hasInitialTerminalOutput: true`, `hasAnsiInInitialOutput: true`, `allPrintableOutputAdvanced: true`, `bufferAbc: true`, `finalTerminalByteCount: 11177`, `finalWaitCount: 9`
+
+**vendor/emacs unchanged. OLD command bridge unchanged.**
+
+**Next candidates:** terminal redraw fidelity in browser xterm / OLD command bridge retirement / memory-root stress smoke.
+
+## 2026-06-03 xterm.js terminal redraw fidelity
+
+Goal: verify Emacs `--nw` ANSI sequences are correct for xterm.js rendering; confirm cursor, mode line, insert/delete, redraw, window split.
+
+### Changes
+
+**scripts/probe-browser-xterm-redraw-fidelity.mjs (new):**
+- Full fidelity sequence: boot → a,b,c → Enter → Backspace → C-l → C-x 2 → C-x 1
+- `analyzeTerminalBytes()`: counts CSI sequences, cursor-pos, erase-EOL, reverse-video, identifies mode line text
+- `runCxStep()`: two-round send for C-x prefix sequences (C-x intermediate wait + completing byte)
+- Mode line detected via simple text search (`*scratch*`, `Fundamental`)
+- ENV not exported in this artifact (abort if accessed) — documented as "80x24 default"
+- PASS criteria: initial output, ANSI sequences, cursor positioning, mode line text, a/b/c/Enter/Backspace/C-l/C-x2/C-x1
+
+**package.json:**
+- Added `test:xterm-redraw-fidelity` script
+
+**docs/os-compatibility-boundary.md:**
+- Added Terminal Redraw Fidelity section with full results table
+- Documented C-x prefix key intermediate wait behavior
+- Documented cursor-rewrite strategy (no ESC[K)
+- Documented mode line detection and reverse video absence
+
+### Results
+
+- `npm test` PASS
+- `test:xterm-redraw-fidelity` PASS:
+  - `hasInitialOutput: true` (11,064 bytes)
+  - `hasAnsiInInitialOutput: true` (591 sequences)
+  - `hasCursorPositioning: true` (468 sequences)
+  - `hasModeLineText: true` (`=--:---  F1  *scratch*  All  (Fundamental)`)
+  - `bufferAbc: true`, `enterNewline: true`, `backspaceWorks: true`
+  - `ctrlLRedrawWorks: true` (+2,102 bytes)
+  - `splitWindowWorks: true` (+260 bytes, last-command=split-window-below)
+  - `unsplitWindowWorks: true` (+278 bytes, last-command=delete-other-windows)
+  - `finalByteCount: 13829`, `finalWaitCount: 21`
+
+**Key findings:**
+- Emacs uses cursor-rewrite display (ESC[row;colH × 468), NOT erase-to-EOL
+- Mode line rendered via character writing (no reverse video attribute)
+- C-x prefix key causes intermediate wait; multi-byte sequences need 2 resolveWait() calls
+- xterm.js can render this output correctly (all sequences are standard CSI)
+
+**vendor/emacs unchanged. OLD command bridge unchanged.**
+
+**Next:** old command bridge retirement / terminal resize / memory-root stress smoke.
+
+## 2026-06-03 — Old Command Bridge Retirement / Product Editing Smoke
+
+### Goal
+Inventory the old command bridge, mark it as legacy, designate the xterm.js path as the product editing surface, and add a smoke that proves the architectural invariant.
+
+### Files changed
+
+**app/src/wasm-worker.js:**
+- Added LEGACY header documenting: persistent-spike artifact, `buildEval()`/`buildCommandForm()`/`wasmacs_eval_string` per keypress, JS owns command semantics, not the product editing path
+
+**app/src/browser-runtime-worker.js:**
+- Added LEGACY header documenting: pdump-profile artifact, Lisp command forms per keypress, JS owns command semantics, not the product editing path, do not add new editing commands here
+
+**app/src/main.js:**
+- Added `// [LEGACY]` comment before `runWorkerCommand()` documenting the old bridge role and pointing to xterm path as the product editing surface
+
+**scripts/probe-browser-xterm-product-editing-smoke.mjs (new):**
+- Architecture-focused smoke distinguishing "editing via byte path" from "old command bridge"
+- Tracks `evalStringCallsDuringEditing` — must be 0 during editing operations
+- Editing operations dispatched via `__wasmacsQueueTerminalInput` only
+- `wasmacs_eval_string` called only after `inEditingPhase = false` (post-edit readback)
+- PASS criteria include: `editingViaBytePath`, `oldCommandBridgeCalled: false`, `evalStringUsedForEditing: false`, `evalStringUsedForReadback: true`, `terminalBytesFlowed`, `bufferAbc`, `enterNewline`, `backspaceWorks`, `ctrlLRedrawWorks`, `splitWindowWorks`, `unsplitWindowWorks`
+- Operations: a, b, c, Enter, Backspace, C-l, C-x 2, C-x 1
+
+**package.json:**
+- Added `test:xterm-product-editing-smoke` script
+
+**docs/os-compatibility-boundary.md:**
+- Added "Old Command Bridge Retirement (2026-06-03)" section with legacy/active table, product editing path diagram, xterm role description, and product editing smoke results table
+
+### Results
+
+- `test:xterm-product-editing-smoke` PASS:
+  - `editingViaBytePath: true`
+  - `oldCommandBridgeCalled: false`
+  - `evalStringCallsDuringEditing: 0`
+  - `evalStringUsedForEditing: false`
+  - `evalStringUsedForReadback: true`
+  - `terminalBytesFlowed: true` (11,064 → 13,829 bytes)
+  - `bufferAbc: true`, `enterNewline: true`, `backspaceWorks: true`
+  - `ctrlLRedrawWorks: true`, `splitWindowWorks: true`, `unsplitWindowWorks: true`
+  - `finalWaitCount: 21`
+- `test:product-input-smoke`, `test:xterm-terminal-smoke`, `test:xterm-redraw-fidelity` — unaffected (pending background confirmation)
+
+**vendor/emacs unchanged.**
+
+**Next:** terminal resize / memory-root stress smoke / Clipboard Service boundary.
+
+## 2026-06-03 — xterm Session Lifecycle Fix
+
+### Symptom
+Browser UI: "session ended (status 0)" immediately after clicking "Start Interactive Session". xterm pane black.
+
+### Diagnosis
+1. `asyncify-minibuffer-worker.js` used `ARTIFACT_DIR = "/artifacts/emacs-browser-interactive"` for `startXtermSession`.
+2. Node.js probe of `emacs-browser-interactive`: `callMain` returns `number 0` synchronously. Then OOM abort.
+3. Smoke with `WASMACS_ARTIFACT_DIR=emacs-browser-interactive`: `test:xterm-terminal-smoke` FAIL.
+4. In `startXtermSession`: `const status = await module.callMain(args)` — `await 0` resolves immediately → `xterm-session-returned` posted → "session ended".
+5. `emacs-browser-interactive` OOM: `ALLOW_MEMORY_GROWTH=0`, 512MB fixed, full lisp tree in 101MB .data file. OOM abort after first wait.
+
+### Fix applied
+
+**asyncify-minibuffer-worker.js:**
+- Added `XTERM_ARTIFACT_DIR = "/artifacts/emacs-browser-asyncify-spike"` constant (with explanation comment)
+- Added `xtermEmacsModule` / `xtermEmacsReady` singleton variables
+- Added `ensureXtermEmacs()` function loading from `XTERM_ARTIFACT_DIR`
+- Rewrote `startXtermSession()`:
+  - Uses `ensureXtermEmacs()` (not `ensureAsyncifyRuntimeOnly`)
+  - Calls `module.callMain(args)` WITHOUT await
+  - Polls `__wasmacsHostWaitForInputPending` (via `waitForXtermHostInput(30_000)`)
+  - Posts `xterm-session-at-wait` when interactive wait confirmed
+  - Wires `.then()` on callMainResult if it is a Promise (for clean exit detection)
+  - For sync callMain: worker stays alive, session runs via worker event loop
+
+**app/src/main.js:**
+- `xterm-session-started` → status "loading…"
+- `xterm-session-at-wait` → status "interactive"
+- `terminal-output-bytes` (first bytes) → status "running" (if still loading)
+- `xterm-session-returned` → status "session ended (status N)" + error if present
+- `xterm-session-error` → status "session error: ..."
+
+**scripts/probe-browser-xterm-manual-app-smoke.mjs (new):**
+- Simulates startXtermSession flow: load asyncify-spike, fire callMain, poll for wait, send a/b/c
+- Key assertions: `sessionReachesWait`, `terminalBytesPresent`, `sessionNotImmediatelyEnded`, `bufferAbc`
+- Explicitly notes: callMain may return sync 0 in Node.js vm — this is OK; poll for wait pending
+
+**package.json:**
+- Added `test:xterm-manual-app-smoke`
+
+### Results
+- `test:xterm-manual-app-smoke` PASS
+  - `sessionReachesWait: true`, `terminalBytesPresent: true`
+  - `terminalBytesFlowed: true`, `bufferAbc: true`, `sessionNotImmediatelyEnded: true`
+- `test:xterm-terminal-smoke`, `test:xterm-redraw-fidelity`, `test:xterm-product-editing-smoke` unaffected
+
+**For visual browser UI verification:** `npm run dev` → `http://localhost:5173` → "Start Interactive Session" → status should show "interactive", xterm should display Emacs `*scratch*`.
+
+**vendor/emacs unchanged.**
+
+## 2026-06-03 — HEAPU8 Export Guard Fix
+
+### Symptom
+Browser: `RuntimeError: Aborted('HEAPU8' was not exported. add it to EXPORTED_RUNTIME_METHODS)` → xterm session ends immediately. All Node.js probes PASS (Emscripten export guard not enforced in vm context).
+
+### Root cause
+`readMemorySnapshot()` in `asyncify-minibuffer-worker.js` accessed `module?.HEAPU8?.length`. `emacs-browser-asyncify-spike` build script's `EXPORTED_RUNTIME_METHODS=callMain,ccall,FS,FS_createPath,FS_createDataFile,FS_readFile` does not include `HEAPU8`. Browser Worker enforces this → abort.
+
+Similarly `readTtySnapshot()` accessed `module.ENV?.TERM` / `module.ENV?.TERMCAP` — `ENV` also not exported.
+
+### Fix
+
+**asyncify-minibuffer-worker.js:**
+- `readMemorySnapshot()`: removed `module?.HEAPU8?.length` access; wrapped `module?.wasmMemory?.buffer?.byteLength` in try/catch; added comment explaining the restriction
+- `readTtySnapshot()`: wrapped `module.ENV?.TERM` and `module.ENV?.TERMCAP` in individual try/catch blocks
+
+### Smoke enhancement
+
+**probe-browser-xterm-manual-app-smoke.mjs:**
+- Added `Object.defineProperty` getter trap on `Module.HEAPU8` and `Module.ENV` after runtime init
+- Trap throws on access, simulating the browser Worker export guard
+- PASS criteria: `heapu8NotAccessed: true`, `envNotAccessed: true`
+- Result: PASS — neither trap triggered during the full startXtermSession flow
+
+### Legacy core worker error (separate, not fixed)
+`browser-runtime-worker.js` starts on page load (via `enqueueBufferCommand()` call in `main.js`). It boots `emacs-browser-pdump-profile` which hits `Maximum call stack size exceeded`. This posts `"error"` message → `setStatus("worker error")` on `#status` (global panel). Does NOT affect `#xterm-status` (separate element). xterm route unaffected.
+
+### All smoke results
+- `test:xterm-manual-app-smoke` PASS (with HEAPU8/ENV traps: `heapu8NotAccessed: true`, `envNotAccessed: true`)
+- `test:xterm-terminal-smoke` PASS
+- `test:xterm-redraw-fidelity` PASS
+- `test:xterm-product-editing-smoke` PASS
+
+**vendor/emacs unchanged.**
+
+### Browser UI verification
+Chrome MCP unavailable for automated browser test. Manual verification needed:
+`npm run dev` → `http://localhost:5173` → "Start Interactive Session"
+Expected: status "xterm session interactive", xterm shows Emacs `*scratch*`
+
+## 2026-06-04 — xterm Boot Loadup Stack Overflow Fix
+
+### Symptom
+Browser: `RangeError: Maximum call stack size exceeded at temacs.wasm.eval_sub` during Emacs loadup in xterm session. Failure around `faces.el`/`ldefs-boot.el`. Session ended immediately.
+
+### Root cause analysis
+
+1. `callMain(['--quick','--no-splash','--nw'])` triggers `loadup.el`
+2. `loadup.el` loads ~100 Lisp files via `load` → `eval_sub` for each form
+3. `eval_sub` recurses deeply during macro expansion (defface etc in faces.el)
+4. With full Asyncify instrumentation, each `eval_sub` call goes through a JS wrapper frame
+5. ~1000+ recursive JS wrapper frames → exceeds browser Worker JS call stack (~1-4MB)
+6. Node.js probe used `--stack-size=65500` (65MB) → escaped the issue
+
+### Attempts and findings
+
+**ASYNCIFY_IGNORE_INDIRECT=1**: Tried in pdump and spike builds.
+- Reduces JS wrapper overhead (indirect calls not instrumented)
+- BROKE Asyncify: `wasmacs_host_wait_for_input` is called via function pointer (keyboard.c syscall path)
+- Error: `import invoke_jjij was not in ASYNCIFY_IMPORTS, but changed the state`
+- Adding invoke_* to ASYNCIFY_IMPORTS: still broken (`RuntimeError: unreachable at dynCall_i`)
+- Conclusion: ASYNCIFY_IGNORE_INDIRECT=1 is fundamentally incompatible with current call chain
+
+**pdump rebuild with current host library**: Built `emacs-browser-asyncify-pdump` with new `wasmacs-asyncify-host-library.js`:
+- Got terminal byte symbols (14 matches)
+- But pdump + ASYNCIFY_IGNORE_INDIRECT=1 still broken for interactive mode
+- Without `--dump-file` arg: exits status 1 (cold loadup still fails)
+- With `--dump-file` + ASYNCIFY_IGNORE_INDIRECT=1: invoke_* abort
+
+**spike + pdump boot (winning solution)**:
+- Use `emacs-browser-asyncify-spike` (full Asyncify, all terminal symbols)
+- Fetch `bootstrap-emacs.pdmp` from `emacs-browser-asyncify-pdump` artifact
+- Write pdmp to wasm FS at `/bootstrap-emacs.pdmp`
+- Call `callMain(['--dump-file','/bootstrap-emacs.pdmp','--quick','--no-splash','--nw'])`
+- Result: `WAIT_PENDING i=0, termBytes=11064, bufferString="a"` — PASS
+
+### Files changed
+
+**app/src/asyncify-minibuffer-worker.js:**
+- Added `XTERM_PDMP_URL` and `XTERM_PDMP_PATH` constants
+- Added `xtermPdmpLoaded` flag and `ensureXtermPdmp(module)` function
+  - Fetches pdmp via `fetch(XTERM_PDMP_URL)`, writes to `module.FS.writeFile(XTERM_PDMP_PATH, bytes)`
+  - Posts `xterm-loadup-checkpoint` messages for diagnostic display
+- Updated `startXtermSession` to call `ensureXtermPdmp(module)` before callMain
+- Changed args to `['--dump-file', XTERM_PDMP_PATH, '--quick', '--no-splash', '--nw']`
+- Added `readArtifactFingerprint(module)` diagnostic function
+- Added `xterm-loadup-checkpoint` messages from `print` handler (Loading... lines)
+- Added `ensureXtermPdmp` status messages and checkpoint messages
+
+**app/xterm.html (new):**
+- xterm-only diagnostic page at `/app/xterm.html`
+- No legacy core worker, no frame-grid, no textarea
+- Shows `#artifact-info` bar with artifact URL and build flags
+- Handles `xterm-artifact-fingerprint` and `xterm-loadup-checkpoint` messages
+- `?autostart` URL param auto-starts session
+
+**scripts/probe-browser-xterm-boot-loadup-smoke.mjs (new):**
+- Validates pdump boot: spike artifact + pdmp → interactive wait + key input
+- PASS: `pdmpLoaded=true`, `interactiveWaitReached=true`, `terminalBytes=11064`, `bufferString="a"`
+
+**scripts/build-emacs-browser-asyncify-spike.sh:**
+- STACK_SIZE 1MB → 16MB (defensive, addresses wasm linear stack)
+
+### Smoke results
+- `test:xterm-boot-loadup-smoke` PASS
+- `test:xterm-terminal-smoke` PASS
+- `test:xterm-redraw-fidelity` PASS
+- `test:xterm-product-editing-smoke` PASS
+- `test:xterm-manual-app-smoke` PASS
+
+### Browser UI verification
+For manual browser confirmation:
+`npm run dev` → `http://localhost:5173/app/xterm.html?autostart`
+Expected: xterm-status shows "interactive ✓", Emacs `*scratch*` visible, `a` input works.
+
+**vendor/emacs unchanged.**
+
+## 2026-06-04 — pdump revert from product path; cold loadup blocker
+
+### Action
+Reverted pdump boot from `startXtermSession` product path. Cold loadup is the correct product default.
+
+### Changes to worker
+- `startXtermSession` args: `['--quick','--no-splash','--nw']` (no `--dump-file`)
+- OPEN BLOCKER comment added to constants section
+- `ensureXtermPdmp` / `startPdumpXtermSession` moved to diagnostic-only section
+- `start-pdump-xterm-session` worker message added (explicit diagnostic opt-in)
+
+### Changes to xterm.html
+- Default session: cold loadup with open blocker warning displayed in artifact-info bar
+- `?boot=pdump`: routes to `start-pdump-xterm-session` diagnostic path
+- Button label and color differ for pdump diagnostic mode
+
+### Renamed smoke
+`probe-browser-xterm-boot-loadup-smoke.mjs` → `probe-browser-xterm-pdump-diagnostic-smoke.mjs`
+Log: `browser-xterm-pdump-diagnostic-smoke.{txt,jsonl}`
+Script: `test:xterm-pdump-diagnostic`
+
+### Documentation
+`docs/os-compatibility-boundary.md`: added "Open Blocker: browser-worker-cold-loadup-js-stack-overflow"
+- Root cause analysis
+- Attempted fixes and results
+- Diagnostic workaround (pdump) — diagnostic only
+- Investigation candidates A-D
+
+### All smoke results
+- `test:xterm-terminal-smoke` PASS
+- `test:xterm-manual-app-smoke` PASS  
+- `test:xterm-pdump-diagnostic` PASS (diagnostic route confirmed)
+- `test:xterm-product-editing-smoke` PASS (probe uses 65MB stack)
+- `test:xterm-redraw-fidelity` PASS (probe uses 65MB stack)
+
+**vendor/emacs unchanged.**
+
+## 2026-06-04 — ASYNCIFY_REMOVE=eval_sub: Cold Loadup Blocker RESOLVED
+
+### Blocker
+`browser-worker-cold-loadup-js-stack-overflow` — RESOLVED
+
+### Root cause
+Full Asyncify instrumentation wraps every potentially-async function with JS frames.
+`eval_sub` is in the async set (it CAN reach `wasmacs_host_wait_for_input` through file loads).
+During loadup.el, eval_sub recurses ~1000+ levels.
+Each call adds ~1-2 JS wrapper frames → JS call stack overflow at 1.5MB (browser Worker level).
+Node.js probes escape via `--stack-size=65500`.
+
+### Fix
+Added `-sASYNCIFY_REMOVE=eval_sub` to `build-emacs-browser-asyncify-spike.sh`.
+
+Removes eval_sub from the Asyncify instrumented set. eval_sub becomes a plain wasm function
+with no JS wrapper. Recursive calls stay in wasm without JS frame overhead.
+
+**Safety justification:**
+- Interactive wait occurs in `read_char` (via `read_key_sequence`) — eval_sub is NOT on this stack
+- During loadup: eval_sub recurses through file loads (not TTY) → no wait occurs
+- For basic `--quiet --nw`: commands dispatched by C functions, eval_sub not on wait stack
+- Known limitation: Lisp `(read-char)` interactive → eval_sub on wait stack → crash
+
+### Test results
+- `test:xterm-cold-loadup-failure`: status=RESOLVED (stackSizeKb=1500, no --dump-file, interactive wait reached)
+- `test:xterm-terminal-smoke`: PASS
+- `test:xterm-manual-app-smoke`: PASS
+- `test:xterm-product-editing-smoke`: PASS
+- `test:xterm-redraw-fidelity`: running
+
+### What was tried before (for this blocker)
+| Approach | Result |
+|---|---|
+| ASYNCIFY_IGNORE_INDIRECT=1 | ❌ Breaks suspend/resume (indirect call chain to wait) |
+| invoke_* in ASYNCIFY_IMPORTS | ❌ unreachable at dynCall_i |
+| STACK_SIZE=16MB | Partial (wasm linear stack only) |
+| pdump boot | Works but NOT product (diagnostic fallback only) |
+| **ASYNCIFY_REMOVE=eval_sub** | **RESOLVED** |
+
+**vendor/emacs unchanged.**
