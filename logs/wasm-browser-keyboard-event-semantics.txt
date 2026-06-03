@@ -1,0 +1,219 @@
+CASE:keyboard-event-semantics
+t=131ms  checkpoint=after-boot
+t=36156ms  checkpoint=first-wait  waitId=1
+t=36158ms  checkpoint=initial-state
+t=66178ms  checkpoint=key-printable-a
+t=96181ms  checkpoint=key-printable-b
+t=126182ms  checkpoint=key-printable-c
+t=156185ms  checkpoint=key-enter-cr
+t=186187ms  checkpoint=key-backspace-del
+t=216188ms  checkpoint=key-cg-quit
+t=247194ms  checkpoint=key-escape-prefix
+t=277206ms  checkpoint=key-after-escape
+t=277206ms  checkpoint=all-keys-complete
+EXIT_STATUS:0
+SIGNAL:null
+TIMEOUT:false
+STDOUT_BEGIN
+
+STDOUT_END
+STDERR_BEGIN
+
+STDERR_END
+SUMMARY_BEGIN
+{
+  "status": "PASS",
+  "timedOut": false,
+  "exitStatus": 0,
+  "signal": null,
+  "checkpoints": [
+    "after-boot",
+    "first-wait",
+    "initial-state",
+    "key-printable-a",
+    "key-printable-b",
+    "key-printable-c",
+    "key-enter-cr",
+    "key-backspace-del",
+    "key-cg-quit",
+    "key-escape-prefix",
+    "key-after-escape",
+    "all-keys-complete"
+  ],
+  "hasFirstWait": true,
+  "hasInitialState": true,
+  "hasAllKeys": true,
+  "printableADequeued": true,
+  "printableAResumed": true,
+  "printableANextWait": true,
+  "cgLoopSurvived": true,
+  "evalWorked": true,
+  "evalBusy": false,
+  "bufferContents": [
+    {
+      "label": "printable-a",
+      "bufferString": "a",
+      "point": "2",
+      "lastCommand": "self-insert-command",
+      "thisCommand": "nil"
+    },
+    {
+      "label": "printable-b",
+      "bufferString": "ab",
+      "point": "3",
+      "lastCommand": "self-insert-command",
+      "thisCommand": "nil"
+    },
+    {
+      "label": "printable-c",
+      "bufferString": "abc",
+      "point": "4",
+      "lastCommand": "self-insert-command",
+      "thisCommand": "nil"
+    },
+    {
+      "label": "enter-cr",
+      "bufferString": "abc\n",
+      "point": "5",
+      "lastCommand": "newline",
+      "thisCommand": "nil"
+    },
+    {
+      "label": "backspace-del",
+      "bufferString": "abc",
+      "point": "4",
+      "lastCommand": "delete-backward-char",
+      "thisCommand": "nil"
+    },
+    {
+      "label": "cg-quit",
+      "bufferString": "abc",
+      "point": "4",
+      "lastCommand": "keyboard-quit",
+      "thisCommand": "nil"
+    },
+    {
+      "label": "escape-prefix",
+      "bufferString": "abc",
+      "point": "4",
+      "lastCommand": "keyboard-quit",
+      "thisCommand": "nil"
+    },
+    {
+      "label": "after-escape",
+      "bufferString": "M-x ",
+      "point": "5",
+      "lastCommand": "execute-extended-command",
+      "thisCommand": "nil"
+    }
+  ],
+  "allKeys": [
+    {
+      "label": "printable-a",
+      "bytes": [
+        97
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "waitCountIncreased": true,
+      "evalStatus": 0,
+      "lastCommand": "self-insert-command",
+      "bufferStringLength": 1
+    },
+    {
+      "label": "printable-b",
+      "bytes": [
+        98
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "waitCountIncreased": true,
+      "evalStatus": 0,
+      "lastCommand": "self-insert-command",
+      "bufferStringLength": 2
+    },
+    {
+      "label": "printable-c",
+      "bytes": [
+        99
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "waitCountIncreased": true,
+      "evalStatus": 0,
+      "lastCommand": "self-insert-command",
+      "bufferStringLength": 3
+    },
+    {
+      "label": "enter-cr",
+      "bytes": [
+        13
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "waitCountIncreased": true,
+      "evalStatus": 0,
+      "lastCommand": "newline",
+      "bufferStringLength": 4
+    },
+    {
+      "label": "backspace-del",
+      "bytes": [
+        127
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "waitCountIncreased": true,
+      "evalStatus": 0,
+      "lastCommand": "delete-backward-char",
+      "bufferStringLength": 3
+    },
+    {
+      "label": "cg-quit",
+      "bytes": [
+        7
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "waitCountIncreased": true,
+      "evalStatus": 0,
+      "lastCommand": "keyboard-quit",
+      "bufferStringLength": 3
+    },
+    {
+      "label": "escape-prefix",
+      "bytes": [
+        27
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "waitCountIncreased": true,
+      "evalStatus": 0,
+      "lastCommand": "keyboard-quit",
+      "bufferStringLength": 3
+    },
+    {
+      "label": "after-escape",
+      "bytes": [
+        120
+      ],
+      "byteDequeued": true,
+      "cResumed": true,
+      "nextWaitReached": true,
+      "waitCountIncreased": true,
+      "evalStatus": 0,
+      "lastCommand": "execute-extended-command",
+      "bufferStringLength": 4
+    }
+  ],
+  "finalWaitCount": 17,
+  "finalGuardDepth": 0
+}
+SUMMARY_END

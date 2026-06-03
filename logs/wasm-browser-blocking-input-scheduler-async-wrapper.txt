@@ -70,6 +70,16 @@ SUMMARY_BEGIN
   "reachedSysdepBeforeWait": false,
   "reachedByteDequeue": false,
   "waitCountStart": 1,
-  "waitCountEnd": 1
+  "waitCountEnd": 1,
+  "promiseThenFired": null,
+  "asyncifyStateAfterResolve": null,
+  "callMainReturnedPromise": false,
+  "asyncifyStateAfterCallMain": {
+    "available": true,
+    "state": 0,
+    "currDataPresent": true,
+    "asyncPromiseHandlersPresent": false,
+    "exportCallStackLength": 0
+  }
 }
 SUMMARY_END

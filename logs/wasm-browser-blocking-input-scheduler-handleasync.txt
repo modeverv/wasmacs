@@ -12,9 +12,13 @@ CHECKPOINT:before-input-queue
 CHECKPOINT:after-input-queue-before-resolve
 CHECKPOINT:before-wait-resolver-call
 CHECKPOINT:after-wait-resolve-before-resume
-EXIT_STATUS:null
-SIGNAL:SIGTERM
-TIMEOUT:true
+CHECKPOINT:after-promise-then-poll
+CHECKPOINT:after-resume
+CHECKPOINT:after-next-wait
+CHECKPOINT:after-command-complete
+EXIT_STATUS:0
+SIGNAL:null
+TIMEOUT:false
 STDOUT_BEGIN
 READY
 CHECKPOINT:after-boot
@@ -28,6 +32,10 @@ CHECKPOINT:before-input-queue
 CHECKPOINT:after-input-queue-before-resolve
 CHECKPOINT:before-wait-resolver-call
 CHECKPOINT:after-wait-resolve-before-resume
+CHECKPOINT:after-promise-then-poll
+CHECKPOINT:after-resume
+CHECKPOINT:after-next-wait
+CHECKPOINT:after-command-complete
 STDOUT_END
 STDERR_BEGIN
 
@@ -36,8 +44,8 @@ SUMMARY_BEGIN
 {
   "status": "PASS",
   "mode": "handleAsync",
-  "exitStatus": null,
-  "signal": "SIGTERM",
+  "exitStatus": 0,
+  "signal": null,
   "checkpoints": [
     "after-boot",
     "before-tty-read",
@@ -47,29 +55,56 @@ SUMMARY_BEGIN
     "after-input-queue-before-resolve",
     "before-wait-resolver-call",
     "after-wait-resolve-before-resume",
-    "failure"
+    "after-promise-then-poll",
+    "after-resume",
+    "after-next-wait",
+    "after-command-complete"
   ],
   "schedulerEventLabels": [
     "c-keyboard-read-char-reached",
     "c-keyboard-before-wait-import",
     "js-import-wait-enter",
+    "js-import-handleasync-currdata-before",
     "js-import-handleasync-enter",
     "js-import-handleasync-promise-created",
     "js-import-resolver-bound",
+    "js-import-asyncpromisehandlers-at-resolver-bound",
     "js-import-handleasync-returning",
     "js-import-resolver-called",
-    "js-import-resolve-after"
+    "js-import-resolve-after",
+    "js-import-promise-then",
+    "js-import-promise-then-asyncify-state",
+    "c-keyboard-after-wait-return",
+    "js-terminal-read-byte-enter",
+    "js-terminal-read-byte-dequeue",
+    "c-sysdep-byte-dequeued"
   ],
-  "snapshotCount": 9,
-  "lastCheckpoint": "failure",
-  "queuedWasConsumed": false,
+  "snapshotCount": 12,
+  "lastCheckpoint": "after-command-complete",
+  "queuedWasConsumed": true,
   "resolverCleared": true,
   "cKeyboardAfterWaitReturnBeforeResolver": false,
-  "cKeyboardAfterWaitReturnAfterResolver": false,
+  "cKeyboardAfterWaitReturnAfterResolver": true,
   "reachedHandleAsync": true,
   "reachedSysdepBeforeWait": false,
-  "reachedByteDequeue": false,
+  "reachedByteDequeue": true,
   "waitCountStart": 1,
-  "waitCountEnd": 1
+  "waitCountEnd": 3,
+  "promiseThenFired": false,
+  "asyncifyStateAfterResolve": {
+    "available": true,
+    "state": 0,
+    "currDataPresent": true,
+    "asyncPromiseHandlersPresent": false,
+    "exportCallStackLength": 0
+  },
+  "callMainReturnedPromise": false,
+  "asyncifyStateAfterCallMain": {
+    "available": true,
+    "state": 0,
+    "currDataPresent": true,
+    "asyncPromiseHandlersPresent": false,
+    "exportCallStackLength": 0
+  }
 }
 SUMMARY_END

@@ -117,7 +117,7 @@ function runParentMode(mode) {
     "after-input-queue-before-resolve",
   ];
   const required = mode === "handleAsync"
-    ? [...requiredBase, "before-wait-resolver-call"]
+    ? [...requiredBase, "before-wait-resolver-call", "after-promise-then-poll"]
     : [...requiredBase, "before-wait-resolver-call", "after-wait-resolve-before-resume"];
   const hasRequired = required.every((checkpoint) => checkpointNames.has(checkpoint));
   const hasResumeEvidence =
@@ -173,6 +173,10 @@ function runParentMode(mode) {
     reachedByteDequeue: snapshots.some((snapshot) => snapshot.scheduler.boundarySeen?.jsTerminalReadByteDequeue),
     waitCountStart: snapshots.find((snapshot) => snapshot.checkpoint === "pending-input")?.scheduler.waitCount,
     waitCountEnd: snapshots.at(-1)?.scheduler?.waitCount,
+    promiseThenFired: snapshots.find((s) => s.checkpoint === "after-promise-then-poll")?.details?.promiseThenFired ?? null,
+    asyncifyStateAfterResolve: snapshots.find((s) => s.checkpoint === "after-promise-then-poll")?.details?.asyncifyOuterState ?? null,
+    callMainReturnedPromise: snapshots.find((s) => s.checkpoint === "before-asyncify-wait")?.details?.callMainReturnedPromise ?? null,
+    asyncifyStateAfterCallMain: snapshots.find((s) => s.checkpoint === "before-asyncify-wait")?.asyncify?.outerState ?? null,
   };
   appendFileSync(modeTextLogPath, [
     "SUMMARY_BEGIN",
@@ -272,6 +276,17 @@ try {
   schedulerPhase = "wait-resolved";
   recordCheckpoint("after-wait-resolve-before-resume", { resolvedWaitId });
 
+  // Poll for js-import-promise-then to confirm the inner .then chain fires.
+  // In handleAsync mode this is the critical missing link before doRewind.
+  const promiseThenPolled = await pollForSchedulerEvent("js-import-promise-then", 2000);
+  recordCheckpoint("after-promise-then-poll", {
+    resolvedWaitId,
+    promiseThenFired: promiseThenPolled,
+    asyncifyOuterState: typeof context.__wasmacsGetAsyncifyState === "function"
+      ? context.__wasmacsGetAsyncifyState()
+      : null,
+  });
+
   await new Promise((resolve) => setTimeout(resolve, 0));
   schedulerPhase = "resumed";
   updateRepeatedWaitCount();
@@ -309,6 +324,9 @@ function recordCheckpoint(checkpoint, details = {}) {
     asyncify: {
       waitActive: scheduler.waitActive,
       waitCount: scheduler.waitCount,
+      outerState: typeof context.__wasmacsGetAsyncifyState === "function"
+        ? context.__wasmacsGetAsyncifyState()
+        : { available: false },
     },
     pendingCommandState: safeCcallString("wasmacs_os_pending_command_state"),
     lifecycle: readDiagnosticJson("wasmacs_os_lifecycle_state"),
@@ -359,6 +377,9 @@ function readSchedulerSnapshot() {
       jsImportResolverCalled: events.some((event) => event.label === "js-import-resolver-called"),
       jsImportResolveAfter: events.some((event) => event.label === "js-import-resolve-after"),
       jsImportPromiseThen: events.some((event) => event.label === "js-import-promise-then"),
+      jsImportHandleAsyncCurrdataBefore: events.some((event) => event.label === "js-import-handleasync-currdata-before"),
+      jsImportAsyncpromisehandlersAtResolverBound: events.some((event) => event.label === "js-import-asyncpromisehandlers-at-resolver-bound"),
+      jsImportPromiseThenAsyncifyState: events.some((event) => event.label === "js-import-promise-then-asyncify-state"),
       cSysdepBeforeWait: events.some((event) => event.label === "c-sysdep-before-wait"),
       cSysdepAfterWaitReturn: events.some((event) => event.label === "c-sysdep-after-wait-return"),
       jsTerminalReadByteDequeue: events.some((event) => event.label === "js-terminal-read-byte-dequeue"),
@@ -405,6 +426,16 @@ function updateRepeatedWaitCount() {
 
 function currentWaitId() {
   return context.__wasmacsHostWaitForInputCount || 0;
+}
+
+async function pollForSchedulerEvent(label, ms) {
+  const start = Date.now();
+  while (Date.now() - start < ms) {
+    const events = Array.from(context.__wasmacsSchedulerEvents || []);
+    if (events.some((e) => e.label === label)) return true;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  return false;
 }
 
 function eventBefore(snapshots, firstLabel, secondLabel) {

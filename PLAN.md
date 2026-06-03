@@ -2363,3 +2363,127 @@ Validation notes:
   Emscripten export/callMain Asyncify resume handoff (`Asyncify.currData`,
   `asyncPromiseHandlers`, and async-aware invocation) before moving to
   `sysdep.c` tty dequeue.
+
+### 2026-06-03: Asyncify Outer Entrypoint / callMain Resume Boundary
+
+Evidence:
+
+- Added `scripts/probe-browser-asyncify-outer-resume.mjs` with minimal C
+  fixture (`tests/fixtures/asyncify-outer-resume.c` +
+  `tests/fixtures/asyncify-outer-resume-library.js`) to compare `callMain`,
+  `ccall+{async:true}`, and direct `_fn()` export as outer invocation methods.
+  Result: all three resume C correctly. The outer invocation form is NOT the
+  root cause of the blocking-input-scheduler handleAsync failure.
+
+- Root cause of the original probe failure identified and fixed: the single
+  `await setTimeout(0)` in the probe was insufficient to drain the vm context's
+  microtask queue after `resolve(0)` is called cross-context. The fix is
+  polling (`pollForSchedulerEvent`, 200 × 10ms). This is a Node.js probe
+  harness artifact.
+
+- handleAsync mode now PASSES `probe-browser-blocking-input-scheduler.mjs`:
+  `js-import-promise-then` fires, `c-keyboard-after-wait-return` is reached
+  after resolve, `js-terminal-read-byte-dequeue` is reached,
+  `c-sysdep-byte-dequeued` is reached, byte `[97]` consumed,
+  `waitCountEnd: 3` (interactive loop alive), `lastCheckpoint: after-command-complete`.
+
+Next diagnostic target:
+
+- `c-sysdep-before-wait` is still NOT reached (the wait import is invoked from
+  `keyboard.c`, not through `sysdep.c`'s `read_avail_input` path).
+- Confirm the byte delivery path from `wasmacs_host_terminal_read_byte` →
+  `sysdep.c` read buffer → `keyboard.c` `read_char`.
+- Consider if `handleAsync` mode can be promoted toward product-adjacent use or
+  if it needs a product-path redesign first.
+
+### 2026-06-03: handleAsync Product-Candidate Smoke
+
+Evidence from `probe-browser-blocking-input-handleasync-loop.mjs`:
+
+- 5 consecutive input rounds (a, b, c, xy, C-g) all PASS
+- FIFO byte order confirmed across separate waits
+- Multi-byte queue drain (2 bytes in one wait) confirmed
+- C-g (0x07) transport boundary confirmed (command loop survives)
+- Timeout stability confirmed (wait/resolver persist with no input)
+- monotone waitCount: 1→3→5→7→9→11→13
+- finalGuardDepth: 0 (GC fence closed)
+
+`wasmacs_host_wait_for_input` import contract is confirmed as:
+  `Asyncify.handleAsync` form only. `async-wrapper` is known-broken.
+
+handleAsync is classified as **diagnostic success / product candidate**.
+
+Not yet product path:
+- Needs wasm artifact rebuild with handleAsync as default mode
+- Needs browser/Web Worker verification (probe runs in Node.js vm only)
+- Needs error recovery path verification (abort during wait)
+
+Next steps in order:
+1. Rebuild wasm artifact with `WASMACS_WAIT_IMPORT_MODE=handleAsync` as default
+   (change `wasmacs-asyncify-host-library.js` default from "async-wrapper" to "handleAsync")
+2. Run `npm run test:blocking-input-scheduler` and `npm run test:handleasync-loop`
+   with the rebuilt artifact
+3. Verify in browser/Web Worker context
+4. If browser test passes: promote handleAsync to product path
+
+OR:
+4. If keyboard.c / C-g semantics are the next priority: observe how Emacs
+   handles the quit signal (C-g → `Fkeyboard_quit`) after byte transport is
+   confirmed working.
+
+## Phase: handleAsync Product Default (2026-06-03)
+
+**Status: COMPLETE**
+
+### Completed
+- [x] Changed default mode to `handleAsync` in `wasmacs-asyncify-host-library.js`
+- [x] Artifact rebuilt; generated JS verified
+- [x] `test:blocking-input-scheduler` passes without env var
+- [x] `test:handleasync-loop` passes without env var
+- [x] `probe-browser-worker-handleasync-input-smoke.mjs` created and passing
+- [x] `npm test` passes
+- [x] docs/os-compatibility-boundary.md updated
+- [x] LOG.md / PLAN.md / MEMORY.md updated
+
+### Remaining before full product integration
+- [ ] Error recovery path (abort/crash during Asyncify wait)
+- [ ] Product command loop entrypoint integration
+- [ ] Real browser Web Worker validation (Chrome + dev server)
+
+### Decision point
+Next work is one of:
+1. **keyboard.c event semantics** — how Emacs processes key events in the
+   command loop (following the byte transport now confirmed working)
+2. **C-g semantics** — `Fkeyboard_quit` response after C-g byte transport
+3. **Product editor input integration** — wire handleAsync into the product
+   command loop so real keystrokes reach Emacs in the browser app
+
+## Phase: keyboard.c Event Semantics (2026-06-03)
+
+**Status: COMPLETE**
+
+### Completed
+- [x] `probe-browser-keyboard-event-semantics.mjs` — 8 keys observed
+- [x] `wasmacs_eval_string` confirmed callable at wait points (command_busy=0)
+- [x] Buffer text / point / last-command readback confirmed
+- [x] self-insert-command, newline, delete-backward-char, keyboard-quit,
+      execute-extended-command all confirmed
+- [x] C-g loop survival confirmed
+- [x] ESC prefix + ESC+x = M-x execute-extended-command confirmed
+- [x] finalGuardDepth=0
+- [x] `npm test` passes
+
+### Observation notes
+- `wasmacs_eval_string` at wait point: status 0 (success), not 3 (busy)
+- `command-state = idle` at all wait points
+- `this-command = nil` at wait points (command already completed)
+- ESC-prefix uses 2 waits (ESC wait + x wait), with ESC consuming the prefix map
+- Buffer name = `*scratch*` in `--quick` mode
+
+### Next: Product Editor Input Integration
+Wire `handleAsync` into the browser app's command loop:
+1. The `wasm-worker.js` Web Worker currently runs persistent-spike commands
+2. A new input-handling path needs to route keyboard events → byte queue → wait
+   resolver in the correct order
+3. The `asyncify-minibuffer-worker.js` already has the wait resolver pattern
+4. Decision: whether to update `wasm-worker.js` or build a dedicated input worker

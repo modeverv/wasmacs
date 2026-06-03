@@ -31,7 +31,17 @@ mergeInto(LibraryManager.library, {
     "globalThis.__wasmacsSchedulerEventSeq = globalThis.__wasmacsSchedulerEventSeq || 0;",
     "globalThis.__wasmacsPromiseSeq = globalThis.__wasmacsPromiseSeq || 0;",
     "globalThis.__wasmacsWaitPromiseState = globalThis.__wasmacsWaitPromiseState || {};",
-    "globalThis.__wasmacsWaitImportMode = globalThis.__wasmacsWaitImportMode || (typeof process !== 'undefined' && process.env && process.env.WASMACS_WAIT_IMPORT_MODE) || 'async-wrapper';",
+    "globalThis.__wasmacsWaitImportMode = globalThis.__wasmacsWaitImportMode || (typeof process !== 'undefined' && process.env && process.env.WASMACS_WAIT_IMPORT_MODE) || 'handleAsync'; // product-default-candidate; use WASMACS_WAIT_IMPORT_MODE=async-wrapper for known-broken comparison",
+    "globalThis.__wasmacsGetAsyncifyState = function () {",
+    "  if (typeof Asyncify === 'undefined') { return { available: false }; }",
+    "  return {",
+    "    available: true,",
+    "    state: Asyncify.state,",
+    "    currDataPresent: !!Asyncify.currData,",
+    "    asyncPromiseHandlersPresent: !!Asyncify.asyncPromiseHandlers,",
+    "    exportCallStackLength: Asyncify.exportCallStack ? Asyncify.exportCallStack.length : -1,",
+    "  };",
+    "};",
     "globalThis.__wasmacsTerminalRows = globalThis.__wasmacsTerminalRows || 24;",
     "globalThis.__wasmacsTerminalCols = globalThis.__wasmacsTerminalCols || 80;",
     "globalThis.__wasmacsQueueTerminalInput = function (bytes) {",
@@ -56,6 +66,10 @@ mergeInto(LibraryManager.library, {
     "    8: 'js-import-handleasync-enter',",
     "    9: 'js-import-handleasync-promise-created',",
     "    13: 'js-import-handleasync-returning',",
+    "    14: 'js-import-handleasync-currdata-before',",
+    "    15: 'js-import-asyncpromisehandlers-at-resolver-bound',",
+    "    16: 'js-import-promise-then-asyncify-state',",
+    "    17: 'js-import-outer-entrypoint-currdata-present',",
     "    10: 'js-terminal-read-byte-enter',",
     "    11: 'js-terminal-read-byte-dequeue',",
     "    12: 'js-terminal-read-byte-empty',",
@@ -167,7 +181,7 @@ mergeInto(LibraryManager.library, {
     var mode =
       globalThis.__wasmacsWaitImportMode ||
       (typeof process !== "undefined" && process.env && process.env.WASMACS_WAIT_IMPORT_MODE) ||
-      "async-wrapper";
+      "handleAsync"; // product-default-candidate; async-wrapper = known-broken comparison
     globalThis.__wasmacsHostWaitForInputCount =
       (globalThis.__wasmacsHostWaitForInputCount || 0) + 1;
     var waitId = globalThis.__wasmacsHostWaitForInputCount;
@@ -176,6 +190,13 @@ mergeInto(LibraryManager.library, {
       globalThis.__wasmacsRecordSchedulerCheckpoint(1, { waitId: waitId, mode: mode });
 
     if (mode === "handleAsync") {
+      globalThis.__wasmacsRecordSchedulerCheckpoint &&
+        globalThis.__wasmacsRecordSchedulerCheckpoint(14, {
+          waitId: waitId,
+          mode: mode,
+          currDataPresentBeforeHandleAsync: (typeof Asyncify !== "undefined") ? !!Asyncify.currData : null,
+          asyncPromiseHandlersPresentBeforeHandleAsync: (typeof Asyncify !== "undefined") ? !!Asyncify.asyncPromiseHandlers : null,
+        });
       return Asyncify.handleAsync(function () {
         globalThis.__wasmacsRecordSchedulerCheckpoint &&
           globalThis.__wasmacsRecordSchedulerCheckpoint(8, { waitId: waitId, mode: mode });
@@ -228,6 +249,13 @@ mergeInto(LibraryManager.library, {
               createdPromiseId: createdPromiseId,
               resolverPromiseId: createdPromiseId,
             });
+          globalThis.__wasmacsRecordSchedulerCheckpoint &&
+            globalThis.__wasmacsRecordSchedulerCheckpoint(15, {
+              waitId: waitId,
+              mode: mode,
+              asyncPromiseHandlersPresentAtResolverBound: (typeof Asyncify !== "undefined") ? !!Asyncify.asyncPromiseHandlers : null,
+              currDataPresentAtResolverBound: (typeof Asyncify !== "undefined") ? !!Asyncify.currData : null,
+            });
 
           if (typeof self !== "undefined" &&
               typeof self.postMessage === "function" &&
@@ -241,6 +269,11 @@ mergeInto(LibraryManager.library, {
         globalThis.__wasmacsWaitPromiseState[waitId].returnedExpressionPromiseId = thenPromiseId;
         var returnedExpression = promise.then(function (value) {
           globalThis.__wasmacsWaitPromiseState[waitId].thenReached = true;
+          var asyncifyAtThen = (typeof Asyncify !== "undefined") ? {
+            state: Asyncify.state,
+            currDataPresent: !!Asyncify.currData,
+            asyncPromiseHandlersPresent: !!Asyncify.asyncPromiseHandlers,
+          } : null;
           globalThis.__wasmacsRecordSchedulerCheckpoint &&
             globalThis.__wasmacsRecordSchedulerCheckpoint(4, {
               waitId: waitId,
@@ -248,6 +281,11 @@ mergeInto(LibraryManager.library, {
               createdPromiseId: createdPromiseId,
               thenPromiseId: thenPromiseId,
               value: value,
+            });
+          globalThis.__wasmacsRecordSchedulerCheckpoint &&
+            globalThis.__wasmacsRecordSchedulerCheckpoint(16, {
+              waitId: waitId,
+              asyncifyAtThen: asyncifyAtThen,
             });
           return value;
         });
@@ -262,6 +300,11 @@ mergeInto(LibraryManager.library, {
             returnedExpressionPromiseId: thenPromiseId,
             actualReturnedPromiseId: "asyncify-handleAsync",
             asyncifyHandleAsyncOwnsSuspend: true,
+            asyncifyStateAtReturning: (typeof Asyncify !== "undefined") ? {
+              state: Asyncify.state,
+              currDataPresent: !!Asyncify.currData,
+              asyncPromiseHandlersPresent: !!Asyncify.asyncPromiseHandlers,
+            } : null,
           });
         return returnedExpression;
       });

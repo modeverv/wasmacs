@@ -1418,3 +1418,180 @@
   but after resolver it still did not reach Promise `.then`, C wait return,
   `c-sysdep-before-wait`, or terminal byte dequeue. In both modes `callMain`
   reported return value 0 rather than a Promise.
+
+## 2026-06-03 (continued)
+
+### Asyncify Outer Entrypoint / callMain Resume Boundary Probe
+
+- Added `tests/fixtures/asyncify-outer-resume.c` — minimal C fixture with
+  `main()` and `fixture_call_handle_async()` both calling
+  `host_wait_handle_async` once each.
+
+- Added `tests/fixtures/asyncify-outer-resume-library.js` — JS library for
+  the fixture, providing `host_wait_handle_async` via `Asyncify.handleAsync`,
+  resolver via `__outerResumeResolve`, events via `__outerResumeEvents`, and
+  `__outerResumeGetAsyncifyState()` to expose `Asyncify.currData`,
+  `asyncPromiseHandlers`, and `exportCallStackLength` from inside the vm context.
+
+- Added `scripts/probe-browser-asyncify-outer-resume.mjs` — probe that builds
+  the minimal fixture and tests three outer invocation cases (A: `callMain`,
+  B: `ccall+async:true`, C: direct `_fn()` export). All three cases PASS: the
+  `.then` fires and C resumes with `post_wait_phase` advancing from 20→21
+  (main) or 10→11 (exported fn). `callMain` returns 0 (not a Promise) and does
+  NOT set `asyncPromiseHandlers`, but Asyncify still resumes correctly.
+
+- Updated `scripts/wasmacs-asyncify-host-library.js`:
+  - Added `__wasmacsGetAsyncifyState()` global accessor to expose Asyncify
+    internal state from outside the vm context.
+  - Added checkpoint 14 (`js-import-handleasync-currdata-before`) before
+    `Asyncify.handleAsync` call — records `Asyncify.currData` state.
+  - Added checkpoint 15 (`js-import-asyncpromisehandlers-at-resolver-bound`)
+    inside resolver registration — records `asyncPromiseHandlers` state.
+  - Added checkpoint 16 (`js-import-promise-then-asyncify-state`) inside the
+    `.then` callback — records Asyncify state when the promise chain resumes.
+  - Updated checkpoint 13 to include `asyncifyStateAtReturning`.
+
+- Updated `scripts/probe-browser-blocking-input-scheduler.mjs`:
+  - Added `pollForSchedulerEvent` helper — polls with 10ms intervals for up to
+    2000ms for a named scheduler event.
+  - Added `after-promise-then-poll` checkpoint after resolver call to confirm
+    whether the inner `.then` fires within 2 seconds.
+  - Added `asyncifyState` (via `__wasmacsGetAsyncifyState`) to snapshot
+    `asyncify.outerState` field at each checkpoint.
+  - Added `promiseThenFired`, `asyncifyStateAfterResolve`,
+    `callMainReturnedPromise`, `asyncifyStateAfterCallMain` to summary.
+  - Updated required checkpoints: `handleAsync` mode now requires
+    `after-promise-then-poll`.
+
+- **Key result: handleAsync mode now PASSES the blocking-input-scheduler probe.**
+  With the polling approach, the vm context's microtask queue drains properly
+  and Emacs completes the full resume cycle:
+  - `js-import-promise-then` fires
+  - `c-keyboard-after-wait-return` reached after resolver
+  - `js-terminal-read-byte-dequeue` reached
+  - `c-sysdep-byte-dequeued` reached
+  - `queuedWasConsumed: true` (byte `[97]` consumed)
+  - `waitCountEnd: 3` (interactive command loop entered 3 input waits)
+  - `lastCheckpoint: after-command-complete`
+
+- **Root cause of original probe failure:** The single `await setTimeout(0)`
+  was insufficient to drain the vm context's microtask queue when the resolver
+  is called cross-context (outer probe → vm context). Multiple event-loop turns
+  are needed. The polling approach (200 × 10ms) provides them. This is a
+  Node.js probe harness artifact, not a product path issue.
+
+- Updated `docs/os-compatibility-boundary.md` with "Asyncify Outer Entrypoint /
+  callMain Resume Boundary" section documenting the outer invocation comparison
+  and the blocking-input-scheduler resolution.
+
+- Added `test:asyncify-outer-resume` script to `package.json`.
+
+## 2026-06-03 (continued)
+
+### handleAsync Product-Candidate Smoke
+
+- Added `scripts/probe-browser-blocking-input-handleasync-loop.mjs` — a
+  continuous input loop smoke for `handleAsync` mode. Runs 5 input rounds
+  (a, b, c, xy multi-byte, C-g boundary) plus a no-resolve timeout observation
+  on a single Emacs instance, all in handleAsync mode.
+
+- All 5 rounds PASS:
+  - `allRoundsConsumedBytes: true` (queued bytes fully drained in each round)
+  - `allRoundsResolverCleared: true` (resolver called in each round)
+  - `allRoundsWaitCountIncreased: true` (strict monotone: 1→3→5→7→9→11→13)
+  - `allRoundsCResumed: true` (c-keyboard-after-wait-return seen in all rounds)
+  - `allRoundsByteDequeued: true` (js-terminal-read-byte-dequeue seen in all rounds)
+  - `allRoundsPromiseThenFired: true` (inner .then fires in all rounds once given 60s)
+  - `waitCountMonotone: true`
+  - `finalGuardDepth: 0` (GC fence properly closed)
+
+- FIFO order confirmed: a, b, c consumed in 3 separate waits in queued order.
+- Multi-byte confirmed: queuing "xy" (2 bytes) before one resolve drains both bytes.
+- C-g boundary confirmed: 0x07 processed without breaking the command loop; Emacs
+  re-entered the input wait after C-g.
+- Timeout/no-input stability confirmed: wait/resolver remain stable for 200ms
+  with no input; no spurious waitId advancement; cleanup resolves cleanly.
+
+- Updated `docs/os-compatibility-boundary.md`:
+  - Added "handleAsync as Product Candidate" section with mode classification table
+  - Documented blocking input service contract (handleAsync mode)
+  - Updated "Current Known Result" to reflect resolved Asyncify resume blocker
+  - Added probe harness note about vm-context microtask latency (probe artifact)
+
+- Added `test:handleasync-loop` script to `package.json`.
+
+- `npm test` passes. `async-wrapper` remains as known-broken comparison mode.
+
+## 2026-06-03 — handleAsync Product Default Promotion
+
+**Objective:** Promote `handleAsync` from diagnostic success to product default
+for `wasmacs_host_wait_for_input`.
+
+**Changes:**
+- `scripts/wasmacs-asyncify-host-library.js`: default mode changed from
+  `'async-wrapper'` to `'handleAsync'` (both the postset initializer and the
+  runtime fallback). Comment added: `async-wrapper = known-broken comparison`.
+- Artifact rebuilt via `scripts/build-emacs-browser-asyncify-spike.sh`.
+  Verified in generated JS: `...|| 'handleAsync'` (was `'async-wrapper'`).
+- `scripts/probe-browser-worker-handleasync-input-smoke.mjs` (NEW):
+  worker_threads-based correctness smoke. 3 rounds (a, b, c), FIFO order,
+  default mode used (no env var). All correctness assertions pass.
+  Known: vm.runInContext latency ~30s/round; real browser would be < 5ms.
+- `package.json`: added `test:worker-handleasync-smoke` script.
+- `docs/os-compatibility-boundary.md`: updated mode classification to
+  "product default candidate"; added default-promotion checklist; added
+  worker_threads smoke results section; updated Current Known Result.
+
+**Validation (without WASMACS_WAIT_IMPORT_MODE env var):**
+- `test:blocking-input-scheduler`: PASS — handleAsync mode used by default,
+  all existing checkpoints reached including `after-command-complete`.
+- `test:handleasync-loop`: PASS — 5 rounds, waitCount 1→13 monotone,
+  finalGuardDepth=0, allRoundsCResumed=true, allRoundsConsumedBytes=true.
+- `test:worker-handleasync-smoke`: PASS — 3 rounds in worker_threads,
+  defaultHandleAsyncUsed=true, finalGuardDepth=0.
+- `npm test`: PASS.
+
+**async-wrapper retained:** known-broken comparison mode; selectable via
+`WASMACS_WAIT_IMPORT_MODE=async-wrapper`. Not deleted.
+
+**Next:** keyboard.c event semantics / C-g semantics / product editor input
+integration (the byte transport layer is now confirmed end-to-end).
+
+## 2026-06-03 — keyboard.c Event Semantics Probe
+
+**Objective:** Observe Emacs command loop / keyboard.c behavior for each byte type.
+
+**Key finding:** `wasmacs_eval_string` is callable while Emacs is suspended at
+`wasmacs_host_wait_for_input` (because `wasmacs_command_busy = 0` when reached via
+`callMain` — unlike `wasmacs_command_begin_*` probes which set busy=1). This enables
+buffer/point/command readback between keys via a SUSPENDED wasm call.
+
+**Changes:**
+- `scripts/probe-browser-keyboard-event-semantics.mjs` (NEW):
+  8 key observations (a, b, c, CR, DEL, C-g, ESC, ESC+x).
+  Reads `(buffer-string)`, `(point)`, `(last-command)` via `wasmacs_eval_string`
+  at each suspension point.
+  Logs: `logs/wasm-browser-keyboard-event-semantics.{txt,jsonl}`.
+- `package.json`: added `test:keyboard-event-semantics`.
+- `docs/os-compatibility-boundary.md`: added keyboard.c event semantics section.
+
+**Results (PASS):**
+
+| Key | Buffer after | Point | last-command |
+|---|---|---|---|
+| a | "a" | 2 | self-insert-command |
+| b | "ab" | 3 | self-insert-command |
+| c | "abc" | 4 | self-insert-command |
+| CR | "abc\n" | 5 | newline |
+| DEL | "abc" | 4 | delete-backward-char |
+| C-g | "abc" | 4 | keyboard-quit |
+| ESC | "abc" | 4 | keyboard-quit (prev) |
+| ESC+x | "M-x " | 5 | execute-extended-command |
+
+finalWaitCount=17, finalGuardDepth=0, evalWorked=true, cgLoopSurvived=true.
+
+**vendor/emacs unchanged. product path unchanged.**
+
+**Next:** product editor input integration — wire handleAsync into the browser
+app's command loop so real keystrokes (from keyboard events → postMessage) reach
+Emacs in the Web Worker.

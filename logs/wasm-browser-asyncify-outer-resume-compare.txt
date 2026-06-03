@@ -1,0 +1,67 @@
+CASE:asyncify-outer-resume-compare
+SUMMARY_BEGIN
+{
+  "status": "PASS",
+  "cases": [
+    {
+      "status": "PASS",
+      "caseId": "A-callMain",
+      "exitStatus": 0,
+      "signal": null,
+      "timedOut": false,
+      "checkpoints": [
+        "after-boot",
+        "before-outer-call",
+        "after-outer-call",
+        "resolver-bound-observed",
+        "after-resolve",
+        "after-poll"
+      ],
+      "returnedPromise": false,
+      "promiseThenFired": true,
+      "cResumed": true,
+      "asyncifyCurrDataAfterCall": true,
+      "asyncifyAsyncPromiseHandlersAfterCall": false
+    },
+    {
+      "status": "PASS",
+      "caseId": "B-ccall-async",
+      "exitStatus": 0,
+      "signal": null,
+      "timedOut": false,
+      "checkpoints": [
+        "after-boot",
+        "before-outer-call",
+        "after-outer-call",
+        "resolver-bound-observed",
+        "after-resolve",
+        "after-poll"
+      ],
+      "returnedPromise": true,
+      "promiseThenFired": true,
+      "cResumed": true,
+      "asyncifyCurrDataAfterCall": true,
+      "asyncifyAsyncPromiseHandlersAfterCall": true
+    },
+    {
+      "status": "PASS",
+      "caseId": "C-direct",
+      "exitStatus": 0,
+      "signal": null,
+      "timedOut": false,
+      "checkpoints": [
+        "after-boot",
+        "before-outer-call",
+        "after-outer-call",
+        "after-resolve",
+        "after-poll"
+      ],
+      "returnedPromise": false,
+      "promiseThenFired": true,
+      "cResumed": true,
+      "asyncifyCurrDataAfterCall": true,
+      "asyncifyAsyncPromiseHandlersAfterCall": false
+    }
+  ]
+}
+SUMMARY_END
