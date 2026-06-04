@@ -2784,3 +2784,327 @@ Added to `build-emacs-browser-asyncify-spike.sh`:
 2. Test more complex interactive operations (C-x, M-x, etc.)
 3. Assess whether Lisp (read-char) limitation matters for MVP
 4. Consider ASYNCIFY_REMOVE=eval_sub,Ffuncall if deeper recursion surfaces
+
+
+# M260604 wasmacs: 外部 pdmp ロード再挑戦タスク
+
+## 目的
+
+wasmacs で、作成済み外部 `.pdmp` / `bootstrap-emacs.pdmp` を `emacs-core.wasm` 起動時にロードできるかを再検証する。
+
+今回の目的は、pdmp を wasm バイナリ内部に埋め込むことではない。まずは外部 artifact として `.pdmp` を扱い、同じ wasm core / system Lisp / build fingerprint に対応する preloaded-state を `initialized` 前にロードできるかを確認する。
+
+この作業は Preloaded-State Service の診断であり、通常ブラウザランタイムへ即時昇格しない。成功・失敗は `LOG.md` / `MEMORY.md` / `PLAN.md` に append-only で記録する。
+
+## 背景
+
+以前の pdump 試行では、Emscripten configure で `--with-dumping=pdumper` / `--with-pdumper=yes` は有効化でき、pdumper-enabled wasm `temacs` のビルドまでは進んだ。しかし `loadup.el --temacs=pdump` 実行時に `bindings.el` 周辺で exit 139 となり、`.pdmp` 生成は完了していない。
+
+切り分けでは、`bindings.el` の early keymap / closure 構造、特に `purecopy` 周辺が blocker として疑われている。
+
+今回は「pdmp を作る」より先に、もし作成済みまたは途中生成済みの `.pdmp` / `bootstrap-emacs.pdmp` が存在するなら、それを外部 artifact として wasm 起動時に読み込むルートを検証する。
+
+## 重要な方針
+
+* `vendor/emacs` は直接変更しない。
+* 変更が必要な場合は、既存方針どおり `scripts/patch-emacs-host-entrypoint-spike.sh` 等で copied source にのみ適用する。
+* JS は raw `Lisp_Object`、GC roots、`specpdl`、pure space、relocation table、preloaded-state object identity を所有しない。
+* JS は `.pdmp` を fetch / MEMFS 配置 / worker message / debug snapshot の coordinator として扱う。
+* pdmp は user data ではなく、`emacs-core.wasm + system-lisp.wasifs + build flags + fingerprint` に紐づく release/cache artifact として扱う。
+* 失敗した場合は、必ず次のどの service の問題か分類する。
+
+  * Lifecycle Service
+  * Preloaded-State Service
+  * Memory And Root Service
+  * Filesystem And Persistence Service
+  * Terminal/Tty Service
+  * Blocking Input Scheduler
+  * Host Capability Service
+
+## 作業ステップ
+
+### Step 1: 既存 pdmp artifact の探索
+
+以下を確認する。
+
+```sh
+find . -name '*.pdmp' -o -name 'bootstrap-emacs.pdmp' -o -name 'emacs.pdmp'
+```
+
+結果を `logs/pdmp-artifact-inventory.txt` に保存する。
+
+存在する場合は、各ファイルについて以下を記録する。
+
+* path
+* size
+* sha256
+* modified time
+* どの build artifact から生成された可能性があるか
+* 対応する wasm core / JS glue / system Lisp が推定できるか
+
+存在しない場合も、その事実をログに残す。
+
+### Step 2: 外部 pdmp ロード用 Node-first probe を追加
+
+新規スクリプトを追加する。
+
+```text
+scripts/probe-browser-pdump-external-load.mjs
+```
+
+目的:
+
+* `artifacts/emacs-browser-persistent-spike/temacs` または pdumper-enabled wasm profile を Node / vm context で起動する。
+* 外部 `.pdmp` を Emscripten MEMFS の Emacs が期待する位置へ配置する。
+* `--dump-file` または Emacs が受け付ける pdump load option で起動する。
+* cold `loadup.el` を再実行せず、pdumper load path に入ったかを観測する。
+
+候補起動例は調査して確定すること。
+
+```sh
+temacs --dump-file=/path/to/emacs.pdmp --batch --eval '(princ emacs-version)'
+```
+
+または Emacs 30.2 の `emacs.c` / `pdumper.c` が期待する形式に合わせる。
+
+### Step 3: pdmp ロード前後の OS diagnostic snapshot を取る
+
+利用可能な C/wasm diagnostic export がある場合、以下の checkpoint で snapshot を取る。
+
+* before-module-load
+* after-memfs-materialize
+* before-callMain
+* after-pdump-load-attempt
+* after-simple-eval
+* after-explicit-gc
+* before-command-loop
+* after-tty-wait-reached
+
+最低限、以下の状態をログに出す。
+
+* lifecycle state
+* initialized かどうか
+* dumped_with_pdumper 相当が観測できるか
+* GC permission state
+* stack/root probe
+* command state
+* last error / stderr tail
+
+ログ出力:
+
+```text
+logs/wasm-browser-pdump-external-load.txt
+logs/wasm-browser-pdump-external-load.jsonl
+```
+
+### Step 4: 成功条件を段階分けする
+
+一発で全部成功させようとしない。以下の段階で PASS / KNOWN_BLOCKER / FAIL を分類する。
+
+#### Level 0: artifact exists
+
+`.pdmp` が存在し、sha256 と size を記録できる。
+
+#### Level 1: MEMFS 配置
+
+`.pdmp` を wasm runtime から見える path に配置できる。
+
+#### Level 2: pdumper load path 到達
+
+`loadup.el` の cold path ではなく、`pdumper_load` / `load_pdump` 相当の経路に入った証拠が取れる。
+
+#### Level 3: simple eval
+
+pdmp load 後に以下が通る。
+
+```elisp
+(princ emacs-version)
+```
+
+#### Level 4: explicit GC
+
+pdmp load 後に以下が通る。
+
+```elisp
+(garbage-collect)
+(princ "gc-ok")
+```
+
+#### Level 5: tty command loop
+
+pdmp load 後に以下相当の起動で command_loop / tty input wait に到達する。
+
+```sh
+emacs --quick --no-splash --nw
+```
+
+#### Level 6: browser worker smoke
+
+browser worker で同じ pdmp を外部 artifact として fetch / MEMFS 配置し、起動・表示・入力待ちまで到達する。
+
+### Step 5: pdmp が存在しない場合の生成再挑戦 probe
+
+既存 pdmp がない、または不整合で読めない場合は、生成側 probe を再実行・再整備する。
+
+新規または既存スクリプトを使う。
+
+```text
+scripts/probe-emacs-pdump-configure.sh
+scripts/probe-emacs-pdump-temacs-build.sh
+```
+
+必要なら新規に追加する。
+
+```text
+scripts/probe-emacs-pdump-generate-node.mjs
+```
+
+目的:
+
+* copied source で pdumper-enabled wasm `temacs` をビルドする。
+* `system-lisp.wasifs` 相当、または preloaded `lisp/` / `etc/` を見せる。
+* `loadup.el --temacs=pdump` を実行する。
+* `.pdmp` 生成に失敗した場合、失敗箇所を source file / Lisp file / top-level form 単位で記録する。
+
+特に再確認する箇所:
+
+* `vendor/emacs/src/pdumper.c`
+* `vendor/emacs/src/alloc.c`
+* `vendor/emacs/src/puresize.h`
+* `vendor/emacs/lisp/loadup.el`
+* `vendor/emacs/lisp/bindings.el`
+
+既知 blocker:
+
+* `bindings.el` の early keymap / closure 構造
+* `purecopy`
+* `mode-line-input-method-map`
+* `mode-line-coding-system-map`
+* compiled Lisp artifact 不足による `(require 'pcase)` 失敗
+
+### Step 6: manifest 設計を仮置きする
+
+外部 pdmp を使う場合、対応関係を明示する manifest を追加する。
+
+候補:
+
+```text
+artifacts/preloaded-state/emacs-30.2/manifest.json
+```
+
+最低限の項目:
+
+```json
+{
+  "schemaVersion": 1,
+  "kind": "wasmacs-pdump",
+  "emacsVersion": "30.2",
+  "coreWasmSha256": "...",
+  "systemLispWasifsSha256": "...",
+  "pdmpSha256": "...",
+  "pdmpPath": "...",
+  "configureFlags": [],
+  "emccFlags": [],
+  "dumpingMode": "pdumper",
+  "createdAt": "...",
+  "sourceCommit": "636f166cfc86aa90d63f592fd99f3fdd9ef95ebd",
+  "loadStatus": "unknown|pass|known-blocker|fail"
+}
+```
+
+manifest は最初は診断用でよい。runtime で厳密利用する必要はない。
+
+### Step 7: test script に分離して追加
+
+通常の `npm test` に重い pdump probe を入れない。以下のように分離する。
+
+```json
+{
+  "scripts": {
+    "test:pdump": "node scripts/probe-browser-pdump-external-load.mjs",
+    "test:pdump:generate": "node scripts/probe-emacs-pdump-generate-node.mjs"
+  }
+}
+```
+
+必要なら `npm run test:heavy` に含めるが、デフォルト `npm test` には入れない。
+
+## 成果物
+
+最低限、以下を追加・更新する。
+
+```text
+scripts/probe-browser-pdump-external-load.mjs
+logs/pdmp-artifact-inventory.txt
+logs/wasm-browser-pdump-external-load.txt
+logs/wasm-browser-pdump-external-load.jsonl
+artifacts/preloaded-state/emacs-30.2/manifest.json
+```
+
+必要に応じて以下も追加する。
+
+```text
+scripts/probe-emacs-pdump-generate-node.mjs
+logs/wasm-pdump-generate-node.txt
+logs/wasm-pdump-generate-node.jsonl
+```
+
+ドキュメント更新:
+
+```text
+LOG.md
+MEMORY.md
+PLAN.md
+```
+
+## 判定基準
+
+### PASS
+
+以下がすべて通る。
+
+* 外部 `.pdmp` を wasm runtime に配置できる。
+* `pdumper_load` / `load_pdump` 相当の経路に入る。
+* cold `loadup.el` を再実行しない。
+* `(princ emacs-version)` が通る。
+* 明示的 `(garbage-collect)` が通る。
+* `--quick --no-splash --nw` で command_loop / tty input wait に到達する。
+
+### KNOWN_BLOCKER
+
+以下のように、原因分類ができている失敗。
+
+* fingerprint mismatch
+* relocation failure
+* pure space / purecopy failure
+* static root / GC root failure
+* `pdumper_load` が initialized 後で拒否される
+* MEMFS path / dump-file path 不整合
+* explicit GC で `mark_specpdl` / root marking failure
+* tty startup failure
+
+### FAIL
+
+以下の状態。
+
+* 失敗箇所が分類できない。
+* ログが残らない。
+* `vendor/emacs` を直接変更した。
+* pdmp と core/system の対応関係を記録しない。
+* cold loadup と pdump load のどちらに入ったか判定できない。
+
+## 注意
+
+今回のタスクは、pdmp を user-filesystem.wasifs に保存するか、wasm 内に埋め込むかを決める作業ではない。
+
+まず、外部 `.pdmp` artifact を使って、
+
+```text
+same emacs-core.wasm
+same system-lisp.wasifs
+same build fingerprint
+```
+
+の条件で、preloaded-state load が成立するかを検証する。
+
+配置設計はその後に決める。
