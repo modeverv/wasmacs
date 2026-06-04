@@ -1,4 +1,102 @@
 CASE:browser-xterm-terminal-smoke
 t=90ms  checkpoint=after-boot
-t=25736ms  checkpoint=first-wait  initTermBytes=11064
-t=55742ms  checkpoint=key-printable-a  label=printable-a  bytes=[97]  termBytes=11157  outputAdvanced=true  lastCommand=self-insert-command  buffer="a"
+t=25763ms  checkpoint=first-wait  initTermBytes=11064
+t=55769ms  checkpoint=key-printable-a  label=printable-a  bytes=[97]  termBytes=11157  outputAdvanced=true  lastCommand=self-insert-command  buffer="a"
+t=85771ms  checkpoint=key-printable-b  label=printable-b  bytes=[98]  termBytes=11158  outputAdvanced=true  lastCommand=self-insert-command  buffer="ab"
+t=115774ms  checkpoint=key-printable-c  label=printable-c  bytes=[99]  termBytes=11159  outputAdvanced=true  lastCommand=self-insert-command  buffer="abc"
+t=115786ms  checkpoint=key-ctrl-g  label=ctrl-g  bytes=[7]  termBytes=11159  outputAdvanced=false  lastCommand=self-insert-command  buffer=null
+t=115787ms  checkpoint=all-keys-complete
+EXIT_STATUS:0
+SIGNAL:null
+TIMEOUT:false
+STDOUT_BEGIN
+[host-lib WAIT] waitId=1 inputQueue=0 termOut=11064 t=25761
+[host-lib WAIT] waitId=3 inputQueue=0 termOut=11157 t=55768
+[host-lib WAIT] waitId=5 inputQueue=0 termOut=11158 t=85770
+[host-lib WAIT] waitId=7 inputQueue=0 termOut=11159 t=115772
+[host-lib WAIT] waitId=9 inputQueue=0 termOut=11159 t=115774
+STDOUT_END
+STDERR_BEGIN
+
+STDERR_END
+SUMMARY_BEGIN
+{
+  "status": "PASS",
+  "timedOut": false,
+  "exitStatus": 0,
+  "signal": null,
+  "checkpoints": [
+    "after-boot",
+    "first-wait",
+    "key-printable-a",
+    "key-printable-b",
+    "key-printable-c",
+    "key-ctrl-g",
+    "all-keys-complete"
+  ],
+  "hasInitialTerminalOutput": true,
+  "hasAnsiInInitialOutput": true,
+  "allPrintableOutputAdvanced": true,
+  "bufferAbc": true,
+  "ctrlGSurvived": false,
+  "finalTerminalByteCount": 11159,
+  "finalWaitCount": 9,
+  "allKeys": [
+    {
+      "label": "printable-a",
+      "bytes": [
+        97
+      ],
+      "outputAdvanced": true,
+      "byteCountBefore": 11064,
+      "byteCountAfter": 11157,
+      "lastCommand": "self-insert-command",
+      "bufferString": "a",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "printable-b",
+      "bytes": [
+        98
+      ],
+      "outputAdvanced": true,
+      "byteCountBefore": 11157,
+      "byteCountAfter": 11158,
+      "lastCommand": "self-insert-command",
+      "bufferString": "ab",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "printable-c",
+      "bytes": [
+        99
+      ],
+      "outputAdvanced": true,
+      "byteCountBefore": 11158,
+      "byteCountAfter": 11159,
+      "lastCommand": "self-insert-command",
+      "bufferString": "abc",
+      "bufferMatches": true,
+      "commandMatches": true
+    },
+    {
+      "label": "ctrl-g",
+      "bytes": [
+        7
+      ],
+      "outputAdvanced": false,
+      "byteCountBefore": 11159,
+      "byteCountAfter": 11159,
+      "lastCommand": "self-insert-command",
+      "bufferString": null,
+      "bufferMatches": null,
+      "commandMatches": false
+    }
+  ],
+  "outputPath": "__wasmacsTerminalOutputBytes → terminal-output-bytes message → xterm.write()",
+  "inputPath": "bytes → __wasmacsQueueTerminalInput → handleAsync",
+  "note": "JS owns no display or command semantics; terminal bytes are Emacs-produced ANSI sequences"
+}
+SUMMARY_END

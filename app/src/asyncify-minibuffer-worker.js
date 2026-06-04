@@ -62,6 +62,31 @@ function flushTerminalOutputBytes() {
   post("terminal-output-bytes", { bytes: newBytes });
 }
 
+// wakeEmacsInput: signal Emacs that input is available.
+// Implements proper blocking select():
+//   1. If select() is waiting (poll callback saved) → fire callback with POLLIN.
+//      makeNotifyCallback automatically cancels the setitimer setTimeout,
+//      select() returns "fd ready", emfile_read reads the byte from queue.
+//      No setitimer loop, no delay.
+//   2. Else if emfile_read is waiting (wasmacs_host_wait_for_input) → resolve.
+//      Boot case or tty_read_avail_input direct path.
+//   3. Else: byte stays in queue; watchdog will retry in 8ms.
+//
+// Important: call ONE path only. Calling both causes nested Asyncify contexts
+// which fight over the same wasm state.
+function wakeEmacsInput() {
+  if (typeof self.__wasmacsSelectCallback === "function") {
+    // Proper select() blocking path: signal POLLIN, cancel setitimer loop.
+    const cb = self.__wasmacsSelectCallback;
+    self.__wasmacsSelectCallback = null;
+    cb(1); // POLLIN — makeNotifyCallback clears the setTimeout too
+  } else if (typeof self.__wasmacsResolveHostInputWait === "function") {
+    // emfile_read direct path: boot or tty_read_avail_input.
+    self.__wasmacsResolveHostInputWait();
+  }
+  // else: watchdog catches it in 8ms
+}
+
 function startTerminalOutputStream() {
   if (terminalOutputStreamStarted) return;
   terminalOutputStreamStarted = true;
@@ -72,13 +97,7 @@ function startTerminalOutputStream() {
   // the queue but the next wait never gets resolved.
   setInterval(function drainInputQueue() {
     if ((self.__wasmacsTerminalInputBytes || []).length > 0) {
-      if (typeof self.__wasmacsSelectCallback === "function") {
-        self.__wasmacsSelectCallback(1);
-        self.__wasmacsSelectCallback = null;
-      }
-      if (typeof self.__wasmacsResolveHostInputWait === "function") {
-        self.__wasmacsResolveHostInputWait();
-      }
+      wakeEmacsInput();
     }
   }, 8);
 }
@@ -128,18 +147,7 @@ self.onmessage = async (event) => {
     const bytes = event.data.bytes ?? [];
     if (bytes.length > 0) {
       queueTerminalInput(bytes);
-      // Wake up select() via TTY poll callback (fast path: avoids 30s setitimer wait).
-      // When wait_reading_process_output calls select() on the keyboard fd, our poll
-      // override saves the makeNotifyCallback. Calling it here signals "POLLIN: data ready",
-      // so select() returns immediately and read_char can read the byte.
-      if (typeof self.__wasmacsSelectCallback === "function") {
-        self.__wasmacsSelectCallback(1); // POLLIN
-        self.__wasmacsSelectCallback = null;
-      }
-      // Also resolve any pending wasmacs_host_wait_for_input (emfile_read path).
-      if (typeof self.__wasmacsResolveHostInputWait === "function") {
-        self.__wasmacsResolveHostInputWait();
-      }
+      wakeEmacsInput();
     }
   }
   if (event.data?.type === "emacs-read-state") {
@@ -740,7 +748,7 @@ async function ensureXtermEmacs() {
         // which creates setTimeout(callback, N_ms). N starts at auto-save-timeout
         // (30s) and decreases each iteration of the wait_reading_process_output loop.
         // We reduce any timeout >= 500ms to 1ms to prevent long blocking.
-        if (typeof delay === "number" && delay >= 500) {
+        if (typeof delay === "number" && delay >= 50) {
           delay = 1;
         }
         return _origSetTimeout.call(self, fn, delay, ...args);

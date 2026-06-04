@@ -1,11 +1,11 @@
 CASE:browser-xterm-cold-loadup-failure
-t=121ms  checkpoint=runtime-initialized
-t=31660ms  checkpoint=unexpected-success
+t=93ms  checkpoint=runtime-initialized
+t=26064ms  checkpoint=unexpected-success
 EXIT_STATUS:0
 SIGNAL:null
 TIMEOUT:false
 STDOUT_BEGIN
-
+[host-lib WAIT] waitId=1 inputQueue=0 termOut=11064 t=25962
 STDOUT_END
 STDERR_BEGIN
 

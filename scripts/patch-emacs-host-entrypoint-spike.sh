@@ -1204,6 +1204,19 @@ if [ "${WASMACS_ENABLE_ASYNCIFY_WAITPOINT:-0}" = "1" ]; then
       perl -0pi -e 's~read_char \(int commandflag, Lisp_Object map,\n\t   Lisp_Object prev_event,\n\t   bool \*used_mouse_menu, struct timespec \*end_time\)\n\{~read_char (int commandflag, Lisp_Object map,\n\t   Lisp_Object prev_event,\n\t   bool *used_mouse_menu, struct timespec *end_time)\n{\n#ifdef __EMSCRIPTEN__\n  wasmacs_host_scheduler_checkpoint (200);\n#endif\n~' "${keyboard_file}"
 
       perl -0pi -e 's#  if \(NILP \(c\)\)\n    \{\n      c = read_decoded_event_from_main_queue \(end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu\);#  if (NILP (c))\n    {\n      /* wasmacs asyncify input waitpoint spike: yield when an interactive\n         command loop would otherwise block for real browser input.  In the\n         browser host, stdin readiness can look like input_pending without a\n         real Emacs key event, so JS owns the actual wait/resume boundary. */\n      if (!noninteractive && !end_time)\n        {\n          wasmacs_host_scheduler_checkpoint (201);\n          wasmacs_host_wait_for_input ();\n          wasmacs_host_scheduler_checkpoint (202);\n        }\n\n      c = read_decoded_event_from_main_queue (end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu);#' "${keyboard_file}"
+
+      # Patch kbd_buffer_get_event: replace wait_reading_process_output with our
+      # OS-level blocking wait. Eliminates select()/setitimer loop overhead.
+      # Clean up any existing spike first:
+      perl -0pi -e 's/\n\t  \x2F\* wasmacs os-level.*?\n#endif//sg' "${keyboard_file}"
+      # Insert new patch (use environment variable to avoid escaping issues):
+      export WASMACS_KBD_WAIT_PATCH='#ifdef __EMSCRIPTEN__
+	  if (kbd_fetch_ptr == kbd_store_ptr)
+	    wasmacs_host_wait_for_input ();
+#else
+	  wait_reading_process_output (0, 0, -1, do_display, Qnil, NULL, 0);
+#endif'
+      perl -0pi -e 'BEGIN { $p = $ENV{"WASMACS_KBD_WAIT_PATCH"} } s#\t  wait_reading_process_output \(0, 0, -1, do_display, Qnil, NULL, 0\);#${p}#' "${keyboard_file}"
       ;;
     minibuf-setup)
       perl -0pi -e 's#static Lisp_Object\nread_minibuf #/\* wasmacs asyncify minibuffer setup waitpoint spike. \*/\nextern int wasmacs_host_wait_for_input (void);\n\nstatic Lisp_Object\nread_minibuf #' "${minibuf_file}"
