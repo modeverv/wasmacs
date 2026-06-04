@@ -49,6 +49,9 @@ const server = createServer(async (request, response) => {
       "Cache-Control": "no-store",
       "Content-Length": info.size,
       "Content-Type": contentType,
+      // Required for SharedArrayBuffer (Atomics.wait in Workers)
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "require-corp",
     });
     createReadStream(filePath).pipe(response);
   } catch {

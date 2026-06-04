@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>wasmacs xterm (atomics)</title>
+    <!-- coi-serviceworker: enables SharedArrayBuffer on GitHub Pages -->
+    <script src="/app/coi-serviceworker.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/css/xterm.css">
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/lib/xterm.js"></script>
+    <style>
+      body { margin: 0; background: #1a1a1a; color: #eee; font-family: monospace; }
+      .shell { display: flex; flex-direction: column; height: 100vh; }
+      .header {
+        display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+        background: #2a2a2a; border-bottom: 1px solid #444; flex-shrink: 0;
+      }
+      .header h1 { margin: 0; font-size: 14px; color: #ccc; }
+      #status { font-size: 13px; color: #888; flex: 1; }
+      #status.interactive { color: #4caf50; font-weight: bold; }
+      #status.error { color: #f44336; }
+      #start-btn {
+        padding: 6px 14px; background: #1976d2; color: #fff;
+        border: none; border-radius: 4px; cursor: pointer; font-size: 13px;
+      }
+      #start-btn:disabled { opacity: 0.5; cursor: default; }
+      #sab-status { font-size: 11px; color: #555; }
+      #xterm-container { flex: 1; overflow: hidden; padding: 4px; }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="header">
+        <h1>wasmacs xterm <span style="color:#4db6ac;font-size:11px">[atomics]</span></h1>
+        <span id="status">idle</span>
+        <span id="sab-status"></span>
+        <button id="start-btn" type="button">Start Emacs</button>
+      </div>
+      <div id="xterm-container"></div>
+    </div>
+
+    <script type="module">
+import { createXtermEmacsTerminal, xtermDataToBytes } from "/app/src/xterm-emacs-terminal.js";
+
+const statusEl = document.querySelector("#status");
+const sabStatusEl = document.querySelector("#sab-status");
+const startBtn = document.querySelector("#start-btn");
+const container = document.querySelector("#xterm-container");
+
+// Check SharedArrayBuffer availability
+const sabAvailable = typeof SharedArrayBuffer !== "undefined";
+sabStatusEl.textContent = sabAvailable
+  ? "SharedArrayBuffer: ✓"
+  : "SharedArrayBuffer: ✗ (need COOP/COEP headers or reload after serviceworker installs)";
+if (!sabAvailable) sabStatusEl.style.color = "#f44336";
+
+function setStatus(text, cls = "") {
+  statusEl.textContent = text;
+  statusEl.className = cls;
+}
+
+let worker = null;
+let terminal = null;
+let inputSAB = null; // SharedArrayBuffer for sending input to Emacs
+
+// SharedArrayBuffer signal layout:
+//   Int32[0]: signal (0=idle, 1=input ready)
+//   Int32[1]: byte count
+//   Uint8[8+]: bytes (up to 256)
+
+function sendInputToEmacs(bytes) {
+  if (!inputSAB || !bytes.length) return;
+  const signal = new Int32Array(inputSAB, 0, 2); // [counter, byteCount]
+  const data   = new Uint8Array(inputSAB, 8);
+  // Write bytes to SAB
+  const count = Math.min(bytes.length, 256);
+  for (let i = 0; i < count; i++) data[i] = bytes[i];
+  // Set byte count, then increment counter and notify
+  Atomics.store(signal, 1, count);
+  Atomics.add(signal, 0, 1);   // increment counter (not reset — avoids race)
+  Atomics.notify(signal, 0, 1); // wake the waiting Worker
+}
+
+function startSession() {
+  if (!sabAvailable) {
+    setStatus("SharedArrayBuffer not available — reload after service worker installs", "error");
+    return;
+  }
+  if (worker) return;
+  startBtn.disabled = true;
+  setStatus("loading…");
+
+  if (!terminal) {
+    terminal = createXtermEmacsTerminal(container);
+    terminal.onData((data) => {
+      sendInputToEmacs(xtermDataToBytes(data));
+    });
+  }
+
+  worker = new Worker("/app/src/emacs-atomics-worker.js");
+
+  worker.onmessage = (event) => {
+    const msg = event.data;
+
+    if (msg.type === "ready") {
+      // Get the SAB from worker
+      inputSAB = msg.sab;
+      setStatus("Emacs loading…");
+    }
+
+    if (msg.type === "terminal-output-bytes" && terminal) {
+      terminal.writeBytes(msg.bytes);
+      if (statusEl.textContent.startsWith("loading") || statusEl.textContent === "Emacs loading…") {
+        setStatus("interactive ✓", "interactive");
+      }
+    }
+
+    if (msg.type === "status") {
+      if (!statusEl.classList.contains("interactive")) setStatus(msg.text);
+    }
+
+    if (msg.type === "stdout") console.log("[emacs stdout]", msg.text);
+    if (msg.type === "diag" || msg.type === "timing") {
+      const d = msg;
+      console.log("[timing]",
+        "ts=" + d.ts,
+        "wait#=" + d.waitCount,
+        "qLen=" + d.queueLen,
+        "fioCalls=" + d.fioCalls,
+        "s0ioctl=" + d.s0ioctl,
+        "TTYioctl=" + d.TTYioctl);
+    }
+    if (msg.type === "diag-err") console.warn("[diag-err]", msg.error);
+    if (msg.type === "stderr") {
+      console.warn("[emacs stderr]", msg.text);
+      // Show first error in status
+      if (/error|Error|failed|abort/i.test(msg.text) && !statusEl.classList.contains("interactive")) {
+        setStatus(`stderr: ${msg.text.slice(0, 100)}`, "error");
+      }
+    }
+
+    if (msg.type === "session-ended") {
+      const err = msg.error ? ` — ${msg.error.slice(0, 100)}` : "";
+      setStatus(`session ended (status ${msg.status ?? "?"}${err})`, "error");
+      worker = null;
+      startBtn.disabled = false;
+    }
+
+    if (msg.type === "stdout" && /^Loading /.test(msg.text ?? "")) {
+      setStatus(`loadup: ${msg.text.slice(8, 60)}`);
+    }
+  };
+
+  worker.onerror = (e) => {
+    setStatus(`worker error: ${e.message}`, "error");
+    worker = null;
+    startBtn.disabled = false;
+  };
+
+  worker.postMessage({ type: "start" });
+}
+
+startBtn.addEventListener("click", startSession);
+
+// Auto-start if ?autostart
+if (new URLSearchParams(window.location.search).has("autostart")) {
+  startSession();
+}
+    </script>
+  </body>
+</html>

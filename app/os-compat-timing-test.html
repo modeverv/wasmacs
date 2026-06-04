@@ -1,0 +1,96 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>wasmacs timing test</title>
+<script src="/app/coi-serviceworker.js"></script>
+<style>
+body{background:#1a1a1a;color:#eee;font:14px monospace;padding:16px}
+#log{white-space:pre-wrap}
+.pass{color:#4caf50}.fail{color:#f44336}.info{color:#888}
+</style></head><body>
+<h3>wasmacs os-compat timing test</h3>
+<div id="status">loading…</div>
+<div id="log"></div>
+<script>
+const logEl = document.getElementById("log");
+const statusEl = document.getElementById("status");
+
+function log(cls, ...args) {
+  const line = args.join(" ");
+  logEl.innerHTML += `<div class="${cls}">[${Date.now()}] ${line}</div>`;
+  console.log(`[test] ${line}`);
+}
+
+const sabAvailable = typeof SharedArrayBuffer !== "undefined";
+if (!sabAvailable) { statusEl.textContent = "SAB unavailable"; } else {
+
+const worker = new Worker("/app/src/emacs-atomics-worker.js");
+let inputSAB = null;
+let startTime = null;
+let keySent = false;
+const timings = [];
+
+worker.onmessage = (e) => {
+  const m = e.data;
+  if (m.type === "ready") {
+    inputSAB = m.sab;
+    log("info", "SAB received, Emacs loading…");
+  }
+  if (m.type === "timing-checkpoint") {
+    log("info", `CHKPT code=${m.code} qLen=${m.queueLen} outputLen=${m.outputLen}`);
+  }
+  if (m.type === "timing") {
+    timings.push(m);
+    if (m.phase === "enter") {
+      const t = Date.now();
+      log("info", `WAIT-ENTER #${m.waitNum} flushed=${m.flushedBytes} queue=${m.queueLen}`);
+      if (!keySent && m.waitNum >= 1) {
+        // Send a key 2s after first wait-enter
+        keySent = true;
+        setTimeout(() => {
+          sendKey(97); // 'a'
+          startTime = Date.now();
+          log("info", "KEY-SENT 'a'");
+        }, 2000);
+      }
+    }
+    if (m.phase === "exit") {
+      log("info", `WAIT-EXIT #${m.waitNum} totalMs=${m.totalMs} qLen=${m.queueLen} fioCalls=${m.fioCalls}`);
+    }
+  }
+  if (m.type === "terminal-output-bytes" && startTime) {
+    const latency = Date.now() - startTime;
+    log(latency < 5000 ? "pass" : "fail",
+      `TERMINAL-OUTPUT latency=${latency}ms bytes=${m.bytes.length}`);
+    statusEl.textContent = latency < 5000
+      ? `PASS: ${latency}ms key-to-output latency`
+      : `FAIL: ${latency}ms (expected <5000ms)`;
+    startTime = null;
+  }
+  if (m.type === "stdout") log("info", "stdout: " + m.text.slice(0,100));
+  if (m.type === "stderr") {
+    if (/error|abort/i.test(m.text))
+      log("fail", "stderr: " + m.text.slice(0,100));
+  }
+  if (m.type === "session-ended") {
+    log(m.status === 0 ? "pass" : "fail",
+      `session ended status=${m.status}`);
+  }
+  if (m.type === "status") log("info", "status: " + m.text);
+};
+
+function sendKey(byte) {
+  if (!inputSAB) return;
+  const signal = new Int32Array(inputSAB, 0, 2);
+  const data = new Uint8Array(inputSAB, 8);
+  data[0] = byte;
+  Atomics.store(signal, 1, 1);
+  Atomics.add(signal, 0, 1);
+  Atomics.notify(signal, 0, 1);
+}
+
+worker.onerror = (e) => {
+  log("fail", "worker error: " + e.message);
+};
+
+worker.postMessage({ type: "start" });
+}
+</script></body></html>
