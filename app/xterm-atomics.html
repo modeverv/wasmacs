@@ -4,7 +4,6 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>wasmacs xterm (atomics)</title>
-    <!-- coi-serviceworker: enables SharedArrayBuffer on GitHub Pages -->
     <script src="/app/coi-serviceworker.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/css/xterm.css">
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/lib/xterm.js"></script>
@@ -12,29 +11,37 @@
       body { margin: 0; background: #1a1a1a; color: #eee; font-family: monospace; }
       .shell { display: flex; flex-direction: column; height: 100vh; }
       .header {
-        display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+        display: flex; align-items: center; gap: 8px; padding: 6px 12px;
         background: #2a2a2a; border-bottom: 1px solid #444; flex-shrink: 0;
+        flex-wrap: wrap;
       }
-      .header h1 { margin: 0; font-size: 14px; color: #ccc; }
-      #status { font-size: 13px; color: #888; flex: 1; }
+      .header h1 { margin: 0; font-size: 13px; color: #aaa; white-space: nowrap; }
+      #status { font-size: 12px; color: #888; flex: 1; min-width: 120px; }
       #status.interactive { color: #4caf50; font-weight: bold; }
       #status.error { color: #f44336; }
-      #start-btn {
-        padding: 6px 14px; background: #1976d2; color: #fff;
-        border: none; border-radius: 4px; cursor: pointer; font-size: 13px;
+      .btn {
+        padding: 4px 10px; border: none; border-radius: 3px; cursor: pointer;
+        font-size: 11px; color: #fff; white-space: nowrap;
       }
-      #start-btn:disabled { opacity: 0.5; cursor: default; }
-      #sab-status { font-size: 11px; color: #555; }
-      #xterm-container { flex: 1; overflow: hidden; padding: 4px; }
+      .btn:disabled { opacity: 0.4; cursor: default; }
+      .btn-start { background: #1976d2; }
+      .btn-import { background: #6d4c41; }
+      .btn-export { background: #2e7d32; }
+      #sab-status { font-size: 10px; color: #555; }
+      #xterm-container { flex: 1; overflow: hidden; padding: 2px; }
+      input[type=file] { display: none; }
     </style>
   </head>
   <body>
     <div class="shell">
       <div class="header">
-        <h1>wasmacs xterm <span style="color:#4db6ac;font-size:11px">[atomics]</span></h1>
+        <h1>wasmacs <span style="color:#4db6ac">[atomics]</span></h1>
         <span id="status">idle</span>
         <span id="sab-status"></span>
-        <button id="start-btn" type="button">Start Emacs</button>
+        <button id="start-btn" class="btn btn-start" type="button">Start</button>
+        <button id="import-btn" class="btn btn-import" type="button">Import</button>
+        <button id="export-btn" class="btn btn-export" type="button" disabled>Export</button>
+        <input type="file" id="import-file" accept=".wasifs">
       </div>
       <div id="xterm-container"></div>
     </div>
@@ -45,13 +52,15 @@ import { createXtermEmacsTerminal, xtermDataToBytes } from "/app/src/xterm-emacs
 const statusEl = document.querySelector("#status");
 const sabStatusEl = document.querySelector("#sab-status");
 const startBtn = document.querySelector("#start-btn");
+const importBtn = document.querySelector("#import-btn");
+const exportBtn = document.querySelector("#export-btn");
+const importFile = document.querySelector("#import-file");
 const container = document.querySelector("#xterm-container");
 
-// Check SharedArrayBuffer availability
 const sabAvailable = typeof SharedArrayBuffer !== "undefined";
 sabStatusEl.textContent = sabAvailable
-  ? "SharedArrayBuffer: ✓"
-  : "SharedArrayBuffer: ✗ (need COOP/COEP headers or reload after serviceworker installs)";
+  ? "SAB ✓"
+  : "SAB ✗";
 if (!sabAvailable) sabStatusEl.style.color = "#f44336";
 
 function setStatus(text, cls = "") {
@@ -61,29 +70,51 @@ function setStatus(text, cls = "") {
 
 let worker = null;
 let terminal = null;
-let inputSAB = null; // SharedArrayBuffer for sending input to Emacs
-
-// SharedArrayBuffer signal layout:
-//   Int32[0]: signal (0=idle, 1=input ready)
-//   Int32[1]: byte count
-//   Uint8[8+]: bytes (up to 256)
+let inputSAB = null;
 
 function sendInputToEmacs(bytes) {
   if (!inputSAB || !bytes.length) return;
-  const signal = new Int32Array(inputSAB, 0, 2); // [counter, byteCount]
+  const signal = new Int32Array(inputSAB, 0, 2);
   const data   = new Uint8Array(inputSAB, 8);
-  // Write bytes to SAB
   const count = Math.min(bytes.length, 256);
   for (let i = 0; i < count; i++) data[i] = bytes[i];
-  // Set byte count, then increment counter and notify
   Atomics.store(signal, 1, count);
-  Atomics.add(signal, 0, 1);   // increment counter (not reset — avoids race)
-  Atomics.notify(signal, 0, 1); // wake the waiting Worker
+  Atomics.add(signal, 0, 1);
+  Atomics.notify(signal, 0, 1);
 }
+
+// ── Import .wasifs ──────────────────────────────────────────────
+importBtn.addEventListener("click", () => importFile.click());
+importFile.addEventListener("change", async () => {
+  const file = importFile.files[0];
+  if (!file) { importFile.value = ""; return; }
+  setStatus("importing .wasifs...");
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  try {
+    let bin = "";
+    for (let o = 0; o < bytes.length; o += 0x8000)
+      bin += String.fromCharCode(...bytes.subarray(o, o + 0x8000));
+    localStorage.setItem("wasmacs:user-filesystem.wasifs:v1", btoa(bin));
+  } catch(e) {}
+  if (worker) {
+    const copy = new Uint8Array(bytes);
+    worker.postMessage({ type: "import-wasifs", bytes: copy.buffer }, [copy.buffer]);
+  }
+  setStatus(worker ? "imported & mounted" : "imported - start Emacs", "interactive");
+  importFile.value = "";
+});
+
+// ── Export .wasifs ──────────────────────────────────────────────
+exportBtn.addEventListener("click", () => {
+  if (!worker) return;
+  setStatus("exporting...");
+  worker.postMessage({ type: "export-wasifs" });
+});
 
 function startSession() {
   if (!sabAvailable) {
-    setStatus("SharedArrayBuffer not available — reload after service worker installs", "error");
+    setStatus("SAB not available", "error");
     return;
   }
   if (worker) return;
@@ -92,9 +123,7 @@ function startSession() {
 
   if (!terminal) {
     terminal = createXtermEmacsTerminal(container);
-    terminal.onData((data) => {
-      sendInputToEmacs(xtermDataToBytes(data));
-    });
+    terminal.onData((data) => sendInputToEmacs(xtermDataToBytes(data)));
   }
 
   worker = new Worker("/app/src/emacs-atomics-worker.js");
@@ -103,16 +132,31 @@ function startSession() {
     const msg = event.data;
 
     if (msg.type === "ready") {
-      // Get the SAB from worker
       inputSAB = msg.sab;
       setStatus("Emacs loading…");
+      importBtn.disabled = false;
+      exportBtn.disabled = false;
+    }
+
+    if (msg.type === "wasifs-export-data") {
+      const blob = new Blob([msg.bytes], { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = msg.filename || "user-filesystem.wasifs";
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatus("exported ✓", "interactive");
+    }
+
+    if (msg.type === "wasifs-imported") {
+      setStatus("imported ✓ — restart to apply", "interactive");
     }
 
     if (msg.type === "terminal-output-bytes" && terminal) {
       terminal.writeBytes(msg.bytes);
-      if (statusEl.textContent.startsWith("loading") || statusEl.textContent === "Emacs loading…") {
+      if (statusEl.textContent.startsWith("loading") || statusEl.textContent === "Emacs loading…")
         setStatus("interactive ✓", "interactive");
-      }
     }
 
     if (msg.type === "status") {
@@ -120,34 +164,19 @@ function startSession() {
     }
 
     if (msg.type === "stdout") console.log("[emacs stdout]", msg.text);
-    if (msg.type === "diag" || msg.type === "timing") {
-      const d = msg;
-      console.log("[timing]",
-        "ts=" + d.ts,
-        "wait#=" + d.waitCount,
-        "qLen=" + d.queueLen,
-        "fioCalls=" + d.fioCalls,
-        "s0ioctl=" + d.s0ioctl,
-        "TTYioctl=" + d.TTYioctl);
-    }
-    if (msg.type === "diag-err") console.warn("[diag-err]", msg.error);
     if (msg.type === "stderr") {
       console.warn("[emacs stderr]", msg.text);
-      // Show first error in status
-      if (/error|Error|failed|abort/i.test(msg.text) && !statusEl.classList.contains("interactive")) {
+      if (/error|Error|failed|abort/i.test(msg.text) && !statusEl.classList.contains("interactive"))
         setStatus(`stderr: ${msg.text.slice(0, 100)}`, "error");
-      }
     }
 
     if (msg.type === "session-ended") {
       const err = msg.error ? ` — ${msg.error.slice(0, 100)}` : "";
-      setStatus(`session ended (status ${msg.status ?? "?"}${err})`, "error");
+      setStatus(`ended (status ${msg.status ?? "?"}${err})`, "error");
       worker = null;
       startBtn.disabled = false;
-    }
-
-    if (msg.type === "stdout" && /^Loading /.test(msg.text ?? "")) {
-      setStatus(`loadup: ${msg.text.slice(8, 60)}`);
+      importBtn.disabled = true;
+      exportBtn.disabled = true;
     }
   };
 
@@ -155,17 +184,15 @@ function startSession() {
     setStatus(`worker error: ${e.message}`, "error");
     worker = null;
     startBtn.disabled = false;
+    importBtn.disabled = true;
+    exportBtn.disabled = true;
   };
 
   worker.postMessage({ type: "start" });
 }
 
 startBtn.addEventListener("click", startSession);
-
-// Auto-start if ?autostart
-if (new URLSearchParams(window.location.search).has("autostart")) {
-  startSession();
-}
+if (new URLSearchParams(window.location.search).has("autostart")) startSession();
     </script>
   </body>
 </html>
