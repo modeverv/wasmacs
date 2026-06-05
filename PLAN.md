@@ -3677,4 +3677,19 @@ X2/X3 確認後、org-mode 最小確認:
     then Enter stays alive and reaches `wait-enter#3`, with
     `interactive wait ✓`.
 
+### README static-docs screenshots (2026-06-05)
+
+- Served the generated `docs/` bundle locally from `127.0.0.1:8175` with
+  COOP/COEP and no-store headers.
+- Captured README images under `docs/screenshots/`:
+  - `wasmacs-startup.jpg`: `xterm-atomics-pdump.html?autostart` reached
+    `SAB ✓`, `pdmp 11.0 MB materialized`, and `interactive wait ✓` at
+    `*scratch*`.
+  - `wasmacs-dired.jpg`: opened `/home/user/` through the xterm route with
+    `M-x dired`; Dired rendered through the no-host-process `ls-lisp` path.
+  - `wasmacs-org-file.jpg`: opened `/home/user/wasmacs-demo.org` through
+    `M-x find-file`, inserted sample Org content, and verified the mode line
+    reported `(Org)`.
+- README now embeds the three screenshots from `docs/screenshots/`.
+
 **vendor/emacs unchanged.**

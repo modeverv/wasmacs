@@ -4,10 +4,6 @@
 Emacs C core and Elisp runtime as the center of gravity, then hosts display,
 input, persistence, and portable filesystem images in the browser.
 
-![top](doc/imgs/img1.jpeg)
-![dired](doc/imgs/img2.jpeg)
-![org](doc/imgs/img3.jpeg)
-
 ## Repository Layout
 
 ```text
@@ -41,6 +37,23 @@ The Pages bundle uses a root `coi-serviceworker.js` to emulate COOP/COEP for
 `SharedArrayBuffer`, keeps app and artifact URLs relative so project pages work
 under `/repo-name/`, and publishes the Emscripten glue as `temacs.js` so static
 servers return a JavaScript MIME type.
+
+## Browser Screenshots
+
+These screenshots were captured from the generated `docs/` bundle served
+locally with COOP/COEP headers.
+
+### Startup
+
+![wasmacs startup screen](docs/screenshots/wasmacs-startup.jpg)
+
+### Dired
+
+![wasmacs Dired buffer](docs/screenshots/wasmacs-dired.jpg)
+
+### Org File
+
+![wasmacs Org file buffer](docs/screenshots/wasmacs-org-file.jpg)
 
 ## Requirements
 
