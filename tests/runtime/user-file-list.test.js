@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { userFileLabel, visibleUserFilePaths } from "../../app/src/user-file-list.js";
+import { userFileLabel, visibleUserFilePaths } from "../../src/wasm/src/user-file-list.js";
 
 test("visible user file paths hide tar metadata and internal runtime state", () => {
   const paths = visibleUserFilePaths([

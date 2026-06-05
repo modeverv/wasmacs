@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>wasmacs</title>
+    <link rel="stylesheet" href="/app/src/styles.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/css/xterm.css">
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/lib/xterm.js"></script>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <h1>wasmacs</h1>
+          <p id="status" class="status">starting worker</p>
+        </div>
+        <div class="actions">
+          <input id="file-path" class="path-input" type="text" spellcheck="false" aria-label="User file path">
+          <button id="open-file" type="button">Open</button>
+          <button id="save" type="button">Save</button>
+          <button id="reload-buffer" type="button">Reload</button>
+          <button id="process-probe" type="button">Process</button>
+          <button id="export-image" type="button">Export</button>
+          <label class="file-button" for="import-image">Import</label>
+          <input id="import-image" type="file" accept=".wasifs,application/octet-stream">
+          <button id="run" type="button">Run Core</button>
+        </div>
+      </header>
+
+      <section class="workspace" aria-label="wasmacs browser MVP">
+        <div class="editor-pane">
+          <div class="buffer-title">
+            <span id="buffer-path">/home/user/notes.txt</span>
+            <span id="buffer-state">loaded</span>
+          </div>
+          <div id="file-list" class="file-list" aria-label="User files"></div>
+          <div id="frame-grid" class="frame-grid" role="textbox" aria-label="Emacs frame" tabindex="0"></div>
+          <div id="minibuffer" class="minibuffer" aria-live="polite" aria-label="Minibuffer"></div>
+          <textarea
+            id="editor"
+            spellcheck="false"
+            aria-label="Single buffer editor"
+          ></textarea>
+        </div>
+
+        <div class="core-pane">
+          <div class="buffer-title">*wasmacs-core*</div>
+          <pre id="output" class="output" aria-live="polite"></pre>
+        </div>
+      </section>
+
+      <section class="xterm-section" aria-label="Emacs terminal">
+        <div class="xterm-header">
+          <span class="buffer-title">*terminal* (xterm)</span>
+          <span id="xterm-status" class="xterm-status">idle</span>
+          <button id="start-xterm-session" type="button">Start Interactive Session</button>
+        </div>
+        <div id="xterm-container" class="xterm-container"></div>
+      </section>
+    </main>
+
+    <script type="module" src="/app/src/main.js?v=2026-06-02-minibuffer-echo"></script>
+  </body>
+</html>

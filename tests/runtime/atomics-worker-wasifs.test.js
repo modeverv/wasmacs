@@ -76,8 +76,8 @@ function createFakeMemfs() {
 }
 
 for (const workerPath of [
-  "app/src/emacs-atomics-worker.js",
-  "app/src/emacs-atomics-pdump-worker.js",
+  "src/wasm/src/emacs-atomics-worker.js",
+  "src/wasm/src/emacs-atomics-pdump-worker.js",
 ]) {
   test(`${workerPath} imports file entries as files, not directories`, async () => {
     const context = await loadWorkerContext(workerPath);

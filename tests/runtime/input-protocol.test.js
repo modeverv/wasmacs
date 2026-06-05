@@ -4,7 +4,7 @@ import {
   keyEventToBufferCommand,
   nextPointIndexForCommand,
   validateBufferCommand,
-} from "../../app/src/input-protocol.js";
+} from "../../src/wasm/src/input-protocol.js";
 
 test("printable keys become insert-text commands", () => {
   const command = keyEventToBufferCommand({ key: "a", path: "/home/user/notes.txt", pointIndex: 3 });

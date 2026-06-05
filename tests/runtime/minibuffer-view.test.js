@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { minibufferTextForPrefix, minibufferTextForWorkerError } from "../../app/src/minibuffer-view.js";
+import { minibufferTextForPrefix, minibufferTextForWorkerError } from "../../src/wasm/src/minibuffer-view.js";
 
 test("minibuffer prefix view renders command prefixes only", () => {
   assert.equal(minibufferTextForPrefix("C-x"), "C-x");

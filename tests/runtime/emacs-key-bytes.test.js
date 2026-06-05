@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { browserKeyEventToEmacsBytes } from "../../app/src/emacs-key-bytes.js";
+import { browserKeyEventToEmacsBytes } from "../../src/wasm/src/emacs-key-bytes.js";
 
 test("printable characters", () => {
   assert.deepEqual(browserKeyEventToEmacsBytes({ key: "a" }), [97]);

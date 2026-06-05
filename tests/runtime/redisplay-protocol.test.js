@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   textToGridDrawMessage,
   validateTextGridDrawMessage,
-} from "../../app/src/redisplay-protocol.js";
+} from "../../src/wasm/src/redisplay-protocol.js";
 
 test("text grid draw messages carry wrapped rows and point", () => {
   const message = textToGridDrawMessage({

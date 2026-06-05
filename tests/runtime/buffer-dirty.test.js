@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isEditorModified } from "../../app/src/buffer-dirty.js";
+import { isEditorModified } from "../../src/wasm/src/buffer-dirty.js";
 
 test("editor text is dirty when it differs from the saved buffer text", () => {
   assert.equal(isEditorModified("alpha", "alpha"), false);

@@ -1,0 +1,177 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
+const outputPath = join(repoRoot, "build", "artifacts", "host-abi.wit");
+
+const wit = `package wasmacs:host-abi@0.1.0;
+
+interface filesystem {
+  enum error-code {
+    not-found,
+    permission-denied,
+    already-exists,
+    invalid,
+    not-directory,
+    is-directory,
+    read-only-filesystem,
+    unsupported,
+    io,
+  }
+
+  enum file-kind {
+    file,
+    directory,
+    symlink,
+    other,
+  }
+
+  flags open-flags {
+    read,
+    write,
+    create,
+    truncate,
+    append,
+    directory,
+  }
+
+  record file-handle {
+    id: u64,
+  }
+
+  record file-stat {
+    kind: file-kind,
+    size: u64,
+    mtime-ms: option<u64>,
+    readonly: bool,
+  }
+
+  record directory-entry {
+    name: string,
+    kind: file-kind,
+  }
+
+  variant fs-error {
+    code(error-code),
+    message(string),
+  }
+
+  path-open: func(path: string, flags: open-flags) -> result<file-handle, fs-error>;
+  read: func(handle: file-handle, length: u64) -> result<list<u8>, fs-error>;
+  write: func(handle: file-handle, bytes: list<u8>) -> result<u64, fs-error>;
+  stat: func(path: string) -> result<file-stat, fs-error>;
+  readdir: func(path: string) -> result<list<directory-entry>, fs-error>;
+  rename: func(old-path: string, new-path: string) -> result<_, fs-error>;
+  unlink: func(path: string) -> result<_, fs-error>;
+  mkdir: func(path: string) -> result<_, fs-error>;
+  sync: func(handle: option<file-handle>) -> result<_, fs-error>;
+  close: func(handle: file-handle) -> result<_, fs-error>;
+}
+
+interface clock {
+  wall-now-ms: func() -> u64;
+  monotonic-now-ms: func() -> u64;
+  set-timer-ms: func(delay-ms: u64) -> u64;
+}
+
+interface random {
+  random-bytes: func(length: u64) -> list<u8>;
+}
+
+interface environment {
+  record env-var {
+    name: string,
+    value: string,
+  }
+
+  getenv: func(name: string) -> option<string>;
+  environ: func() -> list<env-var>;
+  cwd: func() -> string;
+  set-cwd: func(path: string) -> result<_, string>;
+}
+
+interface stdio {
+  enum log-level {
+    trace,
+    debug,
+    info,
+    warn,
+    error,
+  }
+
+  stdout: func(bytes: list<u8>);
+  stderr: func(bytes: list<u8>);
+  debug-log: func(level: log-level, message: string);
+}
+
+interface process {
+  process-unavailable: func() -> string;
+}
+
+interface gui {
+  enum input-kind {
+    key,
+    text,
+    composition-start,
+    composition-update,
+    composition-end,
+    pointer,
+    wheel,
+    focus,
+    resize,
+  }
+
+  enum draw-kind {
+    begin-frame,
+    draw-text-run,
+    clear-rect,
+    set-cursor,
+    set-mode-line,
+    end-frame,
+  }
+
+  record input-event {
+    frame-id: u64,
+    kind: input-kind,
+    payload-json: string,
+  }
+
+  record frame-metrics {
+    frame-id: u64,
+    pixel-width: u32,
+    pixel-height: u32,
+    cell-width: u32,
+    cell-height: u32,
+    device-pixel-ratio: float32,
+    font-family: string,
+    font-size: u32,
+  }
+
+  record draw-message {
+    frame-id: u64,
+    kind: draw-kind,
+    payload-json: string,
+  }
+
+  push-input: func(event: input-event);
+  set-frame-metrics: func(metrics: frame-metrics);
+  flush-draw: func(messages: list<draw-message>);
+  read-clipboard: func() -> option<string>;
+  write-clipboard: func(text: string) -> result<_, string>;
+}
+
+world emacs-core-host {
+  import filesystem;
+  import clock;
+  import random;
+  import environment;
+  import stdio;
+  import process;
+  import gui;
+}
+`;
+
+await mkdir(join(repoRoot, "build", "artifacts"), { recursive: true });
+await writeFile(outputPath, wit);
+console.log(`Generated ${outputPath}`);

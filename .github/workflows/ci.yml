@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  build-test-pages:
+    name: Build, Test, And Publish Pages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: "latest"
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake build-essential libncurses-dev ripgrep rsync texinfo
+      - name: Build generated Pages bundle
+        env:
+          JOBS: "2"
+        run: make build
+      - name: Test generated bundle and runtime contracts
+        run: npm test
+      - name: Check generated artifact sizes
+        run: find docs/artifacts -type f -maxdepth 3 -printf '%s %p\n' | sort -nr | head -20
+      - uses: actions/configure-pages@v5
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      - uses: actions/upload-pages-artifact@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        with:
+          path: docs
+      - id: deployment
+        uses: actions/deploy-pages@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'

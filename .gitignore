@@ -17,7 +17,6 @@
 # Logs
 logs/*
 !logs/.gitkeep
-!logs/*.txt
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -25,13 +24,16 @@ yarn-error.log*
 pnpm-debug.log*
 
 # Build and generated artifacts
-build/
+/build/
 dist/
 out/
 tmp/
 temp/
 cache/
 artifacts/
+!src/build/
+!src/build/**
+docs/artifacts/
 
 # wasmacs generated images and runtime outputs
 *.wasm
@@ -41,10 +43,9 @@ artifacts/
 *.manifest.json
 *.journal.jsonl
 
-# Keep interface/design sources trackable if they appear under artifacts by accident.
+# Keep interface/design sources trackable.
 !docs/**/*.md
-!scripts/**/*.sh
-!wit/**/*.wit
+!tools/**/*.sh
 
 # JavaScript / TypeScript app tooling
 node_modules/
@@ -96,3 +97,4 @@ loaddefs.el
 
 .claude
 
+/logs/*.txt

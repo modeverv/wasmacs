@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeUserPath } from "../../app/src/user-path.js";
+import { normalizeUserPath } from "../../src/wasm/src/user-path.js";
 
 test("relative file names open under projects", () => {
   assert.equal(

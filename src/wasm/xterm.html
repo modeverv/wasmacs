@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>wasmacs xterm</title>
+    <link rel="stylesheet" href="/app/src/styles.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/css/xterm.css">
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/lib/xterm.js"></script>
+    <style>
+      body { margin: 0; background: #1a1a1a; color: #eee; font-family: monospace; }
+      .xterm-only-shell { display: flex; flex-direction: column; height: 100vh; }
+      .xterm-only-header {
+        display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+        background: #2a2a2a; border-bottom: 1px solid #444; flex-shrink: 0;
+      }
+      .xterm-only-header h1 { margin: 0; font-size: 14px; font-weight: bold; color: #ccc; }
+      #xterm-status {
+        font-size: 13px; color: #888; flex: 1;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      #xterm-status.interactive { color: #4caf50; font-weight: bold; }
+      #xterm-status.error { color: #f44336; }
+      #start-xterm-session {
+        padding: 6px 14px; background: #1976d2; color: #fff;
+        border: none; border-radius: 4px; cursor: pointer; font-size: 13px;
+      }
+      #start-xterm-session:disabled { opacity: 0.5; cursor: default; }
+      #xterm-container { flex: 1; overflow: hidden; padding: 4px; }
+      #artifact-info {
+        font-size: 11px; color: #666; padding: 4px 16px;
+        background: #222; border-bottom: 1px solid #333; flex-shrink: 0;
+        font-family: monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="xterm-only-shell">
+      <div class="xterm-only-header">
+        <h1>wasmacs xterm</h1>
+        <span id="xterm-status">idle — xterm-only mode (no legacy workers)</span>
+        <button id="start-xterm-session" type="button">Start Interactive Session</button>
+      </div>
+      <div id="artifact-info">artifact: loading…</div>
+      <div id="xterm-container"></div>
+    </div>
+
+    <script type="module">
+import { createXtermEmacsTerminal, xtermDataToBytes } from "/app/src/xterm-emacs-terminal.js";
+
+// xterm-only diagnostic page.
+// No legacy core worker, no frame-grid, no textarea, no old command bridge.
+//
+// Boot modes (via ?boot= query param):
+//   (default) cold  — start-xterm-session: cold loadup, KNOWN BLOCKER in browser Worker
+//   pdump           — start-pdump-xterm-session: diagnostic pdump boot, avoids loadup overflow
+//
+// The cold loadup path is the product default but fails in browser Workers with:
+//   RangeError: Maximum call stack size exceeded at temacs.wasm.eval_sub
+// This is an open blocker. The pdump boot is a diagnostic workaround, NOT the product default.
+
+const params = new URLSearchParams(window.location.search);
+const bootMode = params.get("boot") ?? "cold";
+const isPdump = bootMode === "pdump";
+
+const xtermStatusEl = document.querySelector("#xterm-status");
+const startButton = document.querySelector("#start-xterm-session");
+const xtermContainer = document.querySelector("#xterm-container");
+const artifactInfoEl = document.querySelector("#artifact-info");
+
+// Show boot mode in UI
+if (isPdump) {
+  document.title = "wasmacs xterm [diagnostic: pdump boot]";
+  startButton.textContent = "Start Diagnostic Session (pdump boot)";
+  startButton.style.background = "#6a1b9a";
+} else {
+  // Cold boot — show blocker warning
+  setArtifactInfo("OPEN BLOCKER: cold loadup causes JS call stack overflow in browser Workers. " +
+    "Use ?boot=pdump for diagnostic workaround. " +
+    "See docs/os-compatibility-boundary.md.");
+}
+
+let xtermWorker = null;
+let xtermTerminal = null;
+
+function setStatus(text, cls = "") {
+  xtermStatusEl.textContent = text;
+  xtermStatusEl.className = cls ?? "";
+}
+
+function setArtifactInfo(text) {
+  artifactInfoEl.textContent = text;
+}
+
+function startXtermSession() {
+  if (xtermWorker) return;
+  setStatus("loading…");
+  startButton.disabled = true;
+
+  if (!xtermTerminal) {
+    xtermTerminal = createXtermEmacsTerminal(xtermContainer);
+    xtermTerminal.onData((data) => {
+      console.log("[xterm] onData fired, data=", JSON.stringify(data), "workerAlive=", !!xtermWorker);
+      if (!xtermWorker) { console.warn("[xterm] worker is null, discarding input"); return; }
+      const bytes = xtermDataToBytes(data);
+      console.log("[xterm→worker] posting emacs-input-bytes", bytes);
+      xtermWorker.postMessage({ type: "emacs-input-bytes", bytes });
+    });
+  }
+
+  xtermWorker = new Worker("/app/src/asyncify-minibuffer-worker.js");
+
+  xtermWorker.onmessage = (event) => {
+    const msg = event.data;
+
+    if (msg.type === "terminal-output-bytes" && xtermTerminal) {
+      xtermTerminal.writeBytes(msg.bytes);
+      const cur = xtermStatusEl.textContent ?? "";
+      if (cur.startsWith("loading") || cur.startsWith("starting Emacs") || cur.startsWith("loadup:")) {
+        setStatus("running — receiving terminal output");
+      }
+    }
+
+    if (msg.type === "status") {
+      if (!xtermStatusEl.classList.contains("interactive")) {
+        setStatus(msg.text);
+      }
+    }
+
+    if (msg.type === "xterm-session-started") {
+      const diagLabel = msg.diagnostic ? " [diagnostic: pdump]" : "";
+      setStatus("starting Emacs" + diagLabel + " — loading…");
+      if (msg.artifact) {
+        setArtifactInfo(`artifact: ${msg.artifact}  |  boot: ${msg.bootMode ?? "cold"}${msg.diagnostic ? " [diagnostic]" : ""}`);
+      }
+      // Show elapsed time while loadup is running (can take 60-120s with JIT warm-up)
+      const t0 = Date.now();
+      const timer = setInterval(() => {
+        const cur = xtermStatusEl.textContent ?? "";
+        if (cur.includes("interactive") || cur.includes("error") || cur.includes("ended")) {
+          clearInterval(timer);
+          return;
+        }
+        const secs = Math.floor((Date.now() - t0) / 1000);
+        const base = cur.replace(/ \(\d+s\)$/, "");
+        setStatus(`${base} (${secs}s)`);
+      }, 2000);
+    }
+
+    if (msg.type === "xterm-artifact-fingerprint") {
+      const fp = msg.fingerprint ?? {};
+      setArtifactInfo([
+        `artifact: ${fp.artifactDir ?? "?"}`,
+        `boot: ${msg.bootMode ?? "cold"}`,
+        `STACK_SIZE: ${fp.stackSize ?? "?"}`,
+        `handleAsync: ${fp.handleAsyncMode ?? "?"}`,
+        fp.wasmacsQueueTerminalInputPresent ? "queue:✓" : "queue:✗",
+      ].join("  |  "));
+    }
+
+    if (msg.type === "xterm-loadup-checkpoint") {
+      setStatus(`loadup: ${msg.file ?? msg.phase ?? "…"}`);
+    }
+
+    if (msg.type === "xterm-session-at-wait") {
+      const diagNote = msg.diagnostic ? " [diagnostic pdump]" : "";
+      setStatus("interactive ✓" + diagNote, "interactive");
+    }
+
+    if (msg.type === "xterm-session-returned") {
+      const err = msg.error ? ` — ${msg.error.slice(0, 120)}` : "";
+      setStatus(`session ended (status ${msg.status ?? "?"}${err}`, "error");
+      xtermWorker = null;
+      startButton.disabled = false;
+    }
+
+    if (msg.type === "xterm-session-error") {
+      setStatus(`error: ${(msg.error ?? "unknown").slice(0, 120)}`, "error");
+    }
+
+    if (msg.type === "stdout") {
+      if (/^Loading /.test(msg.text)) setStatus(`loadup: ${msg.text.slice(0, 80)}`);
+    }
+
+    if (msg.type === "stderr") {
+      // Show loadup progress from stderr (Emacs routes "Loading ..." to stderr in --nw mode).
+      if (/^Loading /.test(msg.text) && !xtermStatusEl.classList.contains("interactive")) {
+        setStatus(`loadup: ${msg.text.slice(8, 80)}`);
+      } else if (/RangeError|Maximum call stack|Aborted|RuntimeError/i.test(msg.text)) {
+        setStatus(`error: ${msg.text.slice(0, 120)}`, "error");
+      }
+    }
+  };
+
+  xtermWorker.onerror = (event) => {
+    setStatus(`worker error: ${event.message}`, "error");
+    xtermWorker = null;
+    startButton.disabled = false;
+  };
+
+  // Route to product path (cold loadup) or diagnostic path (pdump) based on ?boot=
+  const msgType = isPdump ? "start-pdump-xterm-session" : "start-xterm-session";
+  xtermWorker.postMessage({ type: msgType });
+}
+
+startButton.addEventListener("click", startXtermSession);
+
+if (params.has("autostart")) {
+  startXtermSession();
+}
+    </script>
+  </body>
+</html>

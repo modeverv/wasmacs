@@ -5,8 +5,8 @@ import {
   pendingCommandMessage,
   pendingCommandStatusText,
   validatePendingCommandMessage,
-} from "../../app/src/pending-command-protocol.js";
-import { BehaviorTreatment, SmallOsOperations, SmallOsServices } from "../../app/src/small-os-services.js";
+} from "../../src/wasm/src/pending-command-protocol.js";
+import { BehaviorTreatment, SmallOsOperations, SmallOsServices } from "../../src/wasm/src/small-os-services.js";
 
 test("pending command messages carry worker-owned command state", () => {
   const message = pendingCommandMessage(

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pdump diagnostic — M260604</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:monospace;background:#1a1a2e;color:#e0e0e0;padding:12px}
+h1{font-size:16px;color:#7c8aff;margin-bottom:8px}
+.panel{background:#16213e;border:1px solid #0f3460;border-radius:4px;margin-bottom:8px}
+.panel-header{background:#0f3460;padding:4px 8px;font-size:12px}
+.panel-body{padding:8px;max-height:240px;overflow-y:auto;font-size:11px;white-space:pre-wrap;word-break:break-all}
+.toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+button{background:#0f3460;color:#e0e0e0;border:1px solid #1a508b;padding:6px 12px;border-radius:3px;cursor:pointer;font-size:12px;font-family:monospace}
+button:hover{background:#1a508b}
+button:disabled{opacity:0.4}
+.error{color:#ff6b6b}.warn{color:#ffd93d}.ok{color:#6bff8e}.info{color:#7c8aff}
+.sep{border-top:1px solid #0f3460;margin:4px 0;padding-top:4px;color:#7c8aff;font-size:10px}
+</style>
+</head>
+<body>
+<h1>pdump diagnostic — M260604</h1>
+<div id="status">Ready. Click Generate pdmp.</div>
+<div class="toolbar">
+<button id="btn-gen" onclick="startGenerate()">Generate pdmp</button>
+<button id="btn-abort" onclick="abortAll()">Abort</button>
+<button id="btn-dl" onclick="downloadPdmp()" disabled>Download .pdmp</button>
+<button id="btn-save" onclick="saveToStorage()" disabled>Save to Storage</button>
+<button id="btn-reload" onclick="reloadEval()" disabled>Reload + Eval + GC</button>
+<button id="btn-boot" onclick="reloadBootTest()" disabled>Boot Test (batch)</button>
+<button id="btn-nw-pdmp" onclick="nwTest(true)" disabled>NW+pdmp test</button>
+<button id="btn-nw-cold" onclick="nwTest(false)">NW cold boot test</button>
+</div>
+<div class="panel"><div class="panel-header">stdout + stderr</div><div class="panel-body" id="out-panel"></div></div>
+<div class="panel"><div class="panel-header">checkpoints</div><div class="panel-body" id="ck-panel"></div></div>
+<div class="panel"><div class="panel-header">state / results</div><div class="panel-body" id="st-panel"></div></div>
+
+<script>
+var genWorker=null,pdmpBase64=null;
+function esc(s){var d=document.createElement("div");d.textContent=String(s);return d.innerHTML}
+function addOut(h){var e=document.getElementById("out-panel");e.innerHTML+=h+"\n";e.scrollTop=999999}
+function addCk(t){document.getElementById("ck-panel").innerHTML+='<div class="info">'+esc(t)+'</div>'}
+function setSt(h){document.getElementById("st-panel").innerHTML=h}
+function addSt(h){document.getElementById("st-panel").innerHTML+=h}
+function setStatus(h){document.getElementById("status").innerHTML=h}
+function bts(s){["gen","dl","save","reload","boot","nw-pdmp"].forEach(function(k){var el=document.getElementById("btn-"+k);if(el)el.disabled=!s[k]})}
+function mkWorker(fn){var w=new Worker("/app/src/pdump-diagnostic-worker.js?v="+Date.now());w.onmessage=function(e){fn(e.data,w)};w.onerror=function(e){addOut('<span class="error">Worker error: '+esc(e.message||"")+'</span>')};return w}
+
+function onCaps(msg){
+  addSt('<div class="info" style="font-size:10px">caps: callMain='+esc(msg.callMain)+' _main='+esc(msg._main)+' thisProgram='+esc(msg.thisProgram)+'</div>');
+}
+
+function startGenerate(){
+abortAll();setSt("");setStatus('<span class="info">Generating pdmp...</span>');
+document.getElementById("out-panel").innerHTML="";document.getElementById("ck-panel").innerHTML="";
+bts({gen:false,dl:false,save:false,reload:false,boot:false});
+genWorker=mkWorker(function(msg,w){
+if(msg.type==="checkpoint")addCk(msg.kind);
+if(msg.type==="stdout")addOut(esc(msg.text));
+if(msg.type==="stderr")addOut('<span class="warn">'+esc(msg.text)+'</span>');
+if(msg.type==="module-capabilities")onCaps(msg);
+if(msg.type==="pdmp-found")addSt('<div class="ok">'+esc(msg.path)+' ('+(msg.size/1024/1024).toFixed(1)+' MB)</div>');
+if(msg.type==="pdmp-sha256")addSt('<div style="font-size:9px">sha256:'+esc(msg.sha256)+'</div>');
+if(msg.type==="pdmp-download"){pdmpBase64=msg.base64;setStatus('<span class="ok">Done. Click Reload or Boot Test.</span>');bts({gen:true,dl:true,save:true,reload:true,boot:true,'nw-pdmp':true})}
+if(msg.type==="lifecycle")addSt('<div>lifecycle:'+esc(msg.phase||"")+'</div>');
+if(msg.type==="fs-tree")addSt('<div style="font-size:9px">fs:'+esc(JSON.stringify(msg.entries))+'</div>');
+if(msg.kind==="generate-done" && pdmpBase64){setStatus('<span class="ok">Done. Click Reload or Boot Test.</span>');bts({gen:true,dl:true,save:true,reload:true,boot:true,'nw-pdmp':true})}
+if(msg.kind==="generate-done" && !pdmpBase64){setStatus('<span class="warn">Generated, waiting for pdmp bytes...</span>')}
+if(msg.kind==="generate-error"){setStatus('<span class="error">Generate failed.</span>');bts({gen:true,dl:false,save:false,reload:false,boot:false,'nw-pdmp':false})}
+});
+genWorker.postMessage({type:"generate"})}
+
+function reloadEval(){
+if(!pdmpBase64){setStatus('<span class="warn">Generate first.</span>');return}
+abortAll();setStatus('<span class="info">Reloading...</span>');setSt("");bts({gen:false,dl:false,save:false,reload:false,boot:false});
+var w=mkWorker(function(msg,wr){
+if(msg.type==="checkpoint")addCk(msg.kind);
+if(msg.type==="stdout")addOut(esc(msg.text));
+if(msg.type==="stderr")addOut('<span class="warn">'+esc(msg.text)+'</span>');
+if(msg.type==="module-capabilities")onCaps(msg);
+if(msg.type==="reload-results"){
+  addSt('<div class="sep">=== Post-boot eval via wasmacs_eval_string ===</div>');
+  addSt('<div><b>file='+(msg.fileExists?'YES':'NO')+'</b> args='+esc(msg.bootArgs||"?")+' size='+(msg.generatedPdmpSize/1024/1024).toFixed(1)+'MB</div>');
+  addSt('<div style="font-size:9px">analyzePath: '+esc(msg.analyzePath||"")+'</div>');
+  addSt('<div>exit='+msg.exit+' exitErr='+esc(msg.exitErr||"")+'</div>');
+  addSt('<div>version='+esc(msg.version.r)+' pdump='+esc(msg.pdump.r)+' gc='+esc(msg.gc.r)+'</div>');
+  addSt('<div style="font-size:9px">cmdline-args: '+esc((msg.cla.r||"").substring(0,500))+'</div>');
+  var ok=(/LOADED/.test(msg.pdump.r));
+  if(ok&&/GC-OK/.test(msg.gc.r))addSt('<div class="ok"><b>D3+D4 PASS</b></div>');
+	  else addSt('<div class="warn">pdump='+esc(msg.pdump.r)+' (use Boot Test for callMain boot evidence)</div>');
+  setStatus('<span class="'+(ok?'ok':'warn')+'">Done</span>');
+  setTimeout(function(){wr.terminate();bts({gen:true,dl:true,save:true,reload:true,boot:true,'nw-pdmp':true})},500)}
+if(msg.type==="lifecycle")addSt('<div>lifecycle:'+esc(msg.phase||"")+'</div>')});
+w.postMessage({type:"reload-eval",pdmpBase64:pdmpBase64})}
+
+function reloadBootTest(){
+if(!pdmpBase64){setStatus('<span class="warn">Generate first.</span>');return}
+	abortAll();setStatus('<span class="info">Boot test (callMain batch + eval)...</span>');setSt("");bts({gen:false,dl:false,save:false,reload:false,boot:false});
+var w=mkWorker(function(msg,wr){
+if(msg.type==="checkpoint")addCk(msg.kind);
+if(msg.type==="stdout")addOut(esc(msg.text));
+if(msg.type==="stderr")addOut('<span class="warn">'+esc(msg.text)+'</span>');
+if(msg.type==="module-capabilities")onCaps(msg);
+if(msg.type==="boot-callmain-results"){
+	  addSt('<div class="sep">=== Boot via callMain batch + ccall eval ===</div>');
+  addSt('<div><b>file='+(msg.fileExists?'YES':'NO')+'</b> size='+(msg.statSize/1024/1024).toFixed(1)+'MB exit='+msg.exit+(msg.exitErr?' err='+esc(msg.exitErr):'')+'</div>');
+  addSt('<div>BOOT-VER: <b>'+esc(msg.ver)+'</b></div>');
+  addSt('<div>BOOT-PDUMP: <b>'+esc(msg.pdump)+'</b></div>');
+  addSt('<div>BOOT-GC: <b>'+esc(msg.gc)+'</b></div>');
+  addSt('<div style="font-size:9px">BOOT-CLA: '+esc(msg.cla)+'</div>');
+  var ok=(/LOADED/.test(msg.pdump));
+  if(ok&&/PASS/.test(msg.gc))addSt('<div class="ok"><b>PDMP BOOT PASS</b></div>');
+  else addSt('<div class="error">PDMP BOOT: NOT LOADED ('+esc(msg.pdump)+')</div>');
+  setStatus('<span class="'+(ok?'ok':'error')+'">Boot test done</span>');
+  setTimeout(function(){wr.terminate();bts({gen:true,dl:true,save:true,reload:true,boot:true,'nw-pdmp':true})},500)}
+if(msg.type==="done"){wr.terminate();bts({gen:true,dl:true,save:true,reload:true,boot:true,'nw-pdmp':true})}
+});
+w.postMessage({type:"reload-eval-via-callmain",pdmpBase64:pdmpBase64})}
+
+// NW comparison test: withPdmp=true uses pdmpBase64, false=cold boot
+function nwTest(withPdmp){
+if(withPdmp&&!pdmpBase64){setStatus('<span class="warn">Generate pdmp first.</span>');return}
+abortAll();setStatus('<span class="info">NW test (pdmp='+(withPdmp?'YES':'NO')+')...</span>');setSt("");bts({gen:false,dl:false,save:false,reload:false,boot:false});
+document.getElementById("out-panel").innerHTML="";document.getElementById("ck-panel").innerHTML="";
+var w=mkWorker(function(msg,wr){
+if(msg.type==="checkpoint")addCk(msg.kind+(msg.data?JSON.stringify(msg.data):""));
+if(msg.type==="stdout")addOut(esc(msg.text));
+if(msg.type==="stderr")addOut('<span class="warn">'+esc(msg.text)+'</span>');
+if(msg.type==="nw-test-result"){
+  addSt('<div class="sep">=== NW test (pdmp='+msg.withPdmp+') ===</div>');
+  addSt('<div>exit='+msg.exit+' err='+esc(msg.exitErr||"")+'</div>');
+  addSt('<div style="font-size:9px">bootArgs='+esc(msg.bootArgs)+'</div>');
+  var ok=(msg.exit===0||msg.exitErr==="");
+  setStatus('<span class="'+(ok?'ok':'error')+'">NW test done (exit='+msg.exit+')</span>');
+  setTimeout(function(){wr.terminate();bts({gen:true,dl:!!pdmpBase64,save:!!pdmpBase64,reload:!!pdmpBase64,boot:!!pdmpBase64,'nw-pdmp':!!pdmpBase64})},500)}
+});
+w.postMessage({type:"nw-test",withPdmp:withPdmp,pdmpBase64:withPdmp?pdmpBase64:null})}
+
+function downloadPdmp(){if(!pdmpBase64)return;var r=atob(pdmpBase64),b=new Uint8Array(r.length);for(var i=0;i<r.length;i++)b[i]=r.charCodeAt(i);var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([b]));a.download="bootstrap-emacs.pdmp";a.click()}
+function saveToStorage(){if(!pdmpBase64)return;var r=atob(pdmpBase64),b=new Uint8Array(r.length);for(var i=0;i<r.length;i++)b[i]=r.charCodeAt(i);var q=indexedDB.open("wasmacs-pdump",1);q.onupgradeneeded=function(){q.result.createObjectStore("f")};q.onsuccess=function(){var t=q.result.transaction("f","readwrite");t.objectStore("f").put(b,"pdmp");t.oncomplete=function(){q.result.close();setStatus('<span class="ok">Saved ('+(b.length/1024/1024).toFixed(1)+' MB)</span>')}}}
+function abortAll(){if(genWorker){genWorker.terminate();genWorker=null}}
+bts({gen:true,dl:false,save:false,reload:false,boot:false})
+</script>
+</body>
+</html>

@@ -24,7 +24,7 @@ import {
   validateBoundaryInventoryRecord,
   validateOperationContract,
   validateSubstrateRecord,
-} from "../../app/src/small-os-services.js";
+} from "../../src/wasm/src/small-os-services.js";
 
 test("small OS operations name owner services, invariants, sources, and acceptance", () => {
   for (const operation of Object.values(SmallOsOperations)) {

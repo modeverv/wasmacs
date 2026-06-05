@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { coalesceBufferCommand } from "../../app/src/command-queue.js";
+import { coalesceBufferCommand } from "../../src/wasm/src/command-queue.js";
 
 test("coalesces adjacent insert-text commands for the same user file", () => {
   const queue = coalesceBufferCommand([], {

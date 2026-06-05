@@ -1,0 +1,601 @@
+pdump configure probe
+source: vendor/emacs
+workdir: /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/build-gnu-host-internal-termcap-pdump
+host: wasm32-unknown-linux-gnu
+dumping: pdumper
+
+emconfigure: /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/configure --host=wasm32-unknown-linux-gnu --build=aarch64-apple-darwin25.5.0 --without-all --without-x --without-ns --without-pgtk --without-sound --without-dbus --without-gconf --without-gsettings --without-native-compilation --with-wide-int --with-dumping=pdumper --with-pdumper=yes --with-unexec=no 'emacs_cv_tputs_lib=none required' ac_cv_func_malloc_trim=no emacs_cv_linux_sysinfo=no ac_cv_func_sigsuspend=no in directory /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/build-gnu-host-internal-termcap-pdump
+checking for xcrun... xcrun
+checking for make... yes
+checking for GNU Make... make
+checking build system type... aarch64-apple-darwin25.5.0
+checking host system type... wasm32-unknown-linux-gnu
+checking for wasm32-unknown-linux-gnu-gcc... /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc
+checking whether the C compiler works... yes
+checking for C compiler default output file name... a.out
+checking for suffix of executables... 
+checking whether we are cross compiling... yes
+checking for suffix of object files... o
+checking whether the compiler supports GNU C... yes
+checking whether /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc accepts -g... yes
+checking for /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc option to enable C23 features... -std=gnu23
+checking whether the compiler is clang... yes
+checking for compiler option needed when checking for declarations... -Werror=implicit-function-declaration
+checking for ar... /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emar
+checking whether /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 and cc understand -c and -o together... yes
+checking for stdio.h... yes
+checking for stdlib.h... yes
+checking for string.h... yes
+checking for inttypes.h... yes
+checking for stdint.h... yes
+checking for strings.h... yes
+checking for sys/stat.h... yes
+checking for sys/types.h... yes
+checking for unistd.h... yes
+checking for wchar.h... yes
+checking for minix/config.h... no
+checking for linux/fs.h... no
+checking for malloc.h... yes
+checking for sys/systeminfo.h... no
+checking for sys/sysinfo.h... yes
+checking for coff.h... no
+checking for pty.h... yes
+checking for sys/resource.h... yes
+checking for sys/utsname.h... yes
+checking for pwd.h... yes
+checking for util.h... no
+checking for sanitizer/lsan_interface.h... yes
+checking for sanitizer/asan_interface.h... yes
+checking for sanitizer/common_interface_defs.h... yes
+checking for sys/socket.h... yes
+checking for sys/param.h... yes
+checking for pthread.h... yes
+checking for malloc/malloc.h... no
+checking for sys/un.h... yes
+checking for vfork.h... no
+checking for utmp.h... yes
+checking for utmpx.h... yes
+checking for OS.h... no
+checking for byteswap.h... yes
+checking for dirent.h... yes
+checking for execinfo.h... no
+checking for linux/xattr.h... no
+checking for stdio_ext.h... yes
+checking for sys/vfs.h... yes
+checking for sys/fs_types.h... no
+checking for getopt.h... yes
+checking for sys/time.h... yes
+checking for ieee754.h... no
+checking for limits.h... yes
+checking for sys/select.h... yes
+checking for stdbit.h... no
+checking for stdbool.h... yes
+checking for stdckdint.h... yes
+checking for sys/random.h... yes
+checking for endian.h... yes
+checking whether it is safe to define __EXTENSIONS__... yes
+checking whether _XOPEN_SOURCE should be defined... no
+checking how to run the C preprocessor... /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 -E
+checking for egrep -e... /usr/bin/grep -E
+checking for Minix Amsterdam compiler... no
+checking for wasm32-unknown-linux-gnu-ar... (cached) /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emar
+checking for /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 option to support large files... none needed
+checking for /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 option to support timestamps after 2038... none needed
+checking whether the compiler is clang... yes
+checking whether C compiler handles -Werror -Wunknown-warning-option... yes
+checking whether C compiler handles -Wno-pointer-sign... yes
+checking whether C compiler handles -Wno-string-plus-int... yes
+checking whether C compiler handles -Wno-unknown-attributes... yes
+checking whether C compiler handles -Wno-unknown-pragmas... yes
+checking whether C compiler handles -Wno-initializer-overrides... yes
+checking whether C compiler handles -Wno-tautological-compare... yes
+checking whether C compiler handles -Wno-tautological-constant-out-of-range-compare... yes
+checking for a BSD-compatible install... /opt/homebrew/bin/ginstall -c
+checking command to symlink files in the same directory... ln -s
+checking for install-info... /opt/homebrew/bin/install-info
+checking for gzip... /usr/bin/gzip
+checking for 'find' args to delete a file... -delete
+checking for brew... brew
+checking for makeinfo... /opt/homebrew/opt/texinfo/bin/makeinfo
+checking for -znocombreloc... not needed
+checking whether addresses are sanitized... no
+checking for math library... none required
+checking for wasm32-unknown-linux-gnu-pkg-config... no
+checking for pkg-config... /opt/homebrew/bin/pkg-config
+configure: WARNING: using cross tools not prefixed with host triplet
+checking pkg-config is at least version 0.9.0... yes
+checking for ADDR_NO_RANDOMIZE... no
+checking if Linux sysinfo may be used... (cached) no
+checking for sys/wait.h that is POSIX.1 compatible... yes
+checking for net/if.h... yes
+checking for ifaddrs.h... yes
+checking for net/if_dl.h... no
+checking for struct ifreq.ifr_flags... yes
+checking for struct ifreq.ifr_hwaddr... yes
+checking for struct ifreq.ifr_netmask... yes
+checking for struct ifreq.ifr_broadaddr... yes
+checking for struct ifreq.ifr_addr... yes
+checking for struct ifreq.ifr_addr.sa_len... no
+checking whether gcc understands -MMD -MF... yes
+checking for /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 options to detect undeclared functions... none needed
+checking for /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 options to ignore future-version functions... none needed
+checking for struct passwd.pw_gecos... yes
+checking for X... disabled
+checking whether malloc is Doug Lea style... no
+checking for sbrk... yes
+checking for getpagesize... yes
+checking for __lsan_ignore_object... no
+checking for fork... yes
+checking for vfork... yes
+checking for fchmod... yes
+checking for utmpname... no
+checking for utmpxname... no
+checking for canonicalize_file_name... no
+checking for realpath... yes
+checking for lstat... yes
+checking for fchmodat... yes
+checking for lchmod... yes
+checking for fcntl... yes
+checking for fdopendir... yes
+checking for listxattr... no
+checking for fstatat... yes
+checking for fsync... yes
+checking for gettimeofday... yes
+checking for memset_s... no
+checking for pselect... yes
+checking for pthread_sigmask... yes
+checking for readlink... yes
+checking for isblank... yes
+checking for iswctype... yes
+checking for strtoimax... yes
+checking for symlink... yes
+checking for localtime_r... yes
+checking for getdtablesize... no
+checking for working mmap... yes
+checking for main in -lXbsd... no
+checking for pthread library... none needed
+checking for thread support... no
+checking for getaddrinfo_a in -lanl... no
+checking for malloc_trim... (cached) no
+checking for maillock in -lmail... no
+checking for maillock in -llockfile... no
+checking for liblockfile.so... no
+checking for maillock.h... no
+checking for linux/seccomp.h... no
+checking for linux/filter.h... no
+checking for libseccomp >= 2.5.2... no
+checking size of long... 4
+checking for accept4... yes
+checking for fchdir... yes
+checking for gethostname... yes
+checking for getrusage... yes
+checking for get_current_dir_name... yes
+checking for lrand48... yes
+checking for random... yes
+checking for rint... yes
+checking for tcdrain... yes
+checking for trunc... yes
+checking for select... yes
+checking for getpagesize... (cached) yes
+checking for setlocale... yes
+checking for newlocale... yes
+checking for getrlimit... yes
+checking for setrlimit... yes
+checking for shutdown... yes
+checking for pthread_sigmask... (cached) yes
+checking for strsignal... yes
+checking for setitimer... yes
+checking for sendto... yes
+checking for recvfrom... yes
+checking for getsockname... yes
+checking for getifaddrs... yes
+checking for freeifaddrs... yes
+checking for gai_strerror... yes
+checking for sync... yes
+checking for endpwent... yes
+checking for getgrent... yes
+checking for endgrent... yes
+checking for cfmakeraw... yes
+checking for cfsetspeed... yes
+checking for __executable_start... no
+checking for log2... yes
+checking for pthread_setname_np... no
+checking for pthread_set_name_np... no
+checking for getpwent... yes
+checking for renameat2... no
+checking for aligned_alloc... yes
+checking whether aligned_alloc is declared... yes
+checking for posix_madvise... yes
+checking for madvise... yes
+checking for __builtin_frame_address... yes
+checking for __builtin_unwind_init... yes
+checking for declarations of fseeko and ftello... yes
+checking for grantpt... yes
+checking for getpt... no
+checking for posix_openpt... yes
+checking for library containing tputs... (cached) none required
+checking whether -lncurses library defines BC... no
+checking for timerfd interface... no
+checking whether signals can be handled on alternate stack... yes
+checking for valgrind/valgrind.h... no
+checking for struct unipair.unicode... no
+checking for pid_t... yes
+checking for working fork... cross
+configure: WARNING: result yes guessed because of cross compilation
+checking for working vfork... (cached) yes
+checking for snprintf... yes
+checking for open_memstream... yes
+checking for spawn.h... yes
+checking for posix_spawn... yes
+checking for posix_spawn_file_actions_addchdir... no
+checking for posix_spawn_file_actions_addchdir_np... yes
+checking for posix_spawnattr_setflags... yes
+checking whether POSIX_SPAWN_SETSID is declared... yes
+checking whether GLib is linked in... no
+checking for nl_langinfo and CODESET... yes
+checking for nl_langinfo and _NL_PAPER_WIDTH... no
+checking for mbstate_t... yes
+checking for signals via characters... no
+checking for _setjmp... yes
+checking for sigsetjmp... yes
+checking POSIX termios... yes
+checking size of speed_t... 4
+checking for usable FIONREAD... yes
+checking for usable SIGIO... yes
+checking for struct alignment... yes
+checking for C/C++ restrict keyword... __restrict__
+checking for typeof syntax and keyword spelling... typeof
+checking for statement expressions... yes
+checking whether malloc (0) returns nonnull... guessing yes
+checking for working alloca.h... yes
+checking for alloca... yes
+checking for a race-free mkdir -p... /opt/homebrew/bin/gmkdir -p
+checking whether the preprocessor supports include_next... yes
+checking whether source code line length is unlimited... yes
+checking whether endutent is declared... yes
+checking for struct utmpx.ut_user... yes
+checking for struct utmp.ut_user... yes
+checking for struct utmpx.ut_name... yes
+checking for struct utmp.ut_name... yes
+checking for struct utmpx.ut_type... yes
+checking for struct utmp.ut_type... yes
+checking for struct utmpx.ut_pid... yes
+checking for struct utmp.ut_pid... yes
+checking for struct utmp.ut_tv... yes
+checking for struct utmpx.ut_host... yes
+checking for struct utmp.ut_host... yes
+checking for struct utmpx.ut_id... yes
+checking for struct utmp.ut_id... yes
+checking for struct utmpx.ut_session... yes
+checking for struct utmp.ut_session... yes
+checking for struct utmpx.ut_exit... yes
+checking for struct utmp.ut_exit... yes
+checking for struct utmpx.ut_exit.ut_exit... no
+checking for struct utmpx.ut_exit.e_exit... yes
+checking for struct utmp.ut_exit.e_exit... yes
+checking for struct utmpx.ut_exit.ut_termination... no
+checking for struct utmpx.ut_exit.e_termination... yes
+checking for struct utmp.ut_exit.e_termination... yes
+checking whether sysinfo is declared... yes
+checking for sys/sysctl.h... no
+checking for sysctl... no
+checking whether lstat correctly handles trailing slash... guessing yes
+checking whether // is distinct from /... unknown, assuming no
+checking whether realpath works... guessing yes
+checking for faccessat... yes
+checking for getcwd... yes
+checking whether byte ordering is bigendian... no
+checking if environ is properly declared... yes
+checking for complete errno.h... yes
+checking whether ctype.h defines __header_inline... no
+checking for mode_t... yes
+checking whether strmode is declared... no
+checking whether getline is declared... yes
+checking for gawk... no
+checking for mawk... no
+checking for nawk... no
+checking for awk... awk
+checking for getopt.h... (cached) yes
+checking for getopt_long_only... yes
+checking whether getopt is POSIX compatible... guessing yes
+checking for working GNU getopt function... guessing no
+checking for glibc-compatible sys/cdefs.h... no
+checking whether timespec_get is declared... yes
+checking for timespec_get... yes
+checking for struct timeval... yes
+checking for wide-enough struct timeval.tv_sec member... yes
+checking whether limits.h has WORD_BIT, BOOL_WIDTH etc.... no
+checking whether the compiler produces multi-arch binaries... no
+checking whether stdint.h conforms to C99... guessing yes
+checking whether stdint.h works without ISO C predefines... yes
+checking whether stdint.h has UINTMAX_WIDTH etc.... no
+checking whether memmem is declared... yes
+checking whether memrchr is declared... yes
+checking whether <limits.h> defines MIN and MAX... no
+checking whether <sys/param.h> defines MIN and MAX... yes
+checking whether time_t is signed... yes
+checking whether alarm is declared... yes
+checking for working mktime... guessing no
+checking whether struct tm is in sys/time.h or time.h... time.h
+checking for struct tm.tm_zone... yes
+checking for struct tm.tm_gmtoff... yes
+checking whether <sys/select.h> is self-contained... yes
+checking for inline... inline
+checking for sigset_t... yes
+checking for volatile sig_atomic_t... yes
+checking for sighandler_t... yes
+checking for wchar_t... yes
+checking for good max_align_t... yes
+checking whether NULL can be used in arbitrary expressions... yes
+checking for unreachable... yes
+checking whether nullptr_t needs <stddef.h>... yes
+checking for clean definition of __STDC_VERSION_STDDEF_H__... yes
+checking whether fcloseall is declared... no
+checking whether getw is declared... yes
+checking whether putw is declared... yes
+checking which flavor of printf attribute matches inttypes macros... system
+checking whether strnlen is declared... yes
+checking whether strtoimax is declared... yes
+checking whether stat file-mode macros are broken... no
+checking for nlink_t... yes
+checking for struct timespec in <time.h>... yes
+checking for TIME_UTC in <time.h>... yes
+checking whether execvpe is declared... yes
+checking whether clearerr_unlocked is declared... yes
+checking whether feof_unlocked is declared... yes
+checking whether ferror_unlocked is declared... yes
+checking whether fflush_unlocked is declared... yes
+checking whether fgets_unlocked is declared... yes
+checking whether fputc_unlocked is declared... yes
+checking whether fputs_unlocked is declared... yes
+checking whether fread_unlocked is declared... yes
+checking whether fwrite_unlocked is declared... yes
+checking whether getc_unlocked is declared... yes
+checking whether getchar_unlocked is declared... yes
+checking whether putc_unlocked is declared... yes
+checking whether putchar_unlocked is declared... yes
+checking if endian.h defines stdint types... yes
+checking if endian.h defines functions and macros... yes
+checking type of array argument to getgroups... gid_t
+checking whether getdelim is declared... yes
+checking whether getdtablesize is declared... yes
+checking whether malloc is ptrdiff_t safe... no
+checking whether malloc, realloc, calloc set errno on failure... yes
+checking for O_CLOEXEC... yes
+checking for promoted mode_t type... mode_t
+checking whether the utimes function works... guessing no
+checking for C compiler option to allow warnings... -Wno-error
+checking for alignas and alignof... yes, keywords
+checking for alloca as a compiler built-in... yes
+checking for static_assert... yes, a keyword
+checking for __builtin_expect... yes
+checking for working bswap_16, bswap_32, bswap_64... yes
+checking for readlinkat... yes
+checking for library containing clock_gettime... none required
+checking for clock_getres... yes
+checking for clock_gettime... yes
+checking for clock_settime... yes
+checking for copy_file_range... no
+checking for d_type member in directory struct... yes
+checking whether // is distinct from /... (cached) unknown, assuming no
+checking whether dup2 works... guessing yes
+checking for faccessat... (cached) yes
+checking whether fchmodat works... guessing no
+checking for readlinkat... (cached) yes
+checking whether fcntl handles F_DUPFD correctly... guessing yes
+checking whether fcntl understands F_DUPFD_CLOEXEC... guessing no
+checking whether fdopendir is declared... yes
+checking whether fdopendir works... guessing yes
+checking for flexible array member... yes
+checking for __fpending... yes
+checking whether __fpending is declared... yes
+checking whether free is known to preserve errno... no
+checking whether fstatat (..., 0) works... guessing yes
+checking for sys/mount.h... yes
+checking for statvfs function (SVR4)... yes
+checking whether to use statvfs64... no
+checking for two-argument statfs with statfs.f_frsize member... no
+checking for sys/fs/s5param.h... no
+checking for sys/statfs.h... yes
+checking for statfs that truncates block counts... no
+checking for futimens... yes
+checking whether futimens works... guessing no
+checking for getline... yes
+checking for working getline function... guessing no
+checking for getloadavg... yes
+checking for sys/loadavg.h... no
+checking whether getloadavg is declared... yes
+checking for getrandom... no
+checking for gettimeofday with POSIX signature... yes
+checking whether the compiler supports the __inline keyword... yes
+checking for gmp.h... no
+checking for gmp/gmp.h... no
+checking for memmem... yes
+checking whether memmem works... guessing yes
+checking for mempcpy... yes
+checking for memrchr... yes
+checking for memset_explicit... no
+checking for explicit_memset... no
+checking for mkostemp... yes
+checking for library containing nanosleep... none required
+checking for working nanosleep... guessing no (mishandles large arguments)
+checking for sys/pstat.h... no
+checking for sys/sysmp.h... no
+checking for sys/param.h... (cached) yes
+checking for sys/sysctl.h... (cached) no
+checking for sched_getaffinity_np... no
+checking for pstat_getdynamic... no
+checking for sysmp... no
+checking for sysctl... (cached) no
+checking for sched_getaffinity... no
+checking for pipe2... yes
+checking whether signature of pselect conforms to POSIX... yes
+checking whether pselect detects invalid fds... guessing yes
+checking whether pthread_sigmask is a macro... no
+checking whether pthread_sigmask works without -lpthread... guessing yes
+checking whether pthread_sigmask returns error numbers... guessing yes
+checking whether pthread_sigmask unblocks signals correctly... guessing yes
+checking for xattr library with ATTR_ACTION_PERMISSIONS... no
+configure: WARNING: libattr development library was not found or not usable.
+configure: WARNING: GNU Emacs will be built without xattr support.
+checking whether readlink signature is correct... yes
+checking whether readlink handles trailing slash correctly... guessing yes
+checking whether readlink truncates results correctly... guessing yes
+checking for readlinkat... (cached) yes
+checking whether readlinkat signature is correct... yes
+checking for working re_compile_pattern... guessing no
+checking for libintl.h... yes
+checking whether isblank is declared... yes
+checking for sig2str... no
+checking for sigdescr_np... no
+checking for socklen_t... yes
+checking for ssize_t... yes
+checking for struct stat.st_atim.tv_nsec... yes
+checking whether struct stat.st_atim is of type struct timespec... yes
+checking for struct stat.st_birthtimespec.tv_nsec... no
+checking for struct stat.st_birthtimensec... no
+checking for struct stat.st_birthtim.tv_nsec... no
+checking for bool, true, false... yes
+checking for stpcpy... yes
+checking for working strnlen... yes
+checking whether strtoimax works... guessing yes
+checking whether symlink handles trailing slash correctly... guessing yes
+checking whether localtime_r is declared... yes
+checking whether localtime_r is compatible with its POSIX signature... yes
+checking whether localtime works even near extrema... guessing yes
+checking for timezone_t... no
+checking for timegm... yes
+checking whether timer_settime is declared... yes
+checking for library containing timer_settime... no
+checking for timer_settime... no
+checking for utimensat... yes
+checking whether utimensat works... guessing yes
+checking for variable-length arrays... yes
+checking for rawmemchr... no
+checking for futimes... no
+checking for futimesat... yes
+checking for lutimes... no
+checking for futimens... (cached) yes
+checking for utimensat... (cached) yes
+checking for getdelim... yes
+checking for working getdelim function... guessing no
+checking for flockfile... yes
+checking for funlockfile... yes
+checking whether getc_unlocked is declared... (cached) yes
+checking whether open recognizes a trailing slash... guessing yes
+checking for __mktime_internal... no
+checking for timer_getoverrun... no
+checking for /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 option to disable position independent executables... not needed
+checking for __ctype_get_mb_cur_max... yes
+checking whether MB_CUR_MAX is defined to function that won't link... no
+
+Configured for 'wasm32-unknown-linux-gnu'.
+
+  Where should the build process find the source code?    /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src
+  What compiler should emacs be built with?               /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 -g3 -O0
+  Should Emacs use the GNU version of malloc?             no
+    (The GNU allocators don't work with this system configuration.)
+  Should Emacs use a relocating allocator for buffers?    no
+  Should Emacs use mmap(2) for buffer allocation?         no
+  What window system should Emacs use?                    none
+  What toolkit should Emacs use?                          none
+  Where do we find X Windows header files?                NONE
+  Where do we find X Windows libraries?                   NONE
+  Does Emacs use -lXaw3d?                                 no
+  Is Emacs being built for Android?                       no 
+  Does Emacs use the X Double Buffer Extension?           no
+  Does Emacs use -lXpm?                                   no
+  Does Emacs use -ljpeg?                                  no
+  Does Emacs use -ltiff?                                  no
+  Does Emacs use a gif library?                           no 
+  Does Emacs use a png library?                           no 
+  Does Emacs use -lrsvg-2?                                no
+  Does Emacs use -lwebp?                                  no
+  Does Emacs use -lsqlite3?                               no
+  Does Emacs use cairo?                                   no
+  Does Emacs use -llcms2?                                 no
+  Does Emacs use imagemagick?                             no
+  Does Emacs use native APIs for images?                  no
+  Does Emacs support sound?                               no
+  Does Emacs use -lgpm?                                   no
+  Does Emacs use -ldbus?                                  no
+  Does Emacs use -lgconf?                                 no
+  Does Emacs use GSettings?                               no
+  Does Emacs use a file notification library?             no
+  Does Emacs use access control lists?                    no
+  Does Emacs use -lselinux?                               no
+  Does Emacs use -lgnutls?                                no
+  Does Emacs use -lxml2?                                  no
+  Does Emacs use -lfreetype?                              no
+  Does Emacs use HarfBuzz?                                no
+  Does Emacs use -lm17n-flt?                              no
+  Does Emacs use -lotf?                                   no
+  Does Emacs use -lxft?                                   no
+  Does Emacs use -lsystemd?                               no
+  Does Emacs use -ltree-sitter?                           no
+  Does Emacs use the GMP library?                         no
+  Does Emacs directly use zlib?                           no
+  Does Emacs have dynamic modules support?                no
+  Does Emacs use toolkit scroll bars?                     no
+  Does Emacs support Xwidgets?                            no
+  Does Emacs have threading support in lisp?              no
+  Does Emacs support the portable dumper?                 yes
+  Does Emacs support legacy unexec dumping?               no
+  Which dumping strategy does Emacs use?                  pdumper
+  Does Emacs have native lisp compiler?                   no
+  Does Emacs use version 2 of the X Input Extension?      no
+  Does Emacs generate a smaller-size Japanese dictionary? no
+
+
+configure: creating ./config.status
+config.status: creating src/verbose.mk
+config.status: creating src/emacs-module.h
+config.status: creating Makefile
+config.status: creating lib/gnulib.mk
+config.status: creating /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/doc/man/emacs.1
+config.status: creating lib/Makefile
+config.status: creating lib-src/Makefile
+config.status: creating oldXMenu/Makefile
+config.status: creating src/Makefile
+config.status: creating lwlib/Makefile
+config.status: creating nextstep/Makefile
+config.status: creating nt/Makefile
+config.status: creating doc/emacs/Makefile
+config.status: creating doc/misc/Makefile
+config.status: creating doc/lispintro/Makefile
+config.status: creating doc/lispref/Makefile
+config.status: creating lisp/Makefile
+config.status: creating leim/Makefile
+config.status: creating test/Makefile
+config.status: creating test/manual/noverlay/Makefile
+config.status: creating test/infra/Makefile
+config.status: creating admin/charsets/Makefile
+config.status: creating admin/unidata/Makefile
+config.status: creating admin/grammars/Makefile
+config.status: creating java/Makefile
+config.status: creating cross/Makefile
+config.status: creating java/AndroidManifest.xml
+config.status: creating src/config.h
+config.status: executing src/epaths.h commands
+config.status: executing src/.gdbinit commands
+config.status: executing doc/emacs/emacsver.texi commands
+config.status: executing etc-refcards-emacsver.tex commands
+configure: WARNING: This configuration installs a 'movemail' program
+that does not retrieve POP3 email.  By default, Emacs 25 and earlier
+installed a 'movemail' program that retrieved POP3 email via only
+insecure channels, a practice that is no longer recommended but that
+you can continue to support by using '/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/configure --with-pop'.
+configure: You might want to install GNU Mailutils
+<https://mailutils.org> and use '/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/configure --with-mailutils'.
+
+configured DUMPING/HAVE_PDUMPER:
+403:DUMPING=pdumper
+405:HAVE_PDUMPER = yes
+417:bootstrap_pdmp := bootstrap-emacs.pdmp # Keep in sync with loadup.el
+418:pdmp := emacs.pdmp
+420:bootstrap_pdmp :=
+421:pdmp :=
+
+config.h HAVE_PDUMPER:
+1133:#define HAVE_PDUMPER 1
+STATUS:PASS pdumper configure completed

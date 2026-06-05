@@ -1,0 +1,15 @@
+{"ts":1780640682842,"k":"vm-created"}
+{"ts":1780640682844,"k":"loaded","pdmp":12038560}
+{"ts":1780640682844,"k":"sab-ready","sz":264}
+{"ts":1780640683004,"k":"rt-init"}
+{"ts":1780640683004,"k":"globals-set"}
+{"ts":1780640683004,"k":"argv0-file-placed","mode":33261,"size":1}
+{"ts":1780640683005,"k":"pdmp-placed","size":12038560}
+{"ts":1780640683005,"k":"before-callMain"}
+{"ts":1780640683005,"k":"boot-args","args":"[\"--dump-file=/bootstrap-emacs.pdmp\",\"--quick\",\"--no-splash\",\"-nw\",\"--eval\",\"(setq uniquify-trailing-separator-p nil)\",\"--eval\",\"(setq create-lockfiles nil)\"]"}
+{"ts":1780640683021,"k":"stderr","t":"warning: unsupported syscall: __syscall_mprotect"}
+{"ts":1780640683026,"k":"stderr","t":"warning: unsupported syscall: __syscall_prlimit64"}
+{"ts":1780640683035,"k":"stderr","t":"warning: unsupported syscall: __syscall_prlimit64"}
+{"ts":1780640683035,"k":"stderr","t":"warning: unsupported syscall: __syscall_prlimit64"}
+{"ts":1780640683491,"k":"tty-flush","n":4594}
+{"ts":1780640683491,"k":"atomics-wait-entered","ttyOutLen":4594,"ttyInLen":0,"hasTtyOutput":true}

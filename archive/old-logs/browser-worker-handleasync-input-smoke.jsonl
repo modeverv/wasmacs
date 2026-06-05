@@ -1,0 +1,3 @@
+{"checkpoint":"waiting-for-boot","sequence":0,"timestamp":"2026-06-03T14:13:54.878Z","monotonicMs":18,"details":{}}
+{"checkpoint":"boot-complete","sequence":1,"timestamp":"2026-06-03T14:14:01.139Z","monotonicMs":6279,"details":{"bootMs":6176}}
+{"checkpoint":"first-wait-active","sequence":2,"timestamp":"2026-06-03T14:14:01.139Z","monotonicMs":6279,"details":{"waitId":1,"waitCount":1}}

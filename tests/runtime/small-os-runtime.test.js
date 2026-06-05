@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createBrowserSmallOsCoordinator } from "../../app/src/small-os-runtime.js";
-import { LifecyclePhases, SmallOsOperations } from "../../app/src/small-os-services.js";
+import { createBrowserSmallOsCoordinator } from "../../src/wasm/src/small-os-runtime.js";
+import { LifecyclePhases, SmallOsOperations } from "../../src/wasm/src/small-os-services.js";
 
 test("browser small OS coordinator owns command lifecycle before reverse sync", () => {
   const os = createBrowserSmallOsCoordinator();

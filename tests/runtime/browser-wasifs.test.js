@@ -2,13 +2,13 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BrowserUserImage } from "../../app/src/browser-wasifs.js";
-import { parseTar } from "../../runtime/fs/tar.js";
+import { BrowserUserImage } from "../../src/wasm/src/browser-wasifs.js";
+import { parseTar } from "../../src/runtime/fs/tar.js";
 
 const repoRoot = new URL("../..", import.meta.url).pathname;
 
 test("browser user image imports and exports tar-compatible wasifs", async () => {
-  const imageBytes = new Uint8Array(await readFile(join(repoRoot, "artifacts/user-filesystem-empty.wasifs")));
+  const imageBytes = new Uint8Array(await readFile(join(repoRoot, "build/artifacts/user-filesystem-empty.wasifs")));
   const image = BrowserUserImage.fromBytes(imageBytes);
 
   assert.match(image.readText("/home/user/init.el"), /wasmacs empty user image/);
@@ -22,7 +22,7 @@ test("browser user image imports and exports tar-compatible wasifs", async () =>
 });
 
 test("browser user image roundtrips through base64 storage payload", async () => {
-  const imageBytes = new Uint8Array(await readFile(join(repoRoot, "artifacts/user-filesystem-empty.wasifs")));
+  const imageBytes = new Uint8Array(await readFile(join(repoRoot, "build/artifacts/user-filesystem-empty.wasifs")));
   const image = BrowserUserImage.fromBytes(imageBytes);
   image.writeText("/home/user/projects/demo.txt", "roundtrip");
 
@@ -32,7 +32,7 @@ test("browser user image roundtrips through base64 storage payload", async () =>
 });
 
 test("browser user image export preserves multiple project files", async () => {
-  const imageBytes = new Uint8Array(await readFile(join(repoRoot, "artifacts/user-filesystem-empty.wasifs")));
+  const imageBytes = new Uint8Array(await readFile(join(repoRoot, "build/artifacts/user-filesystem-empty.wasifs")));
   const image = BrowserUserImage.fromBytes(imageBytes);
   image.writeText("/home/user/projects/a.txt", "alpha");
   image.writeText("/home/user/projects/b.txt", "beta");
@@ -44,7 +44,7 @@ test("browser user image export preserves multiple project files", async () => {
 });
 
 test("browser user image exposes entries for worker filesystem materialization", async () => {
-  const imageBytes = new Uint8Array(await readFile(join(repoRoot, "artifacts/user-filesystem-empty.wasifs")));
+  const imageBytes = new Uint8Array(await readFile(join(repoRoot, "build/artifacts/user-filesystem-empty.wasifs")));
   const image = BrowserUserImage.fromBytes(imageBytes);
   image.writeText("/home/user/projects/demo.txt", "worker mount");
 
