@@ -1,5 +1,5 @@
 # Native Emacs 30.2 baseline
-date: 2026-06-05T07:58:40Z
+date: 2026-06-05T16:14:48Z
 source: vendor/emacs
 commit: 636f166cfc86aa90d63f592fd99f3fdd9ef95ebd
 tag: emacs-30.2
@@ -592,10 +592,10 @@ make -j16 src
 echo '#include "mini-gmp.h"' > gmp.h-t
   GEN      limits.h
   GEN      signal.h
+mv gmp.h-t gmp.h
   GEN      stdbit.h
   GEN      stdint.h
   GEN      stdio.h
-mv gmp.h-t gmp.h
   GEN      stdlib.h
   GEN      string.h
   GEN      sys/random.h
@@ -636,6 +636,7 @@ mv gmp.h-t gmp.h
   CC       filemode.o
   CC       filevercmp.o
   CC       fpending.o
+  CC       free.o
 dtotimespec.c:34:27: warning: implicit conversion from 'time_t' (aka 'long') to 'double' changes value from 9223372036854775807 to 9223372036854775808 [-Wimplicit-const-int-float-conversion]
    34 |   else if (! (sec < 1.0 + TYPE_MAXIMUM (time_t)))
       |                         ~ ^~~~~~~~~~~~~~~~~~~~~
@@ -646,9 +647,8 @@ dtotimespec.c:34:27: warning: implicit conversion from 'time_t' (aka 'long') to 
       |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    50 |         : ((((t) 1 << (TYPE_WIDTH (t) - 2)) - 1) * 2 + 1)))
       |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-1 warning generated.
-  CC       free.o
   CC       fstatat.o
+1 warning generated.
   CC       fsusage.o
   CC       futimens.o
   CC       getopt.o
@@ -752,8 +752,6 @@ make[3]: Nothing to be done for `all'.
   CC       cmds.o
   CC       casetab.o
   CC       casefiddle.o
-  CC       indent.o
-  CC       search.o
 fileio.c:3954:31: warning: implicit conversion from 'off_t' (aka 'long long') to 'double' changes value from 9223372036854775807 to 9223372036854775808 [-Wimplicit-const-int-float-conversion]
  3954 |       if (0 <= v && v < 1.0 + TYPE_MAXIMUM (off_t))
       |                             ~ ^~~~~~~~~~~~~~~~~~~~
@@ -764,6 +762,8 @@ fileio.c:3954:31: warning: implicit conversion from 'off_t' (aka 'long long') to
       |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    50 |         : ((((t) 1 << (TYPE_WIDTH (t) - 2)) - 1) * 2 + 1)))
       |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  CC       indent.o
+  CC       search.o
   CC       regex-emacs.o
   CC       undo.o
   CC       alloc.o
@@ -772,15 +772,16 @@ fileio.c:3954:31: warning: implicit conversion from 'off_t' (aka 'long long') to
   CC       doc.o
   CC       editfns.o
   CC       callint.o
+  CC       eval.o
+  CC       floatfns.o
 alloc.c:6453:18: warning: implicit conversion from 'long' to 'double' changes value from 4611686018427387903 to 4611686018427387904 [-Wimplicit-const-int-float-conversion]
  6453 |               if (tot < HI_THRESHOLD)
       |                       ~ ^~~~~~~~~~~~
 alloc.c:348:37: note: expanded from macro 'HI_THRESHOLD'
   348 | #define HI_THRESHOLD (EMACS_INT_MAX / 2)
       |                       ~~~~~~~~~~~~~~^~~
-  CC       eval.o
-  CC       floatfns.o
   CC       fns.o
+  CC       sort.o
 editfns.c:3976:21: warning: implicit conversion from 'unsigned long' to 'double' changes value from 18446744073709551615 to 18446744073709551616 [-Wimplicit-const-int-float-conversion]
  3976 |                       if (abs_d < UINTMAX_MAX + 1.0)
       |                                   ^~~~~~~~~~~ ~
@@ -793,26 +794,25 @@ editfns.c:3976:21: warning: implicit conversion from 'unsigned long' to 'double'
 <scratch space>:264:1: note: expanded from here
   264 | 18446744073709551615UL
       | ^~~~~~~~~~~~~~~~~~~~~~
-  CC       sort.o
   CC       font.o
   CC       print.o
+1 warning generated.
   CC       lread.o
   CC       syntax.o
   CC       bytecode.o
-1 warning generated.
   CC       comp.o
   CC       process.o
   CC       gnutls.o
   CC       callproc.o
+1 warning generated.
   CC       region-cache.o
   CC       timefns.o
-1 warning generated.
   CC       atimer.o
   CC       doprnt.o
-1 warning generated.
   CC       intervals.o
   CC       textprop.o
   CC       composite.o
+1 warning generated.
   CC       xml.o
   CC       profiler.o
   CC       thread.o

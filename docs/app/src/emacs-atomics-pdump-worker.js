@@ -47,14 +47,38 @@ function postTerminalTail(reason) {
 
 // ── SharedArrayBuffer ────────────────────────────────────────────
 const INPUT_SAB = new SharedArrayBuffer(264);
+const TERMINAL_SIZE_SAB = new SharedArrayBuffer(12);
 globalThis.__wasmacsInputSAB = INPUT_SAB;
+globalThis.__wasmacsTerminalSizeSAB = TERMINAL_SIZE_SAB;
 globalThis.__wasmacsTerminalOutputBytes = [];
 globalThis.__wasmacsTerminalInputBytes = [];
 globalThis.__wasmacsSentOutputCount = 0;
+globalThis.__wasmacsTerminalRows = 24;
+globalThis.__wasmacsTerminalCols = 80;
+globalThis.__wasmacsTerminalResizeSeen = 0;
+
+function updateTerminalSize(size = {}) {
+  const cols = Number.isInteger(size.cols) ? size.cols : globalThis.__wasmacsTerminalCols;
+  const rows = Number.isInteger(size.rows) ? size.rows : globalThis.__wasmacsTerminalRows;
+  globalThis.__wasmacsTerminalCols = Math.max(20, cols);
+  globalThis.__wasmacsTerminalRows = Math.max(3, rows);
+  const signal = new Int32Array(TERMINAL_SIZE_SAB);
+  Atomics.store(signal, 1, globalThis.__wasmacsTerminalCols);
+  Atomics.store(signal, 2, globalThis.__wasmacsTerminalRows);
+  Atomics.add(signal, 0, 1);
+}
 
 self.onmessage = async (event) => {
   const msg = event.data;
+  if (msg?.type === "terminal-resize") {
+    updateTerminalSize(msg);
+    post("terminal-resized", {
+      rows: globalThis.__wasmacsTerminalRows,
+      cols: globalThis.__wasmacsTerminalCols,
+    });
+  }
   if (msg?.type === "start") {
+    updateTerminalSize(msg.terminalSize);
     const pdmpBytes = msg.pdmpBytes ? new Uint8Array(msg.pdmpBytes) : null;
     await startEmacs(pdmpBytes);
   }
@@ -287,7 +311,7 @@ function createUserTar(nodes) {
 // ═══════════════════════════════════════════════════════════════
 
 async function startEmacs(pdmpBytes) {
-  post("ready", { sab: INPUT_SAB });
+  post("ready", { sab: INPUT_SAB, terminalSizeSAB: TERMINAL_SIZE_SAB });
 
   const userNodes = await loadUserImage();
 
@@ -355,6 +379,8 @@ async function startEmacs(pdmpBytes) {
         artifactDir: ARTIFACT_DIR,
         thisProgram: Module.thisProgram,
         callMainType: typeof Module.callMain,
+        terminalRows: globalThis.__wasmacsTerminalRows,
+        terminalCols: globalThis.__wasmacsTerminalCols,
       });
       post("status", { text: "runtime initialized" });
       resolveReady();

@@ -3752,4 +3752,54 @@ X2/X3 確認後、org-mode 最小確認:
     reported `(Org)`.
 - README now embeds the three screenshots from `docs/screenshots/`.
 
+### Responsive xterm Terminal/Tty resize (2026-06-06)
+
+- Implemented window-following sizing for the xterm Terminal/Tty route:
+  `src/wasm/src/xterm-emacs-terminal.js` now uses xterm's FitAddon when
+  available, falls back to deterministic pixel-to-cell sizing, observes the
+  terminal container with `ResizeObserver`, and exposes `fit()` /
+  `getDimensions()` for page-level coordination.
+- The Atomics xterm pages now publish terminal dimensions through a dedicated
+  `terminalSizeSAB` (`version`, `cols`, `rows`) and wake the existing input
+  wait signal with zero input bytes when only the terminal size changed.  The
+  write order is cols/rows first, then version, so the waiter sees a coherent
+  resize snapshot.
+- The Atomics host library now exposes
+  `wasmacs_host_terminal_resize_pending`, `*_cols`, `*_rows`, and `*_ack`.
+  `wasmacs_host_wait_for_input` returns early on resize-only wakeups, and the
+  ACK posts `terminal-resized` with the version that Emacs consumed.
+- Added the C/wasm facade `wasmacs_os_apply_terminal_resize(width, height)` in
+  the host entrypoint patch.  It applies validated tty dimensions through the
+  selected live termcap frame with `change_frame_size` and
+  `do_pending_window_change`.
+- Source-grounded waitpoint fix: the browser Atomics route processes the live
+  input wait in `keyboard.c`, not the older `sysdep.c` read loop.  The
+  os-compat waitpoint patch now calls `wasmacs_os_maybe_apply_terminal_resize`
+  immediately after `wasmacs_host_wait_for_input` in both timed and untimed
+  waits.
+- Build hygiene: `build-emacs-browser-atomics-pdump-profile.sh` refreshes
+  `keyboard.c` and `sysdep.c` from the read-only `vendor/emacs` source before
+  applying wasmacs OS-compat patches, so repeated profile builds do not
+  accumulate duplicate generated patch blocks.
+- Added `tests/runtime/xterm-emacs-terminal.test.js` for fallback sizing,
+  padding subtraction, and minimum terminal dimensions.
+- Rebuilt artifacts:
+  - `build/artifacts/emacs-browser-atomics-pdump/temacs.wasm` sha256:
+    `dfa35545e247130dfa1d7f24002adaccf03fc8cb22f5846359c1fb8d473c8829`.
+  - `build/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp`
+    sha256:
+    `41053eaa0f41280ee847f1a58d52ae2f115b3d28d46ededa46d5a045b198dd4b`.
+- Validation:
+  - `node --check src/wasm/src/xterm-emacs-terminal.js`: PASS.
+  - `node --check src/wasm/src/emacs-atomics-pdump-worker.js`: PASS.
+  - `node --check src/wasm/src/emacs-atomics-worker.js`: PASS.
+  - `node --test tests/runtime/xterm-emacs-terminal.test.js`: PASS.
+  - `npm test`: PASS (`64` tests).
+  - `make build`: PASS.
+  - `npm run dev` in-app Browser check at
+    `http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart&run=resize-make-build-1780676310135`:
+    initial `interactive wait ✓`; viewport `900x520` produced
+    `resize: 126x30` and `winsize: 126x30 v12`; viewport `1400x860`
+    produced `resize: 197x54` and `winsize: 197x54 v13`.
+
 **vendor/emacs unchanged.**

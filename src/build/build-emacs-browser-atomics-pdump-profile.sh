@@ -101,7 +101,7 @@ base_exports="${base_exports},_wasmacs_os_gc_permission,_wasmacs_os_gc_permissio
 base_exports="${base_exports},_wasmacs_os_root_safety_probe,_wasmacs_os_pending_command_state"
 base_exports="${base_exports},_wasmacs_os_pin_backtrace_args,_wasmacs_os_release_backtrace_args"
 base_exports="${base_exports},_wasmacs_os_push_gc_guard,_wasmacs_os_pop_gc_guard"
-base_exports="${base_exports},_wasmacs_os_begin_command,_wasmacs_os_finish_command,_wasmacs_os_cancel_command,_wasmacs_os_configure_dired_without_ls,_wasmacs_os_dired_without_ls_probe,_wasmacs_os_filesystem_dired_state"
+base_exports="${base_exports},_wasmacs_os_begin_command,_wasmacs_os_finish_command,_wasmacs_os_cancel_command,_wasmacs_os_configure_dired_without_ls,_wasmacs_os_dired_without_ls_probe,_wasmacs_os_filesystem_dired_state,_wasmacs_os_apply_terminal_resize"
 base_exports="${base_exports},_wasmacs_input_text,_wasmacs_input_cancel,_wasmacs_os_timing_checkpoint"
 
 # Atomics (no Asyncify)
@@ -122,6 +122,8 @@ echo "=== Deferring bootstrap-emacs.pdmp generation until final Atomics runtime 
 rm -f "${pdmp_file}" "${build_dir}/src/pdmp-probe-stubs.o"
 
 echo "=== Applying OS compat patches (Atomics waitpoint) ==="
+cp "${repo_root}/vendor/emacs/src/keyboard.c" "${pdump_src}/src/keyboard.c"
+cp "${repo_root}/vendor/emacs/src/sysdep.c" "${pdump_src}/src/sysdep.c"
 WASMACS_SPIKE_SRC="${pdump_src}" \
 WASMACS_ENABLE_ASYNCIFY_WAITPOINT=1 \
 WASMACS_ASYNCIFY_WAITPOINT_MODE="os-compat" \
@@ -131,8 +133,14 @@ WASMACS_ASYNCIFY_WAITPOINT_MODE="os-compat" \
 # The atomics host library provides the implementations.  Add them back.
 SYSDEP="${pdump_src}/src/sysdep.c"
 if ! grep -q "wasmacs_host_scheduler_checkpoint (int code)" "${SYSDEP}"; then
-  perl -0pi -e 's|(extern void wasmacs_os_timing_checkpoint \(int code\);\nextern void wasmacs_os_timing_checkpoint \(int code\);\n\n/\* Read from FD)|/* wasmacs atomics host symbols. */\nextern int wasmacs_host_wait_for_input (void);\nextern int wasmacs_host_terminal_input_available (void);\nextern int wasmacs_host_terminal_read_byte (void);\nextern int wasmacs_host_is_tty_fd (int fd);\nextern int wasmacs_host_scheduler_checkpoint (int code);\n$1|' "${SYSDEP}"
+  perl -0pi -e 's|(extern void wasmacs_os_timing_checkpoint \(int code\);\nextern void wasmacs_os_timing_checkpoint \(int code\);\n\n/\* Read from FD)|/* wasmacs atomics host symbols. */\nextern int wasmacs_host_wait_for_input (void);\nextern int wasmacs_host_terminal_input_available (void);\nextern int wasmacs_host_terminal_read_byte (void);\nextern int wasmacs_host_is_tty_fd (int fd);\nextern int wasmacs_host_scheduler_checkpoint (int code);\nextern int wasmacs_host_terminal_resize_pending (void);\nextern int wasmacs_host_terminal_resize_cols (void);\nextern int wasmacs_host_terminal_resize_rows (void);\nextern int wasmacs_host_terminal_resize_ack (void);\nextern int wasmacs_os_apply_terminal_resize (int width, int height);\n$1|' "${SYSDEP}"
   echo "  fixed: added wasmacs_host_* externs to sysdep.c"
+fi
+if ! grep -q "wasmacs_host_terminal_resize_pending" "${SYSDEP}"; then
+  perl -0pi -e 's|(extern int wasmacs_host_scheduler_checkpoint \(int code\);\n)|$1extern int wasmacs_host_terminal_resize_pending (void);\nextern int wasmacs_host_terminal_resize_cols (void);\nextern int wasmacs_host_terminal_resize_rows (void);\nextern int wasmacs_host_terminal_resize_ack (void);\nextern int wasmacs_os_apply_terminal_resize (int width, int height);\n|' "${SYSDEP}"
+fi
+if ! grep -q "wasmacs_os_apply_terminal_resize (wasmacs_host_terminal_resize_cols" "${SYSDEP}"; then
+  perl -0pi -e 's|(          wasmacs_host_scheduler_checkpoint \(100\);\n          wasmacs_host_wait_for_input \(\);\n          wasmacs_host_scheduler_checkpoint \(101\);\n)|$1          if (wasmacs_host_terminal_resize_pending ())\n            {\n              wasmacs_os_apply_terminal_resize (wasmacs_host_terminal_resize_cols (),\n                                                wasmacs_host_terminal_resize_rows ());\n              wasmacs_host_terminal_resize_ack ();\n            }\n|' "${SYSDEP}"
 fi
 
 echo "=== Building pdumper+Atomics profile (${initial_memory} bytes) ==="

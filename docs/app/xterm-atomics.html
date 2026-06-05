@@ -7,6 +7,7 @@
     <script src="/app/coi-serviceworker.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/css/xterm.css">
     <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5/lib/xterm.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0/lib/addon-fit.js"></script>
     <style>
       body { margin: 0; background: #1a1a1a; color: #eee; font-family: monospace; }
       .shell { display: flex; flex-direction: column; height: 100vh; }
@@ -71,6 +72,8 @@ function setStatus(text, cls = "") {
 let worker = null;
 let terminal = null;
 let inputSAB = null;
+let terminalSizeSAB = null;
+let lastTerminalSize = { cols: 80, rows: 24 };
 
 function sendInputToEmacs(bytes) {
   if (!inputSAB || !bytes.length) return;
@@ -81,6 +84,22 @@ function sendInputToEmacs(bytes) {
   Atomics.store(signal, 1, count);
   Atomics.add(signal, 0, 1);
   Atomics.notify(signal, 0, 1);
+}
+
+function publishTerminalSize(size) {
+  lastTerminalSize = size;
+  if (terminalSizeSAB) {
+    const signal = new Int32Array(terminalSizeSAB);
+    Atomics.store(signal, 1, size.cols);
+    Atomics.store(signal, 2, size.rows);
+    Atomics.add(signal, 0, 1);
+  }
+  if (inputSAB) {
+    const inputSignal = new Int32Array(inputSAB, 0, 2);
+    Atomics.add(inputSignal, 0, 1);
+    Atomics.notify(inputSignal, 0, 1);
+  }
+  if (worker) worker.postMessage({ type: "terminal-resize", ...size });
 }
 
 // ── Import .wasifs ──────────────────────────────────────────────
@@ -122,17 +141,24 @@ function startSession() {
   setStatus("loading…");
 
   if (!terminal) {
-    terminal = createXtermEmacsTerminal(container);
+    terminal = createXtermEmacsTerminal(container, {
+      onResize(size) {
+        publishTerminalSize(size);
+      },
+    });
     terminal.onData((data) => sendInputToEmacs(xtermDataToBytes(data)));
   }
 
   worker = new Worker("/app/src/emacs-atomics-worker.js");
+  lastTerminalSize = terminal.fit();
 
   worker.onmessage = (event) => {
     const msg = event.data;
 
     if (msg.type === "ready") {
       inputSAB = msg.sab;
+      terminalSizeSAB = msg.terminalSizeSAB;
+      publishTerminalSize(lastTerminalSize);
       setStatus("Emacs loading…");
       importBtn.disabled = false;
       exportBtn.disabled = false;
@@ -177,6 +203,8 @@ function startSession() {
       startBtn.disabled = false;
       importBtn.disabled = true;
       exportBtn.disabled = true;
+      inputSAB = null;
+      terminalSizeSAB = null;
     }
   };
 
@@ -186,9 +214,11 @@ function startSession() {
     startBtn.disabled = false;
     importBtn.disabled = true;
     exportBtn.disabled = true;
+    inputSAB = null;
+    terminalSizeSAB = null;
   };
 
-  worker.postMessage({ type: "start" });
+  worker.postMessage({ type: "start", terminalSize: lastTerminalSize });
 }
 
 startBtn.addEventListener("click", startSession);

@@ -40,6 +40,7 @@ static char *wasmacs_last_os_stack_bounds_probe;
 static char *wasmacs_last_os_gc_permission_state;
 static char *wasmacs_last_os_root_safety_probe;
 static char *wasmacs_last_os_filesystem_dired_state;
+static char *wasmacs_last_os_terminal_resize_state;
 static int wasmacs_command_busy;
 static int wasmacs_eval_had_error;
 static int wasmacs_entrypoint_refresh_count;
@@ -60,6 +61,7 @@ int wasmacs_os_finish_command (void);
 int wasmacs_os_cancel_command (void);
 int wasmacs_os_configure_dired_without_ls (void);
 int wasmacs_os_dired_without_ls_probe (void);
+int wasmacs_os_apply_terminal_resize (int width, int height);
 const char *wasmacs_os_lifecycle_state (void);
 const char *wasmacs_os_stack_bounds_probe (void);
 const char *wasmacs_os_gc_permission_state (void);
@@ -358,6 +360,46 @@ wasmacs_os_root_safety_probe (void)
   wasmacs_last_os_root_safety_probe = state;
   WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
   return wasmacs_last_os_root_safety_probe;
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_os_apply_terminal_resize (int width, int height)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  int status = 0;
+  const char *reason = "applied";
+  if (width <= 5 || height <= 2)
+    {
+      status = 1;
+      reason = "too-small";
+    }
+  else if (!initialized || !FRAMEP (selected_frame)
+           || !FRAME_TERMCAP_P (SELECTED_FRAME ()))
+    {
+      status = 2;
+      reason = "no-live-tty-frame";
+    }
+  else
+    {
+      change_frame_size (SELECTED_FRAME (), width, height,
+                         false, true, false);
+      do_pending_window_change (false);
+    }
+
+  char *state = xmalloc (512);
+  snprintf (state, 512,
+            "{\"service\":\"Terminal/Tty\",\"owner\":\"C/wasm facade\","
+            "\"status\":\"%s\",\"width\":%d,\"height\":%d,"
+            "\"pendingCommandState\":\"%s\"}",
+            reason, width, height, wasmacs_os_pending_command_state ());
+  xfree (wasmacs_last_os_terminal_resize_state);
+  wasmacs_last_os_terminal_resize_state = state;
+  wasmacs_store_c_string_result (wasmacs_last_os_terminal_resize_state);
+
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return status;
 }
 
 __attribute__ ((used, visibility ("default")))
@@ -1337,7 +1379,23 @@ extern int wasmacs_host_wait_for_input (void);
 extern int wasmacs_host_terminal_input_available (void);
 extern int wasmacs_host_terminal_read_byte (void);
 extern int wasmacs_host_scheduler_checkpoint (int code);
+extern int wasmacs_host_terminal_resize_pending (void);
+extern int wasmacs_host_terminal_resize_cols (void);
+extern int wasmacs_host_terminal_resize_rows (void);
+extern int wasmacs_host_terminal_resize_ack (void);
+extern int wasmacs_os_apply_terminal_resize (int width, int height);
 extern void wasmacs_os_timing_checkpoint (int code);
+
+static void
+wasmacs_os_maybe_apply_terminal_resize (void)
+{
+  if (wasmacs_host_terminal_resize_pending ())
+    {
+      wasmacs_os_apply_terminal_resize (wasmacs_host_terminal_resize_cols (),
+                                        wasmacs_host_terminal_resize_rows ());
+      wasmacs_host_terminal_resize_ack ();
+    }
+}
 
 /* Read a character from the keyboard; call the redisplay if needed.  */'
 	      perl -0pi -e 'BEGIN { $p = $ENV{"WASMACS_KBD_OSCOMPAT_HEADER"} } s~/\* Read a character from the keyboard.*?\*/~$p~s' "${keyboard_file}"
@@ -1351,6 +1409,7 @@ extern void wasmacs_os_timing_checkpoint (int code);
 	      if (kbd_fetch_ptr == kbd_store_ptr)
 		{
 		  wasmacs_host_wait_for_input ();
+		  wasmacs_os_maybe_apply_terminal_resize ();
 		  wasmacs_os_timing_checkpoint (11);
 		  gobble_input ();
 		  wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 23 : 24);
@@ -1367,6 +1426,7 @@ extern void wasmacs_os_timing_checkpoint (int code);
 	  if (kbd_fetch_ptr == kbd_store_ptr)
 	    {
 	      wasmacs_host_wait_for_input ();
+	      wasmacs_os_maybe_apply_terminal_resize ();
 	      wasmacs_os_timing_checkpoint (10);
 	      gobble_input ();
 	      wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 21 : 22);

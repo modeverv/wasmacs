@@ -14,13 +14,37 @@ function post(type, payload = {}) {
 
 // ── SharedArrayBuffer setup ─────────────────────────────────────
 const INPUT_SAB = new SharedArrayBuffer(264);
+const TERMINAL_SIZE_SAB = new SharedArrayBuffer(12);
 globalThis.__wasmacsInputSAB = INPUT_SAB;
+globalThis.__wasmacsTerminalSizeSAB = TERMINAL_SIZE_SAB;
 globalThis.__wasmacsTerminalOutputBytes = [];
 globalThis.__wasmacsTerminalInputBytes = [];
 globalThis.__wasmacsSentOutputCount = 0;
+globalThis.__wasmacsTerminalRows = 24;
+globalThis.__wasmacsTerminalCols = 80;
+globalThis.__wasmacsTerminalResizeSeen = 0;
+
+function updateTerminalSize(size = {}) {
+  const cols = Number.isInteger(size.cols) ? size.cols : globalThis.__wasmacsTerminalCols;
+  const rows = Number.isInteger(size.rows) ? size.rows : globalThis.__wasmacsTerminalRows;
+  globalThis.__wasmacsTerminalCols = Math.max(20, cols);
+  globalThis.__wasmacsTerminalRows = Math.max(3, rows);
+  const signal = new Int32Array(TERMINAL_SIZE_SAB);
+  Atomics.store(signal, 1, globalThis.__wasmacsTerminalCols);
+  Atomics.store(signal, 2, globalThis.__wasmacsTerminalRows);
+  Atomics.add(signal, 0, 1);
+}
 
 self.onmessage = async (event) => {
+  if (event.data?.type === "terminal-resize") {
+    updateTerminalSize(event.data);
+    post("terminal-resized", {
+      rows: globalThis.__wasmacsTerminalRows,
+      cols: globalThis.__wasmacsTerminalCols,
+    });
+  }
   if (event.data?.type === "start") {
+    updateTerminalSize(event.data.terminalSize);
     await startEmacs(event.data.args ?? [ "--quick", "--no-splash", "--nw", "--eval", "(setq uniquify-trailing-separator-p nil)", "--eval", "(setq create-lockfiles nil)" ]);
   }
   if (event.data?.type === "export-wasifs") {
@@ -241,7 +265,7 @@ let userImageDirty = false;
 let lastSaveBytes = 0;
 
 async function startEmacs(args) {
-  post("ready", { sab: INPUT_SAB });
+  post("ready", { sab: INPUT_SAB, terminalSizeSAB: TERMINAL_SIZE_SAB });
   post("status", { text: "loading user image..." });
 
   // Load user filesystem image

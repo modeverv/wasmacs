@@ -18,6 +18,11 @@
  *   Int32[1]  (bytes 4-7):  byte count
  *   Uint8[8+] (bytes 8+):   input bytes (up to 256 bytes per wakeup)
  *
+ * SharedArrayBuffer layout (terminalSizeSAB):
+ *   Int32[0]: resize version
+ *   Int32[1]: columns
+ *   Int32[2]: rows
+ *
  * No Asyncify, no JS wrapper frames, no call stack save/restore.
  */
 
@@ -33,6 +38,8 @@ mergeInto(LibraryManager.library, {
     "ENV.LOGNAME = ENV.LOGNAME || 'wasmacs';",
     // Shared input buffer (SharedArrayBuffer, set from worker before importScripts)
     "globalThis.__wasmacsInputSAB = globalThis.__wasmacsInputSAB || null;",
+    "globalThis.__wasmacsTerminalSizeSAB = globalThis.__wasmacsTerminalSizeSAB || null;",
+    "globalThis.__wasmacsTerminalResizeSeen = globalThis.__wasmacsTerminalResizeSeen || 0;",
     // I/O buffers
     "globalThis.__wasmacsTerminalOutputBytes = globalThis.__wasmacsTerminalOutputBytes || [];",
     "globalThis.__wasmacsTerminalInputBytes  = globalThis.__wasmacsTerminalInputBytes  || [];",
@@ -139,6 +146,13 @@ mergeInto(LibraryManager.library, {
         } catch(e) {}
       }
       var result = Atomics.wait(signal, 0, lastSeen);
+      if (globalThis.__wasmacsTerminalSizeSAB) {
+        try {
+          var sizeSignal = new Int32Array(globalThis.__wasmacsTerminalSizeSAB);
+          if (Atomics.load(sizeSignal, 0) !== (globalThis.__wasmacsTerminalResizeSeen || 0))
+            return;
+        } catch(e) {}
+      }
       if (result === "ok" || Atomics.load(signal, 1) > 0) break;
     }
 
@@ -186,6 +200,52 @@ mergeInto(LibraryManager.library, {
   wasmacs_host_terminal_input_available__deps: ["$wasmacs_atomics_env"],
   wasmacs_host_terminal_input_available: function () {
     return (globalThis.__wasmacsTerminalInputBytes || []).length > 0 ? 1 : 0;
+  },
+
+  // ── wasmacs_host_terminal_resize_* ────────────────────────────
+  wasmacs_host_terminal_resize_pending__deps: ["$wasmacs_atomics_env"],
+  wasmacs_host_terminal_resize_pending: function () {
+    var sab = globalThis.__wasmacsTerminalSizeSAB;
+    if (!sab) return 0;
+    var signal = new Int32Array(sab);
+    return Atomics.load(signal, 0) !== (globalThis.__wasmacsTerminalResizeSeen || 0) ? 1 : 0;
+  },
+
+  wasmacs_host_terminal_resize_cols__deps: ["$wasmacs_atomics_env"],
+  wasmacs_host_terminal_resize_cols: function () {
+    var sab = globalThis.__wasmacsTerminalSizeSAB;
+    if (!sab) return globalThis.__wasmacsTerminalCols || 80;
+    var signal = new Int32Array(sab);
+    return Atomics.load(signal, 1) || globalThis.__wasmacsTerminalCols || 80;
+  },
+
+  wasmacs_host_terminal_resize_rows__deps: ["$wasmacs_atomics_env"],
+  wasmacs_host_terminal_resize_rows: function () {
+    var sab = globalThis.__wasmacsTerminalSizeSAB;
+    if (!sab) return globalThis.__wasmacsTerminalRows || 24;
+    var signal = new Int32Array(sab);
+    return Atomics.load(signal, 2) || globalThis.__wasmacsTerminalRows || 24;
+  },
+
+  wasmacs_host_terminal_resize_ack__deps: ["$wasmacs_atomics_env"],
+  wasmacs_host_terminal_resize_ack: function () {
+    var sab = globalThis.__wasmacsTerminalSizeSAB;
+    if (!sab) return 0;
+    var signal = new Int32Array(sab);
+    globalThis.__wasmacsTerminalResizeSeen = Atomics.load(signal, 0);
+    globalThis.__wasmacsTerminalCols = Atomics.load(signal, 1) || globalThis.__wasmacsTerminalCols || 80;
+    globalThis.__wasmacsTerminalRows = Atomics.load(signal, 2) || globalThis.__wasmacsTerminalRows || 24;
+    if (typeof self !== "undefined" && typeof self.postMessage === "function") {
+      try {
+        self.postMessage({
+          type: "terminal-resized",
+          cols: globalThis.__wasmacsTerminalCols,
+          rows: globalThis.__wasmacsTerminalRows,
+          version: globalThis.__wasmacsTerminalResizeSeen,
+        });
+      } catch(e) {}
+    }
+    return 0;
   },
 
   // ── wasmacs_host_is_tty_fd ────────────────────────────────────
