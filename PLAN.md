@@ -3303,9 +3303,10 @@ X2/X3 確認後、org-mode 最小確認:
     returned HTTP 404 because the latest GitHub Actions run failed before
     artifact generation. `gh run view 27007316334 --log-failed` showed
     `git describe --tags --exact-match HEAD` failing in the Emacs submodule
-    checkout. CI now fetches submodule tags explicitly, and the native/system
-    Lisp build scripts fall back to the pinned `emacs-30.2` release tag when
-    tag metadata is unavailable in a shallow or archived checkout.
+    checkout. The native/system Lisp build scripts now fall back to the pinned
+    `emacs-30.2` release tag when tag metadata is unavailable in a shallow or
+    archived checkout, so CI no longer depends on fetching Emacs submodule tag
+    history before generating Pages artifacts.
   - 2026-06-05 validation: `bash -n
     src/build/build-native-baseline.sh src/build/build-system-lisp-image.sh`,
     `make build`, and `npm test` passed. The one-liner static server on
@@ -3319,10 +3320,10 @@ X2/X3 確認後、org-mode 最小確認:
     404/importScripts failures.
   - 2026-06-05 validation: `act pull_request -j build-test-pages
     --container-architecture linux/amd64` passed. The local GitHub Actions
-    reproduction fetched Emacs submodule tags, built the Pages bundle,
-    generated `emacs-browser-atomics-pdump/temacs.js`, `temacs.wasm`,
-    `temacs.data`, and `bootstrap-emacs.pdmp`, ran 61 Node/runtime contract
-    tests, and completed the generated artifact size check.
+    reproduction built the Pages bundle, generated
+    `emacs-browser-atomics-pdump/temacs.js`, `temacs.wasm`, `temacs.data`, and
+    `bootstrap-emacs.pdmp`, ran 61 Node/runtime contract tests, and completed
+    the generated artifact size check.
 - Validation to run next:
   - Dev server smoke for
     `http://127.0.0.1:5173/app/xterm-atomics-pdump.html`
