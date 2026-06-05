@@ -469,6 +469,7 @@ async function startEmacs(pdmpBytes) {
     "--eval", "(setq create-lockfiles nil)",
     "--eval", "(setq auto-save-timeout nil)",
     "--eval", "(progn (require 'ls-lisp) (setq ls-lisp-use-insert-directory-program nil insert-directory-program nil))",
+    "--eval", "(progn (require 'xt-mouse) (xterm-mouse-mode 1) (message \"WASMACS-XTERM-MOUSE=%S\" xterm-mouse-mode))",
   ];
   const bootArgs = pdmpBytes
     ? ["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "-nw", ...COMMON_EVALS]

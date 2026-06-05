@@ -3189,11 +3189,11 @@ X2/X3 確認後、org-mode 最小確認:
   avoiding the full GNU `term/xterm.el` startup path, which overflows the
   browser Worker JavaScript stack after the xterm-256color promotion.  Cursor
   keys still come from the C termcap path (`term.c` `ku/kd/kr/kl`).
-- Mouse status: the terminal profile is xterm mouse-ready at the transport
-  boundary, but automatic Emacs `(xterm-mouse-mode 1)` startup is intentionally
-  not enabled in this slice.  In-browser attempts to enable it during startup
-  reproduced `Maximum call stack size exceeded`; keep this as the next focused
-  blocker rather than hiding it behind the terminal profile change.
+- Mouse status: automatic Emacs `(xterm-mouse-mode 1)` startup is enabled on
+  the Atomics/pdump route after the lightweight `term/xterm.el` shim is
+  installed.  The earlier in-browser `Maximum call stack size exceeded` failure
+  was reproduced before the shim existed; after the shim, the terminal profile
+  probe observes xterm SGR mouse mode `1006` without regressing startup.
 - Set the default xterm font size to `20` via
   `DEFAULT_XTERM_FONT_SIZE` in `src/wasm/src/xterm-emacs-terminal.js`; fallback
   terminal sizing now uses the same default cell size.
@@ -3224,11 +3224,34 @@ X2/X3 確認後、org-mode 最小確認:
   - `node --check src/wasm/src/asyncify-minibuffer-worker.js`: PASS.
   - `npm run test:xterm-pdump-dired`: PASS.
   - `npm run test:xterm-input-latency`: PASS.
-  - `npm run test:xterm-terminal-profile`: PASS.
+  - `npm run test:xterm-terminal-profile`: PASS, including
+    `WASMACS-XTERM-MOUSE=t` and emitted `ESC[?1006h`.
   - In-app Browser at
     `http://127.0.0.1:5174/app/xterm-atomics-pdump.html?autostart&run=xterm-profile-shim`:
     PASS (`interactive wait ✓`; earlier validation used row font size `28px`,
     later adjusted to default font size `20`).
+
+### xterm Mouse Retry (2026-06-06)
+
+- Retried Emacs terminal mouse support after the `term/xterm.el` shim was in
+  place.  Added startup eval on the Atomics/pdump worker:
+  `(require 'xt-mouse)`, `(xterm-mouse-mode 1)`, and a
+  `WASMACS-XTERM-MOUSE` readback.
+- Extended `tools/scripts/probe-browser-pdump-atomics-terminal-profile.mjs` to
+  require both `WASMACS-XTERM-MOUSE=t` and the xterm SGR mouse enable sequence
+  `ESC[?1006h`.
+- In-app Browser validation after reload:
+  - `interactive wait ✓`.
+  - Terminal click advanced wait state from `wait-enter#2` to `wait-enter#5`
+    and then `wait-enter#8`, confirming click-generated terminal input is
+    reaching the fake tty route.
+- Validation:
+  - `node --check src/wasm/src/emacs-atomics-pdump-worker.js`: PASS.
+  - `node --check tools/scripts/probe-browser-pdump-atomics-terminal-profile.mjs`:
+    PASS.
+  - `npm run test:xterm-terminal-profile`: PASS.
+
+**vendor/emacs unchanged.**
 
 ### xterm Font Size Adjustment (2026-06-06)
 

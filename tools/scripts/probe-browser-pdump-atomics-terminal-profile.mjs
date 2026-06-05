@@ -101,6 +101,7 @@ if (!isMainThread) {
     "--no-splash",
     "-nw",
     "--eval", "(message \"WASMACS-TERM=%s\" (getenv \"TERM\"))",
+    "--eval", "(progn (require 'xt-mouse) (xterm-mouse-mode 1) (message \"WASMACS-XTERM-MOUSE=%S\" xterm-mouse-mode))",
   ];
   try {
     const status = context.Module.callMain(bootArgs);
@@ -139,6 +140,8 @@ if (!isMainThread) {
     .join("\n");
   const summary = {
     hasXterm256Color: messages.some((m) => m.text?.includes("WASMACS-TERM=xterm-256color")),
+    hasXtermMouseMode: messages.some((m) => m.text?.includes("WASMACS-XTERM-MOUSE=t")),
+    hasMouse1006Enable: finalText.includes("\u001b[?1006h"),
     hasArrowEditResult: finalText.includes("abc") && finalText.includes("\bZc\b"),
     waitEvents: messages.filter((m) => m.type === "wait-entered").length,
     terminalOutputBytes: messages.at(-1)?.terminalOutputBytes ?? null,
@@ -155,6 +158,8 @@ if (!isMainThread) {
   ].join("\n"));
 
   if (!summary.hasXterm256Color) throw new Error(`TERM readback did not report xterm-256color; see ${logPath}`);
+  if (!summary.hasXtermMouseMode) throw new Error(`xterm-mouse-mode was not enabled; see ${logPath}`);
+  if (!summary.hasMouse1006Enable) throw new Error(`xterm mouse 1006 enable sequence was not emitted; see ${logPath}`);
   if (!summary.hasArrowEditResult) throw new Error(`cursor-left edit did not emit the expected backspace + Zc rewrite; see ${logPath}`);
 
   console.log("Atomics pdmp terminal profile probe passed — see " + logPath);
