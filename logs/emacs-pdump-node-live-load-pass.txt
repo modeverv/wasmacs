@@ -1,0 +1,33 @@
+pdmp Node load LIVE evidence — 2026-06-04 M260604
+====================================================
+Matching set (rebuilt):
+  temacs.wasm sha256: 75132c0fd43bfd77d32cdd17dbd01f49a2ee8858f30ef7d9317198c689964540
+  bootstrap-emacs.pdmp sha256: b3b7c0409d98072e6e77ab71d32182d9d9b240dd1f7ddb423aae1f6d9e1c33ea
+  dump fingerprint: 3e59cd24358c94753161c2c2b26056f5a86bd3ff5fa380de87fcd4964edbd13f
+
+Command:
+  node --stack-size=65500 ./temacs --dump-file=./bootstrap-emacs.pdmp --batch
+    --eval '(princ (concat "VERSION:" emacs-version "\n"))'
+    --eval '(garbage-collect)' --eval '(princ "GC:PASS\n")'
+    --eval '(princ (format "PDUMP:%s\n" (if (pdumper-stats) "loaded" "no")))'
+
+Output:
+  VERSION:30.2
+  GC:PASS
+  PDUMP:loaded
+
+Level classification (LIVE):
+  Level 2 (pdumper load path): PASS — PDUMP:loaded
+  Level 3 (simple eval):       PASS — VERSION:30.2
+  Level 4 (explicit GC):       PASS — GC:PASS
+
+Build notes:
+  - temacs rebuilt from pdump-configure-probe source with:
+    - alloc.c purecopy fix (Fputhash before recursive slot copy)
+    - pdumper.c mmap fix (force dump_mmap_contiguous_heap)
+    - pdmp-probe-stubs.c (no-op stubs for wasmacs_host_wait_for_input et al.)
+    - loadup.el: inline.el prereq + .elc files (cl-preloaded, cl-lib, macroexp)
+  - 512MB fixed memory, 16MB wasm stack, NODERAWFS=1
+  - vendor/emacs unchanged
+
+Prior evidence (2026-06-03) confirmed and replaced by this live evidence.

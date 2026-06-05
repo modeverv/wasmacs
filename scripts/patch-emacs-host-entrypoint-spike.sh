@@ -1226,12 +1226,13 @@ extern void wasmacs_os_timing_checkpoint (int code);\n\n/\* Read a character fro
     os-compat)
       # os-compat mode: replace wait_reading_process_output with
       # wasmacs_host_wait_for_input + terminal drain via read_socket_hook.
-      # This makes bytes flow through the proper OS compat chain:
-      #   Atomics.wait → __wasmacsTerminalInputBytes
-      #   → tty_read_avail_input → emacs_read → emfile_read → read()
-      #   → TTY get_char → kbd_buffer_store_event
-      perl -0pi -e 's#/\* Read a character from the keyboard.*?\*/#/\* wasmacs os-compat terminal input injection spike. \*/\
-extern int wasmacs_host_wait_for_input (void);\
+	      # This makes bytes flow through the proper OS compat chain:
+	      #   Atomics.wait → __wasmacsTerminalInputBytes
+	      #   → tty_read_avail_input → emacs_read → emfile_read → read()
+	      #   → TTY get_char → kbd_buffer_store_event
+	      perl -0pi -e 's#/\* wasmacs os-compat terminal input injection spike\. \*/.*?/\* Read a character from the keyboard; call the redisplay if needed\.  \*/#/* Read a character from the keyboard; call the redisplay if needed.  */#sg' "${keyboard_file}"
+	      perl -0pi -e 's#/\* Read a character from the keyboard.*?\*/#/\* wasmacs os-compat terminal input injection spike. \*/\
+	extern int wasmacs_host_wait_for_input (void);\
 extern int wasmacs_host_terminal_input_available (void);\
 extern int wasmacs_host_terminal_read_byte (void);\
 extern int wasmacs_host_scheduler_checkpoint (int code);

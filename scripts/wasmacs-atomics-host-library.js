@@ -212,4 +212,10 @@ mergeInto(LibraryManager.library, {
     globalThis.__wasmacsTerminalInputBytes = [];
     return 0;
   },
+
+  // ── wasmacs_os_timing_checkpoint ─────────────────────────────────
+  // No-op stub for latency measurement calls from os-compat waitpoint.
+  wasmacs_os_timing_checkpoint__deps: [],
+  wasmacs_os_timing_checkpoint: function (code) {
+  },
 });

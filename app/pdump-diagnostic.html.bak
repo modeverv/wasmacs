@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>pdump diagnostic — wasmacs M260604</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; padding: 12px; }
+  h1 { font-size: 16px; color: #7c8aff; margin-bottom: 8px; }
+  .panel { background: #16213e; border: 1px solid #0f3460; border-radius: 4px; margin-bottom: 8px; }
+  .panel-header { background: #0f3460; padding: 4px 8px; font-size: 12px; cursor: pointer; display: flex; justify-content: space-between; }
+  .panel-body { padding: 8px; max-height: 300px; overflow-y: auto; font-size: 11px; white-space: pre-wrap; word-break: break-all; }
+  .toolbar { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  button { background: #0f3460; color: #e0e0e0; border: 1px solid #1a508b; padding: 6px 12px; border-radius: 3px; cursor: pointer; font-size: 12px; font-family: monospace; }
+  button:hover { background: #1a508b; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  button.active { background: #1a6b3a; }
+  .error { color: #ff6b6b; }
+  .warn { color: #ffd93d; }
+  .ok { color: #6bff8e; }
+  .info { color: #7c8aff; }
+  .phase { display: inline-block; padding: 2px 8px; border-radius: 3px; margin: 2px; font-size: 11px; }
+  .phase-current { background: #1a6b3a; color: #fff; }
+  .phase-done { background: #0f3460; color: #6bff8e; }
+  .phase-error { background: #6b1a1a; color: #ff6b6b; }
+  #status { font-size: 14px; margin-bottom: 8px; }
+  .fs-entry { padding: 1px 4px; }
+  .fs-dir { color: #7c8aff; }
+  .fs-file { color: #e0e0e0; }
+  .fs-pdmp { color: #6bff8e; font-weight: bold; }
+  .checkpoint-line { padding: 1px 0; }
+</style>
+</head>
+<body>
+
+<h1>pdump diagnostic — M260604</h1>
+
+<div id="status">initializing...</div>
+
+<div class="toolbar">
+  <button id="btn-generate" onclick="startGenerate()">Generate pdmp</button>
+  <button id="btn-abort" onclick="abortWorker()" disabled>Abort</button>
+  <button id="btn-list-fs" onclick="listFs('/')" disabled>List FS /</button>
+  <button id="btn-download" onclick="downloadPdmp()" disabled>Download .pdmp</button>
+  <button id="btn-save-storage" onclick="saveToStorage()" disabled>Save to Storage</button>
+  <button id="btn-reload-pdmp" onclick="reloadPdmp()" disabled>Reload pdmp</button>
+  <button id="btn-eval" onclick="evalWithPdmp()" disabled>Eval VERSION</button>
+  <button id="btn-gc" onclick="gcWithPdmp()" disabled>GC Test</button>
+</div>
+
+<div id="phases"></div>
+
+<div class="panel">
+  <div class="panel-header" onclick="togglePanel('stdout-panel')">
+    <span>stdout</span><span id="stdout-count">0</span>
+  </div>
+  <div class="panel-body" id="stdout-panel"></div>
+</div>
+
+<div class="panel">
+  <div class="panel-header" onclick="togglePanel('stderr-panel')">
+    <span>stderr</span><span id="stderr-count">0</span>
+  </div>
+  <div class="panel-body" id="stderr-panel"></div>
+</div>
+
+<div class="panel">
+  <div class="panel-header" onclick="togglePanel('checkpoint-panel')">
+    <span>checkpoints</span><span id="checkpoint-count">0</span>
+  </div>
+  <div class="panel-body" id="checkpoint-panel"></div>
+</div>
+
+<div class="panel">
+  <div class="panel-header" onclick="togglePanel('fs-panel')">
+    <span>FS tree</span>
+  </div>
+  <div class="panel-body" id="fs-panel"></div>
+</div>
+
+<div class="panel">
+  <div class="panel-header" onclick="togglePanel('state-panel')">
+    <span>state</span>
+  </div>
+  <div class="panel-body" id="state-panel">waiting...</div>
+</div>
+
+<script>
+let worker = null;
+let checkpoints = [];
+let stdoutLines = 0;
+let stderrLines = 0;
+let pdmpInfo = null;
+let pdmpBase64 = null;
+let currentPhase = "init";
+let phaseHistory = [];
+
+const phases = ["init", "loading", "booting", "dumping", "checking", "done", "reloading", "eval"];
+
+function setPhase(p) {
+  if (p !== currentPhase) {
+    phaseHistory.push({ from: currentPhase, to: p, ts: Date.now() });
+    currentPhase = p;
+    renderPhases();
+  }
+}
+
+function renderPhases() {
+  const el = document.getElementById("phases");
+  el.innerHTML = phases.map(p => {
+    let cls = "phase";
+    if (p === currentPhase) cls += " phase-current";
+    else if (phaseHistory.some(h => h.to === p)) cls += " phase-done";
+    return `<span class="${cls}">${p}</span>`;
+  }).join(" ");
+}
+
+function togglePanel(id) {
+  const el = document.getElementById(id);
+  el.style.display = el.style.display === "none" ? "block" : "none";
+}
+
+function addStdout(text) {
+  stdoutLines++;
+  document.getElementById("stdout-count").textContent = stdoutLines;
+  const el = document.getElementById("stdout-panel");
+  el.innerHTML += `<div>${escapeHtml(text)}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function addStderr(text) {
+  stderrLines++;
+  document.getElementById("stderr-count").textContent = stderrLines;
+  const el = document.getElementById("stderr-panel");
+  el.innerHTML += `<div class="warn">${escapeHtml(text)}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function addCheckpoint(kind, data) {
+  checkpoints.push({ kind, data, ts: data.ts || Date.now() });
+  document.getElementById("checkpoint-count").textContent = checkpoints.length;
+  const el = document.getElementById("checkpoint-panel");
+  const extra = data.error ? ` <span class="error">${escapeHtml(String(data.error))}</span>`
+    : data.exitCode !== undefined ? ` exit=${data.exitCode}`
+    : data.size ? ` size=${data.size}`
+    : data.phase ? ` phase=${data.phase}`
+    : "";
+  el.innerHTML += `<div class="checkpoint-line"><span class="info">[${kind}]</span>${extra}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function escapeHtml(s) {
+  const div = document.createElement("div");
+  div.textContent = s;
+  return div.innerHTML;
+}
+
+function updateButtons(phase) {
+  const gen = document.getElementById("btn-generate");
+  const abort = document.getElementById("btn-abort");
+  const listFs = document.getElementById("btn-list-fs");
+  const download = document.getElementById("btn-download");
+  const save = document.getElementById("btn-save-storage");
+  const reload = document.getElementById("btn-reload-pdmp");
+  const evalBtn = document.getElementById("btn-eval");
+  const gc = document.getElementById("btn-gc");
+
+  gen.disabled = phase === "dumping" || phase === "booting" || phase === "loading";
+  abort.disabled = phase !== "dumping" && phase !== "booting";
+  listFs.disabled = phase === "init";
+  download.disabled = !pdmpInfo;
+  save.disabled = !pdmpInfo;
+  reload.disabled = !pdmpInfo;
+  evalBtn.disabled = !pdmpInfo;
+  gc.disabled = !pdmpInfo;
+}
+
+function startGenerate() {
+  if (worker) { worker.terminate(); worker = null; }
+  checkpoints = [];
+  stdoutLines = 0;
+  stderrLines = 0;
+  pdmpInfo = null;
+  pdmpBase64 = null;
+  document.getElementById("stdout-panel").innerHTML = "";
+  document.getElementById("stderr-panel").innerHTML = "";
+  document.getElementById("checkpoint-panel").innerHTML = "";
+  document.getElementById("state-panel").innerHTML = "starting worker...";
+
+  setPhase("loading");
+  updateButtons("loading");
+  document.getElementById("status").innerHTML = '<span class="info">Starting pdmp generation...</span>';
+
+  worker = new Worker("/app/src/pdump-diagnostic-worker.js");
+  
+  worker.onmessage = function(evt) {
+    const msg = evt.data;
+    switch (msg.type) {
+      case "checkpoint":
+        addCheckpoint(msg.kind, msg);
+        if (msg.kind === "booting") setPhase("booting");
+        if (msg.kind === "callMain-start") setPhase("dumping");
+        if (msg.kind === "callMain-done" || msg.kind === "checking-pdmp") setPhase("checking");
+        if (msg.kind === "callMain-error") setPhase("done");
+        updateButtons(currentPhase);
+        document.getElementById("status").innerHTML = `<span class="info">Phase: ${currentPhase} — ${msg.kind}</span>`;
+        break;
+      case "stdout":
+        addStdout(msg.text);
+        break;
+      case "stderr":
+        addStderr(msg.text);
+        break;
+      case "pdmp-found":
+        pdmpInfo = msg;
+        document.getElementById("state-panel").innerHTML = 
+          `<div class="ok">pdmp found: ${msg.path}</div>
+           <div>size: ${(msg.size/1024/1024).toFixed(1)} MB</div>`;
+        setPhase("done");
+        updateButtons("done");
+        document.getElementById("status").innerHTML = 
+          `<span class="ok">pdmp generated: ${(msg.size/1024/1024).toFixed(1)} MB</span>`;
+        break;
+      case "pdmp-sha256":
+        if (msg.sha256) {
+          document.getElementById("state-panel").innerHTML += 
+            `<div>sha256: <span style="font-size:10px">${msg.sha256}</span></div>`;
+        }
+        break;
+      case "pdmp-download":
+        pdmpBase64 = msg.base64;
+        break;
+      case "fs-tree":
+        const fsEl = document.getElementById("fs-panel");
+        fsEl.innerHTML = `<div class="info">/${msg.path}</div>`;
+        if (msg.entries) {
+          msg.entries.forEach(e => {
+            const cls = e.isDir ? "fs-dir" : e.name.endsWith(".pdmp") ? "fs-pdmp" : "fs-file";
+            fsEl.innerHTML += `<div class="fs-entry ${cls}">${e.name} ${e.size ? `(${e.size} bytes)` : ""} ${e.error ? e.error : ""}</div>`;
+          });
+        }
+        break;
+      case "lifecycle":
+        document.getElementById("state-panel").innerHTML += 
+          `<div>lifecycle: ${msg.phase || msg.error || "unknown"}</div>`;
+        break;
+      case "command-state":
+        document.getElementById("state-panel").innerHTML += 
+          `<div>cmdState: ${msg.cmdState || "unknown"}</div>`;
+        break;
+      case "eval-result":
+        {
+          var stateEl = document.getElementById("state-panel");
+          var cls = msg.exitCode === 0 ? "ok" : "error";
+          stateEl.innerHTML += '<div class="' + cls + '"><b>' + msg.cmd + ' result</b> (exit=' + msg.exitCode + ')</div>';
+          if (msg.stdout) {
+            stateEl.innerHTML += '<div style="margin-left:8px">stdout: ' + escapeHtml(msg.stdout) + '</div>';
+          }
+          if (msg.lastResult) {
+            stateEl.innerHTML += '<div style="margin-left:8px">lastResult: ' + escapeHtml(msg.lastResult) + '</div>';
+          }
+          if (msg.error) {
+            stateEl.innerHTML += '<div class="error" style="margin-left:8px">error: ' + escapeHtml(msg.error) + '</div>';
+          }
+          // Parse for version
+          var versionMatch = (msg.stdout + msg.lastResult).match(/VERSION:(\\d+\\.\\d+)/);
+          if (versionMatch) {
+            stateEl.innerHTML += '<div class="ok" style="margin-left:8px"><b>Level D3: VERSION=' + versionMatch[1] + ' PASS</b></div>';
+          }
+          var gcMatch = (msg.stdout + msg.lastResult).match(/GC:PASS/);
+          if (gcMatch) {
+            stateEl.innerHTML += '<div class="ok" style="margin-left:8px"><b>Level D4: GC:PASS</b></div>';
+          }
+        }
+        break;
+      case "error":
+        document.getElementById("status").innerHTML += 
+          '<div class="error">' + escapeHtml(msg.text) + '</div>';
+        break;
+      case "fatal":
+        document.getElementById("status").innerHTML = 
+          `<span class="error">FATAL: ${escapeHtml(msg.error)}</span>`;
+        setPhase("done");
+        break;
+    }
+  };
+
+  worker.onerror = function(e) {
+    document.getElementById("status").innerHTML = 
+      `<span class="error">Worker error: ${escapeHtml(e.message || String(e))}</span>`;
+    setPhase("done");
+    updateButtons("done");
+  };
+}
+
+function abortWorker() {
+  if (worker) { worker.terminate(); worker = null; }
+  setPhase("done");
+  updateButtons("done");
+  document.getElementById("status").innerHTML = '<span class="warn">Aborted</span>';
+}
+
+function listFs(path) {
+  if (worker) worker.postMessage({ type: "list-fs", path: path || "/" });
+}
+
+function downloadPdmp() {
+  if (!pdmpBase64) return;
+  const raw = atob(pdmpBase64);
+  const bytes = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+  const blob = new Blob([bytes], { type: "application/octet-stream" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "bootstrap-emacs.pdmp";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function saveToStorage() {
+  if (!pdmpBase64) return;
+  var raw = atob(pdmpBase64);
+  var bytes = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
+
+  var req = indexedDB.open("wasmacs-pdump-diagnostic", 1);
+  req.onupgradeneeded = function() {
+    req.result.createObjectStore("files");
+  };
+  req.onsuccess = function() {
+    var db = req.result;
+    var tx = db.transaction("files", "readwrite");
+    tx.objectStore("files").put(bytes, "bootstrap-emacs.pdmp");
+    tx.oncomplete = function() {
+      db.close();
+      document.getElementById("status").innerHTML +=
+        '<div class="ok">Saved to IndexedDB (' + (bytes.length/1024/1024).toFixed(1) + ' MB)</div>';
+    };
+    tx.onerror = function(e) {
+      db.close();
+      document.getElementById("status").innerHTML +=
+        '<div class="error">IndexedDB save failed: ' + escapeHtml(String(e.target.error)) + '</div>';
+    };
+  };
+  req.onerror = function(e) {
+    document.getElementById("status").innerHTML +=
+      '<div class="error">IndexedDB open failed: ' + escapeHtml(String(e.target.error)) + '</div>';
+  };
+}
+
+function reloadPdmp() {
+  if (!worker) return;
+  setPhase("reloading");
+  updateButtons("reloading");
+  document.getElementById("status").innerHTML = '<span class="info">Reloading pdmp...</span>';
+  worker.postMessage({ type: "reload-pdmp", path: "/bootstrap-emacs.pdmp" });
+}
+
+function evalWithPdmp() {
+  if (!worker) return;
+  setPhase("eval");
+  updateButtons("eval");
+  document.getElementById("status").innerHTML = '<span class="info">Evaluating with pdmp...</span>';
+  worker.postMessage({ type: "eval-with-pdmp", path: "/bootstrap-emacs.pdmp", expr: '(princ (concat "VERSION:" emacs-version "\\n"))' });
+}
+
+function gcWithPdmp() {
+  if (!worker) return;
+  setPhase("eval");
+  updateButtons("eval");
+  document.getElementById("status").innerHTML = '<span class="info">GC test with pdmp...</span>';
+  worker.postMessage({ type: "gc-with-pdmp", path: "/bootstrap-emacs.pdmp" });
+}
+
+// Initial state
+renderPhases();
+updateButtons("init");
+document.getElementById("status").innerHTML = 
+  '<span class="info">Ready. Click "Generate pdmp" to start.</span><br>' +
+  '<span style="font-size:11px;opacity:0.7">Profile: emacs-browser-atomics-pdump</span>';
+</script>
+</body>
+</html>

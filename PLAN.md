@@ -3108,3 +3108,121 @@ same build fingerprint
 の条件で、preloaded-state load が成立するかを検証する。
 
 配置設計はその後に決める。
+
+## M260604 完了レポート (2026-06-04)
+
+- **Step 1 (artifact inventory)**: 4 `.pdmp` files found. Documented in
+  `logs/pdmp-artifact-inventory.txt`.
+- **Step 2 (probe)**: `scripts/probe-browser-pdump-external-load.mjs` 作成。
+  pdmp-profile temacs は pdumper 非対応、pdump-probe tree temacs は
+  interactive build に上書き済みで OOM。
+- **Step 3 (diagnostics)**: `logs/wasm-browser-pdump-external-load.txt`
+  + `.jsonl` に checkpoint snapshot 記録。
+- **Step 4 (levels)**: Level 0-4 PASS (既存 evidence `logs/emacs-pdump-node-load-pass.txt` に基づく).
+  Level 5-6 NOT VERIFIED (temacs binary 破損のため).
+- **Step 5 (regenerate)**: SKIP — 既存 evidence が十分。
+- **Step 6 (manifest)**: `artifacts/preloaded-state/emacs-30.2/manifest.json`
+  に全 4 matching set と known patches を記録。
+- **Step 7 (test scripts)**: `npm run test:pdump` / `test:pdump:generate`
+  package.json に追加。デフォルト test には未統合。
+- **Documentation**: LOG.md, MEMORY.md に append-only で記録。
+- **Service classification**: Preloaded-State Service (pdmp artifact exists,
+  load route proven). Memory And Root Service (post-pdmp GC passes).
+- **KNOWN_BLOCKER**: pdmp-probe tree temacs 上書きにより rebuild が必要。
+  patched source tree の Asyncify シンボル競合でリンク失敗。
+- **vendor/emacs**: unchanged.
+
+## M260604b: bootstrap-emacs.pdmp → xterm-atomics 接続 (2026-06-04)
+
+### 成果
+
+- `pdump-diagnostic.html` の "Boot Test (--eval)" で以下を確認:
+  - bootstrap-emacs.pdmp self-generate (emacs-browser-atomics-pdump artifact)
+  - fresh worker での pdmp-materialized
+  - BOOT-PDUMP: LOADED (callMain 内部の --eval で確認)
+  - version=30.2, gc=GC-OK
+  - D3+D4 PASS
+
+- **根本原因特定**: `thisProgram: "temacs"` → `find_emacs_executable` が PATH 検索失敗
+  → `goto hardcoded` + `dump_file=NULL` → `--dump-file` 無視 → cold boot
+  **修正**: `thisProgram: "/temacs"` で `strchr(argv0, '/')` 分岐に入り null 回避
+
+### 新規ファイル
+
+- `app/src/emacs-atomics-pdump-worker.js`: emacs-atomics-worker.js 派生、
+  pdump artifact + thisProgram="/temacs" + --dump-file boot
+- `app/xterm-atomics-pdump.html`: generate phase (pdmp 生成) → emacs phase (xterm 接続)
+  IndexedDB キャッシュで再訪問時の generate をスキップ
+
+### Level 分類 (次の確認対象)
+
+| Level | 内容 | 状態 |
+|-------|------|------|
+| X1 | pdmp materialized + --dump-file argv 確認 | diagnostic で PASS 済み |
+| X2 | terminal bytes → xterm 表示 | **要確認** (xterm-atomics-pdump.html) |
+| X3 | Atomics.wait / input wait 到達 | **要確認** |
+| X4 | `a` キー → *scratch* に insert | **要確認** |
+
+### 次のタスク
+
+X2/X3 確認後、org-mode 最小確認:
+- `(require 'org)` が通るか
+- `.org` ファイル open/見出し入力/保存
+- 不足なら emacs.pdmp 生成 (full dump) を検討
+
+**vendor/emacs unchanged.**
+
+## M260605: atomic pdmp artifact regenerate / Reload+Eval+GC recovery (2026-06-05)
+
+### Status
+
+- `artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp` regenerated from
+  the final Atomics runtime, then packaged with matching `temacs.wasm`.
+- `http://localhost:5173/app/pdump-diagnostic.html` "Generate pdmp" now loads
+  the bundled artifact into MEMFS and enables Reload/Eval controls.
+- "Reload + Eval + GC" PASS in the browser page:
+  - `version=30.2`
+  - `pdump=LOADED`
+  - `gc=GC-OK`
+  - `D3+D4 PASS`
+- Node probe PASS:
+  - `VERSION:30.2`
+  - `PDUMP:LOADED`
+  - `GC:PASS`
+
+### Evidence
+
+- Build command:
+  `scripts/build-emacs-browser-atomics-pdump-profile.sh`
+- Artifact hashes:
+  - `temacs.wasm`: `54b813bb07d12fe638f68bf03a1364974302098c9bc32d2f853c705b46df6d69`
+  - `bootstrap-emacs.pdmp`: `c0958f4c717f95bff00f027af79b370b5c0170d34b24c32a956817645842b0d2`
+- Browser page evidence:
+  - Generate checkpoint: `generate-done`
+  - Reload checkpoint: `pdmp-materialized`, `argv0-file-placed`, `boot-done`, `reload-done`
+
+### Fixes Applied
+
+- Rebuilt `build/emacs-pdump-configure-probe` from a fresh GNU Emacs 30.2 copy;
+  the previous generated copy had repeated os-compat insertions in `keyboard.c`.
+- Made the os-compat keyboard insertion cleanup idempotent before reinsertion.
+- Changed atomic pdmp artifact build to generate `bootstrap-emacs.pdmp` after
+  building the final Atomics runtime, then extract `/bootstrap-emacs.pdmp` from
+  MEMFS to the host artifact. This avoids runtime/pdmp fingerprint mismatch.
+- Added the Emscripten pbootstrap load-path fix to the Atomics pdmp build path.
+- Ensured native `make-docfile` / `make-fingerprint` helpers and internal
+  termcap settings are restored before `src/temacs` link.
+- `pdump-diagnostic-worker.js` now reads bundled pdmp artifacts and preserves
+  `/temacs` argv0 placement before pdmp boot.
+
+### Remaining Blockers
+
+- `Boot Test (--eval)` in the page still falls into a normal-top-level path and
+  currently ends at `Cannot open load file: No such file or directory, japan-util`.
+  The independent Node batch probe proves the same artifact can load pdmp and
+  run eval/GC, so this is now a page worker callMain/argument lifecycle issue.
+- `--quick --no-splash --nw` with pdmp still aborts before the Atomics.wait
+  checkpoint in `scripts/probe-browser-pdump-atomics-tty-command-loop.mjs`.
+  X2/X3/X4 remain open.
+
+**vendor/emacs unchanged.**

@@ -1,0 +1,18 @@
+{"ts":1780618128758,"k":"vm-created"}
+{"ts":1780618128761,"k":"loaded","pdmp":26455952}
+{"ts":1780618128762,"k":"sab-ready","sz":264}
+{"ts":1780618128875,"k":"rt-init"}
+{"ts":1780618128875,"k":"globals-set"}
+{"ts":1780618128876,"k":"argv0-file-placed","mode":33261,"size":1}
+{"ts":1780618128879,"k":"pdmp-placed","size":26455952}
+{"ts":1780618128880,"k":"before-callMain"}
+{"ts":1780618128880,"k":"boot-args","args":"[\"--dump-file=/bootstrap-emacs.pdmp\",\"--quick\",\"--no-splash\",\"--nw\"]"}
+{"ts":1780618128902,"k":"stderr","t":"warning: unsupported syscall: __syscall_mprotect"}
+{"ts":1780618128907,"k":"stderr","t":"warning: unsupported syscall: __syscall_prlimit64"}
+{"ts":1780618128920,"k":"stderr","t":"warning: unsupported syscall: __syscall_prlimit64"}
+{"ts":1780618128920,"k":"stderr","t":"warning: unsupported syscall: __syscall_prlimit64"}
+{"ts":1780618129102,"k":"stderr","t":"Aborted(native code called abort())"}
+{"ts":1780618129103,"k":"callMain-threw","e":"Aborted(native code called abort())"}
+{"ts":1780618129103,"k":"callMain-blocked-or-crashed"}
+{"ts":1780618129103,"k":"tty-output","n":268,"t":"Warning: arch-dependent data dir '/usr/local/libexec/emacs/30.2/wasm32-unknown-linux-gnu/': No such file or directory\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\u001b[H\u001b[2J\u001b[24;1H                                                                               \r\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\u001b[H\u001b[2J"}
+{"ts":1780618129103,"k":"worker-done"}

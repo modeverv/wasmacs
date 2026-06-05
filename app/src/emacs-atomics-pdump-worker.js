@@ -1,0 +1,342 @@
+/**
+ * emacs-atomics-pdump-worker.js
+ *
+ * Web Worker for Emacs wasm booting from bootstrap-emacs.pdmp.
+ * Uses SharedArrayBuffer + Atomics.wait for input blocking.
+ *
+ * Architecture identical to emacs-atomics-worker.js except:
+ *   - ARTIFACT_DIR points to emacs-browser-atomics-pdump (pdumper-enabled)
+ *   - thisProgram: "/temacs"  (leading slash fixes load_pdump --dump-file path)
+ *   - Accepts { type: "start", pdmpBytes: ArrayBuffer } to load from pdmp
+ *
+ * Boot sequence:
+ *   1. Module loads + TTY patched
+ *   2. pdmpBytes written to MEMFS at /bootstrap-emacs.pdmp
+ *   3. callMain(["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "--nw"])
+ *   4. Emacs enters command loop, Atomics.wait blocks at input
+ */
+const ARTIFACT_DIR = "/artifacts/emacs-browser-atomics-pdump";
+const USER_WASIFS_KEY = "wasmacs:user-filesystem.wasifs:v1";
+const USER_WASIFS_URL = "/artifacts/user-filesystem-empty.wasifs";
+
+function post(type, payload = {}) {
+  self.postMessage({ type, ...payload });
+}
+
+// ── SharedArrayBuffer ────────────────────────────────────────────
+const INPUT_SAB = new SharedArrayBuffer(264);
+globalThis.__wasmacsInputSAB = INPUT_SAB;
+globalThis.__wasmacsTerminalOutputBytes = [];
+globalThis.__wasmacsTerminalInputBytes = [];
+globalThis.__wasmacsSentOutputCount = 0;
+
+self.onmessage = async (event) => {
+  const msg = event.data;
+  if (msg?.type === "start") {
+    const pdmpBytes = msg.pdmpBytes ? new Uint8Array(msg.pdmpBytes) : null;
+    await startEmacs(pdmpBytes);
+  }
+  if (msg?.type === "export-wasifs") {
+    try {
+      const bytes = exportUserImage(self.Module?.FS);
+      self.postMessage({
+        type: "wasifs-export-data",
+        bytes: bytes.buffer,
+        filename: "user-filesystem.wasifs",
+      }, [bytes.buffer]);
+    } catch (e) {
+      post("stderr", { text: "export failed: " + e });
+    }
+  }
+  if (msg?.type === "import-wasifs") {
+    try {
+      const bytes = new Uint8Array(msg.bytes);
+      const nodes = parseUserTar(bytes);
+      if (self.Module?.FS) {
+        mountUserImage(self.Module.FS, nodes);
+        saveToLocalStorage(bytes);
+        post("wasifs-imported", {});
+      }
+    } catch (e) {
+      post("stderr", { text: "import failed: " + e });
+    }
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════
+// .wasifs filesystem (tar-compatible user image — same as emacs-atomics-worker.js)
+// ═══════════════════════════════════════════════════════════════
+
+const BLOCK = 512;
+const td = new TextDecoder();
+const te = new TextEncoder();
+
+function trimNulls(bytes) {
+  const zero = bytes.indexOf(0);
+  return td.decode(bytes.subarray(0, zero === -1 ? bytes.length : zero)).trim();
+}
+function parseOctal(bytes) {
+  const text = trimNulls(bytes).trim();
+  return text.length === 0 ? 0 : Number.parseInt(text, 8);
+}
+function padLen(n) { return Math.ceil(n / BLOCK) * BLOCK; }
+function loadBase64(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
+function saveToLocalStorage(bytes) { saveBase64(USER_WASIFS_KEY, b64encode(bytes)); }
+function saveBase64(key, val) { try { localStorage.setItem(key, val); } catch (_) {} }
+function b64decode(text) {
+  const bin = atob(text);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+function b64encode(bytes) {
+  let bin = "";
+  const sz = 0x8000;
+  for (let o = 0; o < bytes.length; o += sz)
+    bin += String.fromCharCode(...bytes.subarray(o, o + sz));
+  return btoa(bin);
+}
+
+function parseUserTar(bytes) {
+  const nodes = new Map();
+  let off = 0;
+  while (off + BLOCK <= bytes.length) {
+    const h = bytes.subarray(off, off + BLOCK);
+    if (h.every(b => b === 0)) break;
+    const name = trimNulls(h.subarray(0, 100));
+    const prefix = trimNulls(h.subarray(345, 500));
+    const entry = prefix ? prefix + "/" + name : name;
+    const size = parseOctal(h.subarray(124, 136));
+    const type = String.fromCharCode(h[156] || 48);
+    const dstart = off + BLOCK;
+    if (entry === "home/user" || entry.startsWith("home/user/")) {
+      const path = entry === "home/user" ? "/home/user" : "/" + entry;
+      nodes.set(path, { isDir: type === "5" || entry.endsWith("/"), data: type === "5" ? null : bytes.slice(dstart, dstart + size) });
+    }
+    off = dstart + padLen(size);
+  }
+  return nodes;
+}
+
+async function loadUserImage() {
+  const stored = loadBase64(USER_WASIFS_KEY);
+  if (stored) {
+    post("status", { text: "loading user image from storage..." });
+    return parseUserTar(b64decode(stored));
+  }
+  post("status", { text: "fetching empty user image..." });
+  const resp = await fetch(USER_WASIFS_URL);
+  if (!resp.ok) throw new Error(`Failed to fetch user image: ${resp.status}`);
+  return parseUserTar(new Uint8Array(await resp.arrayBuffer()));
+}
+
+function mountUserImage(FS, nodes) {
+  const dirs = new Set();
+  for (const [path] of nodes) {
+    const parts = path.split("/").filter(Boolean);
+    for (let i = 0; i < parts.length; i++) {
+      const d = "/" + parts.slice(0, i + 1).join("/");
+      if (d !== "/") dirs.add(d);
+    }
+  }
+  for (const d of [...dirs].sort()) { try { FS.mkdir(d); } catch (_) {} }
+  for (const [path, node] of nodes) {
+    if (!node.isDir && node.data) {
+      try { FS.unlink(path); } catch (_) {}
+      FS.createDataFile(path, null, node.data, true, true);
+    }
+  }
+  post("status", { text: `mounted ${nodes.size} user paths` });
+}
+
+function exportUserImage(FS) {
+  const nodes = new Map();
+  nodes.set("/home/user", { isDir: true, data: null });
+  walkFS(FS, "/home/user", nodes);
+  return createUserTar(nodes);
+}
+function walkFS(FS, dir, nodes) {
+  try {
+    for (const name of FS.readdir(dir).filter(n => n !== "." && n !== "..")) {
+      const path = dir === "/" ? "/" + name : dir + "/" + name;
+      try {
+        const stat = FS.stat(path);
+        if (FS.isDir(stat.mode)) {
+          nodes.set(path, { isDir: true, data: null });
+          if (!path.includes("/.local/")) walkFS(FS, path, nodes);
+        } else {
+          nodes.set(path, { isDir: false, data: new Uint8Array(FS.readFile(path, { encoding: "binary" })) });
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+}
+function createUserTar(nodes) {
+  const chunks = [];
+  const paths = [...nodes.keys()].filter(p => p === "/home/user" || p.startsWith("/home/user/")).sort();
+  for (const path of paths) {
+    const node = nodes.get(path);
+    const tarpath = node.isDir ? path.replace(/^\//, "") + "/" : path.replace(/^\//, "");
+    const content = node.isDir ? new Uint8Array() : (node.data || new Uint8Array());
+    const h = new Uint8Array(BLOCK);
+    const enc = (off, len, str) => { h.fill(0, off, off + len); h.set(te.encode(str.slice(0, len)).subarray(0, len), off); };
+    const octal = (off, len, val) => enc(off, len, val.toString(8).padStart(len - 1, "0").slice(-(len - 1)));
+    enc(0, 100, tarpath); octal(100, 8, node.isDir ? 0o755 : 0o644);
+    octal(108, 8, 0); octal(116, 8, 0); octal(124, 12, content.length);
+    octal(136, 12, Math.floor(Date.now() / 1000));
+    h.fill(32, 148, 156); h[156] = node.isDir ? 53 : 48;
+    enc(257, 6, "ustar"); enc(263, 2, "00");
+    octal(148, 7, h.reduce((s, b) => s + b, 0)); h[155] = 0;
+    chunks.push(h);
+    if (!node.isDir) {
+      chunks.push(content);
+      const p = padLen(content.length) - content.length;
+      if (p > 0) chunks.push(new Uint8Array(p));
+    }
+  }
+  chunks.push(new Uint8Array(BLOCK * 2));
+  const total = chunks.reduce((s, c) => s + c.length, 0);
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) { out.set(c, off); off += c.length; }
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Emacs bootstrap
+// ═══════════════════════════════════════════════════════════════
+
+async function startEmacs(pdmpBytes) {
+  post("ready", { sab: INPUT_SAB });
+
+  const userNodes = await loadUserImage();
+
+  post("status", { text: "loading Emacs wasm (pdump profile)..." });
+
+  let resolveReady;
+  const ready = new Promise(r => { resolveReady = r; });
+
+  const Module = {
+    noInitialRun: true,
+    // "/temacs" (leading slash): find_emacs_executable takes the strchr branch,
+    // returns "/temacs" even if not found via realpath, so --dump-file is not nulled.
+    thisProgram: "/temacs",
+    locateFile(path) { return `${ARTIFACT_DIR}/${path}`; },
+    print(text) { post("stdout", { text }); },
+    printErr(text) {
+      console.warn("[pdump worker]", text);
+      post("stderr", { text });
+    },
+    onAbort(what) { post("session-ended", { error: `abort: ${what}` }); },
+    preRun: [function() {
+      try {
+        try { Module.FS.mkdir("/tmp"); } catch (_) {}
+        try { Module.FS.mkdir("/home"); } catch (_) {}
+        try { Module.FS.mkdir("/home/user"); } catch (_) {}
+        try { Module.FS.mkdir("/home/user/.emacs.d"); } catch (_) {}
+        try { Module.FS.mkdir("/home/user/projects"); } catch (_) {}
+        mountUserImage(Module.FS, userNodes);
+      } catch (e) {
+        console.warn("[pdump worker] user mount failed:", e);
+      }
+    }],
+    onRuntimeInitialized() {
+      // Patch TTY ops on each fd (belt-and-suspenders alongside js-library __postset)
+      try {
+        const FS = Module.FS;
+        const putChar = (_tty, val) => {
+          if (val === null) return;
+          globalThis.__wasmacsTerminalOutputBytes.push(val & 255);
+        };
+        const getChar = () => {
+          const q = globalThis.__wasmacsTerminalInputBytes || [];
+          return q.length ? q.shift() : undefined;
+        };
+        const ioctl_tcgets = () => ({
+          c_iflag: 0, c_oflag: 0, c_cflag: 2237, c_lflag: 0,
+          c_cc: [3,28,127,21,4,0,1,0,17,19,26,0,18,15,23,22,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        });
+        for (let fd = 0; fd <= 2; fd++) {
+          const stream = FS.getStream(fd);
+          if (stream?.tty) {
+            stream.tty.ops.put_char = putChar;
+            stream.tty.ops.get_char = getChar;
+            stream.tty.ops.fsync = () => {};
+            stream.tty.ops.ioctl_tcgets = ioctl_tcgets;
+            stream.tty.ops.ioctl_tcsets = () => 0;
+            stream.tty.ops.ioctl_tiocgwinsz = () =>
+              [globalThis.__wasmacsTerminalRows || 24, globalThis.__wasmacsTerminalCols || 80];
+          }
+        }
+      } catch (e) {
+        console.warn("[pdump worker] TTY patch failed:", e);
+      }
+      post("binary-info", {
+        artifactDir: ARTIFACT_DIR,
+        thisProgram: Module.thisProgram,
+        callMainType: typeof Module.callMain,
+      });
+      post("status", { text: "runtime initialized" });
+      resolveReady();
+    },
+  };
+
+  self.Module = Module;
+
+  try {
+    importScripts(`${ARTIFACT_DIR}/temacs`);
+  } catch (err) {
+    post("session-ended", { error: String(err) });
+    return;
+  }
+
+  await ready;
+
+  // Write pdmp to MEMFS AFTER runtime is ready
+  if (pdmpBytes) {
+    try {
+      Module.FS.writeFile("/temacs", new Uint8Array([0]));
+      Module.FS.chmod("/temacs", 0o755);
+      Module.FS.createDataFile("/", "bootstrap-emacs.pdmp", pdmpBytes, true, true, true);
+      post("status", { text: `pdmp materialized (${(pdmpBytes.length / 1024 / 1024).toFixed(1)} MB)` });
+      post("pdmp-materialized", { size: pdmpBytes.length });
+    } catch (e) {
+      post("stderr", { text: `pdmp MEMFS write failed: ${e}` });
+    }
+  }
+
+  const bootArgs = pdmpBytes
+    ? ["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "--nw"]
+    : ["--quick", "--no-splash", "--nw"];
+
+  post("status", { text: `boot: ${bootArgs.join(" ")}` });
+  post("stderr", { text: `JS-BEFORE-CALLMAIN: args=${JSON.stringify(bootArgs)} callMain=${typeof Module.callMain}` });
+
+  // Periodic user image save (fires between Atomics.wait wakeups)
+  let lastSaveLen = 0;
+  const saveInterval = setInterval(() => {
+    try {
+      const bytes = exportUserImage(Module.FS);
+      if (bytes.length !== lastSaveLen) {
+        lastSaveLen = bytes.length;
+        saveBase64(USER_WASIFS_KEY, b64encode(bytes));
+      }
+    } catch (_) {}
+  }, 5000);
+
+  try {
+    post("stderr", { text: "JS-CALLMAIN-START" });
+    const status = Module.callMain(bootArgs);
+    post("stderr", { text: `JS-CALLMAIN-RETURNED: ${status}` });
+    clearInterval(saveInterval);
+    try { saveBase64(USER_WASIFS_KEY, b64encode(exportUserImage(Module.FS))); } catch (_) {}
+    post("session-ended", { status });
+  } catch (err) {
+    clearInterval(saveInterval);
+    try { saveBase64(USER_WASIFS_KEY, b64encode(exportUserImage(Module.FS))); } catch (_) {}
+    if (err?.name !== "ExitStatus") {
+      console.error("[pdump worker] callMain threw:", err);
+    }
+    post("session-ended", { status: err?.status ?? 1, error: err?.message });
+  }
+}

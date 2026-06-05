@@ -90,7 +90,7 @@ checking whether C compiler handles -Wno-unknown-pragmas... yes
 checking whether C compiler handles -Wno-initializer-overrides... yes
 checking whether C compiler handles -Wno-tautological-compare... yes
 checking whether C compiler handles -Wno-tautological-constant-out-of-range-compare... yes
-checking for a BSD-compatible install... /usr/bin/install -c
+checking for a BSD-compatible install... /opt/homebrew/bin/ginstall -c
 checking command to symlink files in the same directory... ln -s
 checking for install-info... /opt/homebrew/bin/install-info
 checking for gzip... /usr/bin/gzip
@@ -249,7 +249,7 @@ checking for statement expressions... yes
 checking whether malloc (0) returns nonnull... guessing yes
 checking for working alloca.h... yes
 checking for alloca... yes
-checking for a race-free mkdir -p... mkdir -p
+checking for a race-free mkdir -p... /opt/homebrew/bin/gmkdir -p
 checking whether the preprocessor supports include_next... yes
 checking whether source code line length is unlimited... yes
 checking whether endutent is declared... yes
