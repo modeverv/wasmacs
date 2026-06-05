@@ -3296,6 +3296,33 @@ X2/X3 確認後、org-mode 最小確認:
     `http://127.0.0.1:8176/app/xterm-atomics-pdump.html`, showed `SAB ✓`, and
     after pressing Start reached `interactive wait ✓` with the Emacs scratch
     buffer rendered.
+  - 2026-06-05 GitHub Pages failure analysis: live Pages served
+    `https://modeverv.github.io/wasimacs/`, but
+    `/wasimacs/artifacts/emacs-browser-atomics-pdump/temacs.js` and
+    `/wasimacs/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp`
+    returned HTTP 404 because the latest GitHub Actions run failed before
+    artifact generation. `gh run view 27007316334 --log-failed` showed
+    `git describe --tags --exact-match HEAD` failing in the Emacs submodule
+    checkout. CI now fetches submodule tags explicitly, and the native/system
+    Lisp build scripts fall back to the pinned `emacs-30.2` release tag when
+    tag metadata is unavailable in a shallow or archived checkout.
+  - 2026-06-05 validation: `bash -n
+    src/build/build-native-baseline.sh src/build/build-system-lisp-image.sh`,
+    `make build`, and `npm test` passed. The one-liner static server on
+    `127.0.0.1:8176` served
+    `/artifacts/emacs-browser-atomics-pdump/temacs.js`,
+    `/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp`, and
+    `/app/src/emacs-atomics-pdump-worker.js` with HTTP 200. In-app Browser
+    reloaded `http://127.0.0.1:8176/app/xterm-atomics-pdump.html`; after
+    pressing Start it reached `interactive wait ✓`, materialized the 11.0 MB
+    pdmp, rendered the Emacs scratch buffer, and reported no console errors or
+    404/importScripts failures.
+  - 2026-06-05 validation: `act pull_request -j build-test-pages
+    --container-architecture linux/amd64` passed. The local GitHub Actions
+    reproduction fetched Emacs submodule tags, built the Pages bundle,
+    generated `emacs-browser-atomics-pdump/temacs.js`, `temacs.wasm`,
+    `temacs.data`, and `bootstrap-emacs.pdmp`, ran 61 Node/runtime contract
+    tests, and completed the generated artifact size check.
 - Validation to run next:
   - Dev server smoke for
     `http://127.0.0.1:5173/app/xterm-atomics-pdump.html`

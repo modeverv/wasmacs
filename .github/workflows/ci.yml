@@ -21,6 +21,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
+      - name: Fetch Emacs submodule tags
+        run: git -C vendor/emacs fetch --tags --force
       - uses: actions/setup-node@v4
         with:
           node-version: "24"

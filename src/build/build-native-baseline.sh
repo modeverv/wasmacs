@@ -6,6 +6,10 @@ source_ref="${repo_root}/vendor/emacs"
 work_root="${repo_root}/build/native-emacs-30.2"
 source_copy="${work_root}/src"
 log_file="${repo_root}/logs/native-baseline.txt"
+emacs_source_tag="$(
+  git -C "${source_ref}" describe --tags --exact-match HEAD 2>/dev/null \
+    || printf 'emacs-%s' "${WASMACS_EMACS_VERSION:-30.2}"
+)"
 
 mkdir -p "${work_root}" "${repo_root}/logs"
 
@@ -14,7 +18,7 @@ mkdir -p "${work_root}" "${repo_root}/logs"
   echo "date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "source: vendor/emacs"
   echo "commit: $(git -C "${source_ref}" rev-parse HEAD)"
-  echo "tag: $(git -C "${source_ref}" describe --tags --exact-match HEAD)"
+  echo "tag: ${emacs_source_tag}"
   echo
 } >"${log_file}"
 

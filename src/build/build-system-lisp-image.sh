@@ -10,7 +10,10 @@ staging_root="$work_root/root"
 log_path="$repo_root/logs/system-lisp-image.txt"
 
 source_commit="$(git -C "$repo_root/vendor/emacs" rev-parse HEAD)"
-source_tag="$(git -C "$repo_root/vendor/emacs" describe --tags --exact-match HEAD)"
+source_tag="$(
+  git -C "$repo_root/vendor/emacs" describe --tags --exact-match HEAD 2>/dev/null \
+    || printf 'emacs-%s' "${WASMACS_EMACS_VERSION:-30.2}"
+)"
 emacs_version="$("$native_root/src/emacs" --batch --eval '(princ emacs-version)' 2>/dev/null | tail -n 1)"
 
 if [[ "$emacs_version" != "30.2" ]]; then
