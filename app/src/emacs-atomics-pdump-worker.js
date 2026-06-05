@@ -23,6 +23,14 @@ function post(type, payload = {}) {
   self.postMessage({ type, ...payload });
 }
 
+function postTerminalTail(reason) {
+  try {
+    const bytes = globalThis.__wasmacsTerminalOutputBytes || [];
+    const tail = bytes.slice(Math.max(0, bytes.length - 2000));
+    post("stderr", { text: `${reason} terminal-tail: ${new TextDecoder().decode(new Uint8Array(tail))}` });
+  } catch (_) {}
+}
+
 // ── SharedArrayBuffer ────────────────────────────────────────────
 const INPUT_SAB = new SharedArrayBuffer(264);
 globalThis.__wasmacsInputSAB = INPUT_SAB;
@@ -71,6 +79,38 @@ const BLOCK = 512;
 const td = new TextDecoder();
 const te = new TextEncoder();
 
+// ── IndexedDB wasifs store (Workers can use IDB; localStorage is unavailable) ──
+const WASIFS_IDB_DB    = "wasmacs-wasifs";
+const WASIFS_IDB_STORE = "snapshots";
+
+function openWasifsIDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(WASIFS_IDB_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(WASIFS_IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+function saveWasifsToIDB(bytes) {
+  openWasifsIDB().then(db => {
+    const tx = db.transaction(WASIFS_IDB_STORE, "readwrite");
+    tx.objectStore(WASIFS_IDB_STORE).put(bytes, USER_WASIFS_KEY);
+    tx.oncomplete = () => db.close();
+    tx.onerror    = () => db.close();
+  }).catch(() => {});
+}
+async function loadWasifsFromIDB() {
+  try {
+    const db = await openWasifsIDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(WASIFS_IDB_STORE, "readonly");
+      const req = tx.objectStore(WASIFS_IDB_STORE).get(USER_WASIFS_KEY);
+      req.onsuccess = () => { db.close(); resolve(req.result ?? null); };
+      req.onerror   = () => { db.close(); resolve(null); };
+    });
+  } catch (_) { return null; }
+}
+
 function trimNulls(bytes) {
   const zero = bytes.indexOf(0);
   return td.decode(bytes.subarray(0, zero === -1 ? bytes.length : zero)).trim();
@@ -80,9 +120,9 @@ function parseOctal(bytes) {
   return text.length === 0 ? 0 : Number.parseInt(text, 8);
 }
 function padLen(n) { return Math.ceil(n / BLOCK) * BLOCK; }
-function loadBase64(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
-function saveToLocalStorage(bytes) { saveBase64(USER_WASIFS_KEY, b64encode(bytes)); }
-function saveBase64(key, val) { try { localStorage.setItem(key, val); } catch (_) {} }
+function loadBase64(_key) { return null; } // localStorage unavailable in workers
+function saveToLocalStorage(bytes) { saveWasifsToIDB(bytes); }
+function saveBase64(__key, __val) { /* no-op: use IDB instead */ }
 function b64decode(text) {
   const bin = atob(text);
   const bytes = new Uint8Array(bin.length);
@@ -109,9 +149,11 @@ function parseUserTar(bytes) {
     const size = parseOctal(h.subarray(124, 136));
     const type = String.fromCharCode(h[156] || 48);
     const dstart = off + BLOCK;
-    if (entry === "home/user" || entry.startsWith("home/user/")) {
-      const path = entry === "home/user" ? "/home/user" : "/" + entry;
-      nodes.set(path, { isDir: type === "5" || entry.endsWith("/"), data: type === "5" ? null : bytes.slice(dstart, dstart + size) });
+    const cleanEntry = entry.replace(/\/$/, "");
+    if (cleanEntry === "home/user" || cleanEntry.startsWith("home/user/")) {
+      const isDir = type === "5" || entry.endsWith("/");
+      const path = cleanEntry === "home/user" ? "/home/user" : "/" + cleanEntry;
+      nodes.set(path, { isDir, data: isDir ? null : bytes.slice(dstart, dstart + size) });
     }
     off = dstart + padLen(size);
   }
@@ -119,10 +161,10 @@ function parseUserTar(bytes) {
 }
 
 async function loadUserImage() {
-  const stored = loadBase64(USER_WASIFS_KEY);
+  const stored = await loadWasifsFromIDB();
   if (stored) {
-    post("status", { text: "loading user image from storage..." });
-    return parseUserTar(b64decode(stored));
+    post("status", { text: "loading user image from IDB..." });
+    return parseUserTar(stored instanceof Uint8Array ? stored : new Uint8Array(stored));
   }
   post("status", { text: "fetching empty user image..." });
   const resp = await fetch(USER_WASIFS_URL);
@@ -132,9 +174,10 @@ async function loadUserImage() {
 
 function mountUserImage(FS, nodes) {
   const dirs = new Set();
-  for (const [path] of nodes) {
+  for (const [path, node] of nodes) {
     const parts = path.split("/").filter(Boolean);
-    for (let i = 0; i < parts.length; i++) {
+    const directoryDepth = node.isDir ? parts.length : parts.length - 1;
+    for (let i = 0; i < directoryDepth; i++) {
       const d = "/" + parts.slice(0, i + 1).join("/");
       if (d !== "/") dirs.add(d);
     }
@@ -142,8 +185,12 @@ function mountUserImage(FS, nodes) {
   for (const d of [...dirs].sort()) { try { FS.mkdir(d); } catch (_) {} }
   for (const [path, node] of nodes) {
     if (!node.isDir && node.data) {
+      const slash = path.lastIndexOf("/");
+      const parent = slash <= 0 ? "/" : path.slice(0, slash);
+      const name = path.slice(slash + 1);
       try { FS.unlink(path); } catch (_) {}
-      FS.createDataFile(path, null, node.data, true, true);
+      try { FS.rmdir(path); } catch (_) {}
+      FS.createDataFile(parent, name, node.data, true, true);
     }
   }
   post("status", { text: `mounted ${nodes.size} user paths` });
@@ -155,21 +202,40 @@ function exportUserImage(FS) {
   walkFS(FS, "/home/user", nodes);
   return createUserTar(nodes);
 }
-function walkFS(FS, dir, nodes) {
+function postUserImageSnapshot(FS, reason) {
+  if (!FS || globalThis.__wasmacsExportingUserImage) return;
+  globalThis.__wasmacsExportingUserImage = true;
   try {
-    for (const name of FS.readdir(dir).filter(n => n !== "." && n !== "..")) {
-      const path = dir === "/" ? "/" + name : dir + "/" + name;
-      try {
-        const stat = FS.stat(path);
-        if (FS.isDir(stat.mode)) {
-          nodes.set(path, { isDir: true, data: null });
-          if (!path.includes("/.local/")) walkFS(FS, path, nodes);
-        } else {
-          nodes.set(path, { isDir: false, data: new Uint8Array(FS.readFile(path, { encoding: "binary" })) });
-        }
-      } catch (_) {}
-    }
-  } catch (_) {}
+    const bytes = exportUserImage(FS);
+    self.postMessage(
+      { type: "wasifs-snapshot", bytes: bytes.buffer, reason },
+      [bytes.buffer],
+    );
+  } catch (_) {
+    // Snapshot export must never break the Emacs input wait boundary.
+  } finally {
+    globalThis.__wasmacsExportingUserImage = false;
+  }
+}
+function walkFS(FS, startDir, nodes) {
+  const queue = [startDir];
+  while (queue.length > 0) {
+    const dir = queue.pop();
+    try {
+      for (const name of FS.readdir(dir).filter(n => n !== "." && n !== "..")) {
+        const path = dir === "/" ? "/" + name : dir + "/" + name;
+        try {
+          const stat = FS.stat(path);
+          if (FS.isDir(stat.mode)) {
+            nodes.set(path, { isDir: true, data: null });
+            if (!path.includes("/.local/")) queue.push(path);
+          } else {
+            nodes.set(path, { isDir: false, data: new Uint8Array(FS.readFile(path, { encoding: "binary" })) });
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
 }
 function createUserTar(nodes) {
   const chunks = [];
@@ -293,6 +359,14 @@ async function startEmacs(pdmpBytes) {
   await ready;
 
   try {
+    const originalAtomicsWait = Atomics.wait.bind(Atomics);
+    Atomics.wait = function wasmacsSnapshottingAtomicsWait(...args) {
+      postUserImageSnapshot(Module.FS, "before-wait");
+      return originalAtomicsWait(...args);
+    };
+  } catch (_) {}
+
+  try {
     ENV.LANG = "C";
     ENV.LC_ALL = "C";
     ENV.HOME = "/home/user";
@@ -313,35 +387,28 @@ async function startEmacs(pdmpBytes) {
     }
   }
 
+  const COMMON_EVALS = [
+    "--eval", "(setq uniquify-trailing-separator-p nil)",
+    "--eval", "(setq create-lockfiles nil)",
+    "--eval", "(setq auto-save-timeout nil)",
+  ];
   const bootArgs = pdmpBytes
-    ? ["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "-nw", "--eval", "(setq uniquify-trailing-separator-p nil)", "--eval", "(setq create-lockfiles nil)", "--eval", "(setq auto-save-timeout nil)"]
-    : ["--quick", "--no-splash", "-nw", "--eval", "(setq uniquify-trailing-separator-p nil)", "--eval", "(setq create-lockfiles nil)", "--eval", "(setq auto-save-timeout nil)"];
+    ? ["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "-nw", ...COMMON_EVALS]
+    : ["--quick", "--no-splash", "-nw", ...COMMON_EVALS];
 
   post("status", { text: `boot: ${bootArgs.join(" ")}` });
   post("stderr", { text: `JS-BEFORE-CALLMAIN: args=${JSON.stringify(bootArgs)} callMain=${typeof Module.callMain}` });
-
-  // Periodic user image save (fires between Atomics.wait wakeups)
-  let lastSaveLen = 0;
-  const saveInterval = setInterval(() => {
-    try {
-      const bytes = exportUserImage(Module.FS);
-      if (bytes.length !== lastSaveLen) {
-        lastSaveLen = bytes.length;
-        saveBase64(USER_WASIFS_KEY, b64encode(bytes));
-      }
-    } catch (_) {}
-  }, 5000);
 
   try {
     post("stderr", { text: "JS-CALLMAIN-START" });
     const status = Module.callMain(bootArgs);
     post("stderr", { text: `JS-CALLMAIN-RETURNED: ${status}` });
-    clearInterval(saveInterval);
-    try { saveBase64(USER_WASIFS_KEY, b64encode(exportUserImage(Module.FS))); } catch (_) {}
+    if (status) postTerminalTail(`status=${status}`);
+    postUserImageSnapshot(Module.FS, "session-ended");
     post("session-ended", { status });
   } catch (err) {
-    clearInterval(saveInterval);
-    try { saveBase64(USER_WASIFS_KEY, b64encode(exportUserImage(Module.FS))); } catch (_) {}
+    postTerminalTail("throw");
+    postUserImageSnapshot(Module.FS, "session-error");
     if (err?.name !== "ExitStatus") {
       console.error("[pdump worker] callMain threw:", err);
     }

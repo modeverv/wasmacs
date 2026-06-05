@@ -3343,3 +3343,66 @@ X2/X3 確認後、org-mode 最小確認:
     xterm test hook/probe.
 
 **vendor/emacs unchanged.**
+
+### Atomics pdump `.wasifs` Import/Export Fix (2026-06-05)
+
+- Symptom reported during `.wasifs` export/import work: export could produce a
+  user image, but the browser session could end with
+  `Maximum call stack size exceeded` around `C-x C-f`.
+- The browser-only storage path now uses IndexedDB for the pdump Atomics page
+  and worker; worker `localStorage` access stays unavailable by design.
+- Removed ad hoc startup stack guard evals (`max-lisp-eval-depth`,
+  `max-specpdl-size`, completion/fido/icomplete tweaks). They were not
+  source-grounded fixes for Emacs' `find-file` path and made the pdmp restore
+  route diverge from the normal terminal product path.
+- Added a guarded `Atomics.wait` boundary snapshot in
+  `app/src/emacs-atomics-pdump-worker.js`: just before Emacs blocks for the
+  next terminal input, the worker exports `/home/user` to a tar-compatible
+  `user-filesystem.wasifs` payload and posts it to the main page. The main page
+  persists that payload to IndexedDB while its event loop remains free.
+- Kept snapshot export iterative and best-effort so `.wasifs` persistence cannot
+  recursively break the Emacs input wait boundary.
+- 2026-06-05 follow-up: fixed Atomics worker `.wasifs` import materialization so
+  file entries such as `/home/user/h.org` only create parent directories before
+  `FS.createDataFile(parent, name, ...)`. The previous import path collected the
+  full file path as a directory candidate, so export/import could turn a saved
+  file into a MEMFS directory.
+- Validation:
+  - `git diff --check`: PASS.
+  - `npm test`: PASS after the timed-wait and bundled-pdmp fixes.
+  - `node scripts/probe-browser-pdump-atomics-tty-command-loop.mjs`: reaches
+    Atomics wait with tty output (`tty-flush:YES`, `atomics-wait:YES`,
+    `callMain-done:NO`).
+  - `node --test tests/runtime/atomics-worker-wasifs.test.js`: PASS; both
+    Atomics workers import `/home/user/h.org` as a file, not a directory.
+  - Browser `http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart`
+    after reload reached `interactive wait ✓`.
+  - Browser boot args after reload were reduced to
+    `--dump-file=/bootstrap-emacs.pdmp --quick --no-splash -nw` plus the three
+    existing safe evals for `uniquify-trailing-separator-p`, `create-lockfiles`,
+    and `auto-save-timeout`.
+- Correction to the first browser validation attempt: sending `C-x C-f` as one
+  queued batch skipped the real prefix-key delay. Re-testing the user's
+  delayed `C-x` case showed the finite `end_time` branch in `keyboard.c` still
+  used `wait_reading_process_output (...)`, which could spin in the browser OS
+  compatibility path with no queued input and eventually end with
+  `Maximum call stack size exceeded`.
+- Added a source-backed os-compat patch for the finite keyboard wait branch:
+  when compiled under Emscripten and no keyboard bytes are queued, it now calls
+  `wasmacs_host_wait_for_input ()`, then `gobble_input ()`, matching the
+  indefinite input wait boundary used by the normal command loop.
+- The real Chrome tab also revealed a separate cache problem: hard reload did
+  not clear the old IndexedDB pdmp. The page now tries the bundled
+  `/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp` with
+  `cache: "no-store"` before falling back to the old IDB/generate path, so a
+  rebuilt wasm binary does not boot against a stale pdmp fingerprint.
+- Real Chrome check after the bundled-pdmp fix: the user's
+  `?autostart` tab was claimed through the Chrome extension and reloaded; it
+  reached `interactive wait ✓`, `pdmp 11.5 MB materialized`, and `*scratch*`
+  from the bundled artifact. The Chrome connector and macOS `System Events`
+  path both blocked or failed terminal control-key injection in this session
+  (`Control+X` clipboard guard / virtual clipboard missing / UI scripting
+  hang), so delayed `C-x C-f` still needs a manual visible-page confirmation or
+  a dedicated xterm control-byte test hook.
+
+**vendor/emacs unchanged.**

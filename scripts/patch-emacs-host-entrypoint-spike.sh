@@ -1245,6 +1245,22 @@ extern void wasmacs_os_timing_checkpoint (int code);\
         while (s/#ifdef __EMSCRIPTEN__\n\t  if \(kbd_fetch_ptr == kbd_store_ptr\).*?\n#else\n((?:#ifdef __EMSCRIPTEN__.*?#endif\n)*)\t  wait_reading_process_output \(0, 0, -1, do_display, Qnil, NULL, 0\);\n#endif/$1\t  wait_reading_process_output (0, 0, -1, do_display, Qnil, NULL, 0);\n/sg) {}
       ' "${keyboard_file}"
 
+	      export WASMACS_KBD_TIMED_WAIT_OSCOMPAT_PATCH='#ifdef __EMSCRIPTEN__
+	      if (kbd_fetch_ptr == kbd_store_ptr)
+		{
+		  wasmacs_host_wait_for_input ();
+		  wasmacs_os_timing_checkpoint (11);
+		  gobble_input ();
+		  wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 23 : 24);
+		}
+#else
+	      wait_reading_process_output (min (duration.tv_sec,
+						WAIT_READING_MAX),
+					   duration.tv_nsec,
+					   -1, 1, Qnil, NULL, 0);
+#endif'
+	      perl -0pi -e 'BEGIN { $p = $ENV{"WASMACS_KBD_TIMED_WAIT_OSCOMPAT_PATCH"} } s#\s+wait_reading_process_output \(min \(duration\.tv_sec,\n\s+WAIT_READING_MAX\),\n\s+duration\.tv_nsec,\n\s+-1, 1, Qnil, NULL, 0\);#\n$p#' "${keyboard_file}"
+
 	      export WASMACS_KBD_WAIT_OSCOMPAT_PATCH='#ifdef __EMSCRIPTEN__
 	  if (kbd_fetch_ptr == kbd_store_ptr)
 	    {

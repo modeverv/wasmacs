@@ -105,11 +105,13 @@ function parseUserTar(bytes) {
     const dstart = off + BLOCK;
 
     // Map "home/user/xxx" → "/home/user/xxx"
-    if (entry === "home/user" || entry.startsWith("home/user/")) {
-      const path = entry === "home/user" ? "/home/user" : "/" + entry;
+    const cleanEntry = entry.replace(/\/$/, "");
+    if (cleanEntry === "home/user" || cleanEntry.startsWith("home/user/")) {
+      const isDir = type === "5" || entry.endsWith("/");
+      const path = cleanEntry === "home/user" ? "/home/user" : "/" + cleanEntry;
       nodes.set(path, {
-        isDir: type === "5" || entry.endsWith("/"),
-        data: type === "5" ? null : bytes.slice(dstart, dstart + size),
+        isDir,
+        data: isDir ? null : bytes.slice(dstart, dstart + size),
       });
     }
     off = dstart + padLen(size);
@@ -137,9 +139,9 @@ async function loadUserImage() {
 function mountUserImage(FS, nodes) {
   const dirs = new Set();
   for (const [path, node] of nodes) {
-    // Collect parent directories
     const parts = path.split("/").filter(Boolean);
-    for (let i = 0; i < parts.length; i++) {
+    const directoryDepth = node.isDir ? parts.length : parts.length - 1;
+    for (let i = 0; i < directoryDepth; i++) {
       const d = "/" + parts.slice(0, i + 1).join("/");
       if (d !== "/") dirs.add(d);
     }
@@ -151,8 +153,12 @@ function mountUserImage(FS, nodes) {
   // Create files
   for (const [path, node] of nodes) {
     if (!node.isDir && node.data) {
+      const slash = path.lastIndexOf("/");
+      const parent = slash <= 0 ? "/" : path.slice(0, slash);
+      const name = path.slice(slash + 1);
       try { FS.unlink(path); } catch (_) {}
-      FS.createDataFile(path, null, node.data, true, true);
+      try { FS.rmdir(path); } catch (_) {}
+      FS.createDataFile(parent, name, node.data, true, true);
     }
   }
   post("status", { text: `mounted ${nodes.size} user paths` });
