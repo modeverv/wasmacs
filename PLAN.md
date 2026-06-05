@@ -3173,6 +3173,37 @@ X2/X3 確認後、org-mode 最小確認:
 
 **vendor/emacs unchanged.**
 
+### xterm 256-color palette registration (2026-06-06)
+
+- Root cause: the browser route already advertised `TERM=xterm-256color` and
+  termcap `Co#256` / `AF` / `AB`, but the lightweight `term/xterm.el` shim did
+  not run GNU Emacs' xterm palette registration path.  Emacs therefore kept
+  `tty-color-alist` at the default tty colors even though the terminal profile
+  claimed 256-color support.
+- Implemented a browser-safe xterm palette registration in the Atomics pdump
+  shim: 16 standard xterm colors, the 216-color cube, and the 24 grayscale
+  ramp are registered through `tty-color-define` when
+  `display-color-cells` reports 256.
+- Kept the full GNU `term/xterm.el` probe path out of the browser worker, so
+  the existing small-stack avoidance remains in place while matching the color
+  table behavior needed by Emacs faces.
+- Extended `npm run test:xterm-terminal-profile` to assert:
+  `TERM=xterm-256color`, `display-color-cells=256`, `tty-color-alist` length
+  `256`, `tty-color-by-index 196`, 256-color indexed SGR output, xterm mouse
+  enablement, and cursor-left editing.
+- Validation:
+  - `node --check src/wasm/src/emacs-atomics-pdump-worker.js`: PASS.
+  - `node --check tools/scripts/probe-browser-pdump-atomics-terminal-profile.mjs`: PASS.
+  - `npm run test:xterm-terminal-profile`: PASS; log summary in
+    `logs/browser-pdump-atomics-terminal-profile.txt` reports all color,
+    mouse, and arrow-key assertions true.
+  - In-app Browser reload at
+    `http://127.0.0.1:5174/app/xterm-atomics-pdump.html?autostart&run=xterm-profile-shim-input`:
+    initial `interactive wait ✓`; xterm DOM includes indexed color classes
+    such as `xterm-fg-124` and `xterm-bg-250`.
+
+**vendor/emacs unchanged.**
+
 ### xterm-256color Terminal Profile, Mouse, and Larger Font (2026-06-06)
 
 - Promoted the fake tty terminal profile from `TERM=dumb` to

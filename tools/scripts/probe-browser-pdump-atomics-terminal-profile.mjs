@@ -101,6 +101,9 @@ if (!isMainThread) {
     "--no-splash",
     "-nw",
     "--eval", "(message \"WASMACS-TERM=%s\" (getenv \"TERM\"))",
+    "--eval", "(message \"WASMACS-COLOR-CELLS=%S\" (display-color-cells))",
+    "--eval", "(message \"WASMACS-TTY-COLORS=%S\" (length (tty-color-alist)))",
+    "--eval", "(message \"WASMACS-COLOR-196=%S\" (tty-color-by-index 196))",
     "--eval", "(progn (require 'xt-mouse) (xterm-mouse-mode 1) (message \"WASMACS-XTERM-MOUSE=%S\" xterm-mouse-mode))",
   ];
   try {
@@ -138,9 +141,17 @@ if (!isMainThread) {
     .filter((m) => m.terminalTextTail)
     .map((m) => m.terminalTextTail)
     .join("\n");
+  const probeText = [
+    finalText,
+    ...messages.map((m) => m.text ?? ""),
+  ].join("\n");
   const summary = {
-    hasXterm256Color: messages.some((m) => m.text?.includes("WASMACS-TERM=xterm-256color")),
-    hasXtermMouseMode: messages.some((m) => m.text?.includes("WASMACS-XTERM-MOUSE=t")),
+    hasXterm256Color: probeText.includes("WASMACS-TERM=xterm-256color"),
+    has256ColorCells: probeText.includes("COLOR-CELLS=256"),
+    has256TtyColors: probeText.includes("TTY-COLORS=256"),
+    hasColor196: probeText.includes("COLOR-196=(\"color-196\" 196"),
+    hasIndexedColorEscape: /\u001b\[(?:38|48);5;(?:1[6-9][0-9]|2[0-4][0-9]|25[0-5])m/.test(probeText),
+    hasXtermMouseMode: probeText.includes("WASMACS-XTERM-MOUSE=t"),
     hasMouse1006Enable: finalText.includes("\u001b[?1006h"),
     hasArrowEditResult: finalText.includes("abc") && finalText.includes("\bZc\b"),
     waitEvents: messages.filter((m) => m.type === "wait-entered").length,
@@ -158,6 +169,10 @@ if (!isMainThread) {
   ].join("\n"));
 
   if (!summary.hasXterm256Color) throw new Error(`TERM readback did not report xterm-256color; see ${logPath}`);
+  if (!summary.has256ColorCells) throw new Error(`display-color-cells did not report 256; see ${logPath}`);
+  if (!summary.has256TtyColors) throw new Error(`tty-color-alist did not contain 256 entries; see ${logPath}`);
+  if (!summary.hasColor196) throw new Error(`tty color index 196 was not registered; see ${logPath}`);
+  if (!summary.hasIndexedColorEscape) throw new Error(`no 256-color indexed SGR escape was emitted; see ${logPath}`);
   if (!summary.hasXtermMouseMode) throw new Error(`xterm-mouse-mode was not enabled; see ${logPath}`);
   if (!summary.hasMouse1006Enable) throw new Error(`xterm mouse 1006 enable sequence was not emitted; see ${logPath}`);
   if (!summary.hasArrowEditResult) throw new Error(`cursor-left edit did not emit the expected backspace + Zc rewrite; see ${logPath}`);
@@ -181,8 +196,65 @@ function installXtermTermShim(FS) {
 ;; path in browser Workers with small JavaScript stacks.  Termcap has already
 ;; installed cursor-key sequences from ku/kd/kr/kl in src/term.c.
 
+(require 'term/tty-colors)
+
+(defvar xterm-standard-colors
+  '((\"black\"          0 (  0   0   0))
+    (\"red\"            1 (205   0   0))
+    (\"green\"          2 (  0 205   0))
+    (\"yellow\"         3 (205 205   0))
+    (\"blue\"           4 (  0   0 238))
+    (\"magenta\"        5 (205   0 205))
+    (\"cyan\"           6 (  0 205 205))
+    (\"white\"          7 (229 229 229))
+    (\"brightblack\"    8 (127 127 127))
+    (\"brightred\"      9 (255   0   0))
+    (\"brightgreen\"   10 (  0 255   0))
+    (\"brightyellow\"  11 (255 255   0))
+    (\"brightblue\"    12 ( 92  92 255))
+    (\"brightmagenta\" 13 (255   0 255))
+    (\"brightcyan\"    14 (  0 255 255))
+    (\"brightwhite\"   15 (255 255 255))))
+
+(defun xterm-rgb-convert-to-16bit (prim)
+  (logior prim (ash prim 8)))
+
+(defun wasmacs-xterm-register-256-colors ()
+  "Register xterm's 256-color palette without running full xterm probes."
+  (let ((ncolors (display-color-cells)))
+    (when (> ncolors 0)
+      (tty-color-clear))
+    (dolist (color xterm-standard-colors)
+      (when (> ncolors 0)
+        (tty-color-define (car color) (cadr color)
+                          (mapcar #'xterm-rgb-convert-to-16bit
+                                  (car (cddr color))))
+        (setq ncolors (1- ncolors))))
+    (when (= ncolors 240)
+      (let ((r 0) (g 0) (b 0))
+        (while (> ncolors 24)
+          (tty-color-define (format \"color-%d\" (- 256 ncolors))
+                            (- 256 ncolors)
+                            (mapcar #'xterm-rgb-convert-to-16bit
+                                    (list (if (zerop r) 0 (+ (* r 40) 55))
+                                          (if (zerop g) 0 (+ (* g 40) 55))
+                                          (if (zerop b) 0 (+ (* b 40) 55)))))
+          (setq b (1+ b))
+          (when (> b 5) (setq g (1+ g) b 0))
+          (when (> g 5) (setq r (1+ r) g 0))
+          (setq ncolors (1- ncolors))))
+      (while (> ncolors 0)
+        (let ((gray (xterm-rgb-convert-to-16bit
+                     (+ 8 (* (- 24 ncolors) 10)))))
+          (tty-color-define (format \"color-%d\" (- 256 ncolors))
+                            (- 256 ncolors)
+                            (list gray gray gray)))
+        (setq ncolors (1- ncolors))))
+    (clear-face-cache)))
+
 (defun terminal-init-xterm ()
   "Initialize the wasmacs xterm tty without probing browser-hostile features."
+  (wasmacs-xterm-register-256-colors)
   (when (fboundp 'tty-set-up-initial-frame-faces)
     (tty-set-up-initial-frame-faces))
   (run-hooks 'terminal-init-xterm-hook))
