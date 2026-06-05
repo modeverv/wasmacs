@@ -341,3 +341,20 @@ Append-only project memory for `wasmacs`.
     `3812ecc58f01ac9c88e93b3af050d7036109488e412352347854f15edf478ab3`
   - `bootstrap-emacs.pdmp` sha256:
     `fe66c16d682ac8ecbbaafc15d029752db0262153a09351532d5ab2a31f6d5b0e`
+
+## 2026-06-05: M260605c pdmp Atomics input latency fix
+
+- The 30 second delay after typing `a` on `xterm-atomics-pdump.html` was not an
+  Asyncify regression.  The route is `emacs-atomics-pdump-worker.js` using the
+  Atomics / `NO Asyncify` artifact.
+- Cause: Emacs' `auto-save-timeout` timer path caused the wasm process to spin
+  in terminal availability checks until the ~30s timeout.  Before the fix,
+  `a` to `wait-enter#2` was ~30.2s and `fio` reached `14534857`.
+- Fix: start the pdmp Atomics worker with `(setq auto-save-timeout nil)`.
+- Validation after the fix:
+  - boot to `*scratch*`: ~3.2s
+  - typed `a` to visible `a` and `wait-enter#2`: `50ms`
+  - debug tail: `wait-enter#2 queue=0 out=2565 fio=4`
+- A broad worker `setTimeout` shortening patch was tested first, but did not
+  improve the latency by itself; keep the final fix narrow at the Emacs startup
+  setting.

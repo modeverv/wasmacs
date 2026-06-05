@@ -1835,6 +1835,54 @@ Validation:
 
 **vendor/emacs unchanged.**
 
+## Task M260605c: pdmp Atomics input latency
+
+### Result (2026-06-05)
+
+The post-input 30 second delay on `xterm-atomics-pdump.html` was traced to
+Emacs' `auto-save-timeout` path, not to Asyncify.  The pdmp Atomics worker now
+starts Emacs with:
+
+```elisp
+(setq auto-save-timeout nil)
+```
+
+This keeps the pdmp startup speed and removes the input-to-redisplay delay.
+
+Evidence:
+
+| Run | Boot to `*scratch*` | `a` to `wait-enter#2` | FIONREAD calls |
+|-----|---------------------|-----------------------|----------------|
+| Before autosave timeout disable | ~3.4s | ~30.2s | `14534857` |
+| After autosave timeout disable | ~3.2s | `50ms` | `4` |
+
+Browser debug tail after the fix:
+
+```text
+wait#1 bytes=1 queue=1
+...
+os-timing-checkpoint:46 queue=0 out=2471
+wait-enter#2 queue=0 out=2565 fio=4
+```
+
+Why this was not the old Asyncify issue:
+
+- The current pdmp route is the Atomics worker and `NO Asyncify` build lane.
+- The 30 second symptom came from Emacs' normal timer timeout around autosave;
+  while waiting for that timeout, the wasm process busy-polled FIONREAD millions
+  of times.
+- A broad worker `setTimeout` monkey patch was tested but did not fix the
+  latency by itself, so the final change is the narrower Emacs startup setting.
+
+Validation:
+
+- `node --check app/src/emacs-atomics-pdump-worker.js`
+- In-app browser:
+  `xterm-atomics-pdump.html` with cleared pdmp cache, typed `a`, observed
+  `wait-enter#2` in `50ms` and visible `a` in `*scratch*`.
+
+**vendor/emacs unchanged.**
+
 ## 2026-06-05: M260605 pdmp + Atomics `-nw` integrated proof
 
 Goal: clear the two remaining blockers before treating

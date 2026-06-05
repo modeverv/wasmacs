@@ -314,8 +314,8 @@ async function startEmacs(pdmpBytes) {
   }
 
   const bootArgs = pdmpBytes
-    ? ["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "-nw", "--eval", "(setq uniquify-trailing-separator-p nil)", "--eval", "(setq create-lockfiles nil)"]
-    : ["--quick", "--no-splash", "-nw", "--eval", "(setq uniquify-trailing-separator-p nil)", "--eval", "(setq create-lockfiles nil)"];
+    ? ["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "-nw", "--eval", "(setq uniquify-trailing-separator-p nil)", "--eval", "(setq create-lockfiles nil)", "--eval", "(setq auto-save-timeout nil)"]
+    : ["--quick", "--no-splash", "-nw", "--eval", "(setq uniquify-trailing-separator-p nil)", "--eval", "(setq create-lockfiles nil)", "--eval", "(setq auto-save-timeout nil)"];
 
   post("status", { text: `boot: ${bootArgs.join(" ")}` });
   post("stderr", { text: `JS-BEFORE-CALLMAIN: args=${JSON.stringify(bootArgs)} callMain=${typeof Module.callMain}` });

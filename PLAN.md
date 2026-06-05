@@ -3291,4 +3291,20 @@ X2/X3 確認後、org-mode 最小確認:
   - `temacs.wasm`: `3812ecc58f01ac9c88e93b3af050d7036109488e412352347854f15edf478ab3`
   - `bootstrap-emacs.pdmp`: `fe66c16d682ac8ecbbaafc15d029752db0262153a09351532d5ab2a31f6d5b0e`
 
+### X4 Latency Resolution (2026-06-05)
+
+- The `a` input path initially worked but sometimes took about 30 seconds to
+  redisplay and return to `wait-enter#2`.
+- This was not an Asyncify regression: the current route is
+  `emacs-atomics-pdump-worker.js` with the Atomics / `NO Asyncify` artifact.
+- Measured cause: Emacs' `auto-save-timeout` path caused a 30 second wait while
+  wasm busy-polled terminal availability.  Before the fix, `wait-enter#2`
+  arrived after ~30.2s with `fio=14534857`.
+- The pdmp Atomics worker now starts with:
+  `(setq auto-save-timeout nil)`.
+- Browser validation after the fix:
+  - boot to `*scratch*`: ~3.2s
+  - `a` to visible redisplay and `wait-enter#2`: `50ms`
+  - `wait-enter#2 queue=0 out=2565 fio=4`
+
 **vendor/emacs unchanged.**
