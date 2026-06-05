@@ -1,15 +1,15 @@
-{"ts":1780624623765,"k":"vm-created"}
-{"ts":1780624623768,"k":"loaded","pdmp":27703600}
-{"ts":1780624623768,"k":"sab-ready","sz":264}
-{"ts":1780624623880,"k":"rt-init"}
-{"ts":1780624623880,"k":"globals-set"}
-{"ts":1780624623885,"k":"argv0-file-placed","mode":33261,"size":1}
-{"ts":1780624623888,"k":"pdmp-placed","size":27703600}
-{"ts":1780624623888,"k":"before-callMain"}
-{"ts":1780624623888,"k":"boot-args","args":"[\"--dump-file=/bootstrap-emacs.pdmp\",\"--quick\",\"--no-splash\",\"-nw\",\"--eval\",\"(setq uniquify-trailing-separator-p nil)\",\"--eval\",\"(setq create-lockfiles nil)\"]"}
-{"ts":1780624623910,"k":"stderr","t":"warning: unsupported syscall: __syscall_mprotect"}
-{"ts":1780624623916,"k":"stderr","t":"warning: unsupported syscall: __syscall_prlimit64"}
-{"ts":1780624623929,"k":"stderr","t":"warning: unsupported syscall: __syscall_prlimit64"}
-{"ts":1780624623929,"k":"stderr","t":"warning: unsupported syscall: __syscall_prlimit64"}
-{"ts":1780624624395,"k":"tty-flush","n":2476}
-{"ts":1780624624395,"k":"atomics-wait-entered","ttyOutLen":2476,"ttyInLen":0,"hasTtyOutput":true}
+{"ts":1780625952675,"k":"vm-created"}
+{"ts":1780625952678,"k":"loaded","pdmp":27954160}
+{"ts":1780625952678,"k":"sab-ready","sz":264}
+{"ts":1780625952785,"k":"rt-init"}
+{"ts":1780625952786,"k":"globals-set"}
+{"ts":1780625952787,"k":"argv0-file-placed","mode":33261,"size":1}
+{"ts":1780625952790,"k":"pdmp-placed","size":27954160}
+{"ts":1780625952790,"k":"before-callMain"}
+{"ts":1780625952790,"k":"boot-args","args":"[\"--dump-file=/bootstrap-emacs.pdmp\",\"--quick\",\"--no-splash\",\"-nw\",\"--eval\",\"(setq uniquify-trailing-separator-p nil)\",\"--eval\",\"(setq create-lockfiles nil)\"]"}
+{"ts":1780625952812,"k":"stderr","t":"warning: unsupported syscall: __syscall_mprotect"}
+{"ts":1780625952818,"k":"stderr","t":"warning: unsupported syscall: __syscall_prlimit64"}
+{"ts":1780625952830,"k":"stderr","t":"warning: unsupported syscall: __syscall_prlimit64"}
+{"ts":1780625952830,"k":"stderr","t":"warning: unsupported syscall: __syscall_prlimit64"}
+{"ts":1780625954284,"k":"tty-flush","n":4594}
+{"ts":1780625954284,"k":"atomics-wait-entered","ttyOutLen":4594,"ttyInLen":0,"hasTtyOutput":true}

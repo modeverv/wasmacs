@@ -1883,6 +1883,37 @@ Validation:
 
 **vendor/emacs unchanged.**
 
+## Task M260605d: pdmp Atomics generated loaddefs / Org validation
+
+- Kept the latency fix unchanged: `emacs-atomics-pdump-worker.js` still starts
+  Emacs with `(setq auto-save-timeout nil)`.
+- Extended `scripts/build-emacs-browser-atomics-pdump-profile.sh` so the pdump
+  source tree copies native-generated autoload/loaddefs from
+  `build/native-emacs-30.2/src/lisp` before pbootstrap.  This now includes
+  `emacs-lisp/cl-loaddefs.el`, `org/org-loaddefs.el`, top-level
+  `loaddefs.el`, and the other generated `*loaddefs*.el` files.
+- Rebuilt `artifacts/emacs-browser-atomics-pdump`:
+  - `temacs.wasm`:
+    `4f58d61fe440b08ac9b13f934b2099315630e4a19383ef3e2bc86cffcd570be8`
+  - `bootstrap-emacs.pdmp`:
+    `11ee98a6bb5a8392f9f0cc6d7f63370e7ce7341deea23ea9a085066d29007a31`
+- Validation:
+  - `node --check app/src/emacs-atomics-pdump-worker.js`: PASS.
+  - `node scripts/probe-browser-pdump-atomics-tty-command-loop.mjs`: PASS for
+    wait proof (`tty-flush:YES`, `atomics-wait:YES`, `callMain-done:NO`).
+  - Atomics pdump eval readback for `(require 'org)`:
+    `org=t org-mode=t cl-subseq=t cl-loaddefs="/usr/local/share/emacs/30.2/lisp/emacs-lisp/cl-loaddefs.el"`.
+  - Atomics pdump eval readback for `.org` file/buffer:
+    `file="/home/user/test.org" mode=org-mode buffer="* Heading from wasmacs\n"`.
+  - Browser `xterm-atomics-pdump.html` with refreshed pdmp reaches
+    `interactive wait ✓` and visible `*scratch*`.
+- Browser automation caveat: the Browser tool blocks native clipboard-like
+  `Ctrl-x`, so a fully key-driven `C-x C-f` `.org` smoke was not completed in
+  automation.  The runtime/eval path confirms Org and `.org` buffers now work;
+  the remaining gap is UI key-sequence automation, not the loaddefs fix.
+
+**vendor/emacs unchanged.**
+
 ## 2026-06-05: M260605 pdmp + Atomics `-nw` integrated proof
 
 Goal: clear the two remaining blockers before treating

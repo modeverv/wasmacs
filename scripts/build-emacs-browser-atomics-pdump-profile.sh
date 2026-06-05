@@ -38,7 +38,7 @@ if [ ! -x "${native_baseline}/lib-src/make-docfile" ] \
   exit 1
 fi
 
-echo "=== Syncing generated Unicode property Lisp for pdump redisplay ==="
+echo "=== Syncing native generated Lisp for pdump redisplay/autoloads ==="
 if [ ! -f "${native_baseline}/lisp/international/charprop.el" ]; then
   echo "error: missing native generated Lisp: ${native_baseline}/lisp/international/charprop.el" >&2
   exit 1
@@ -57,6 +57,15 @@ for generated_lisp in "${native_baseline}"/lisp/international/uni-*.el; do
   fi
   cp "${generated_lisp}" "${pdump_src}/lisp/international/$(basename "${generated_lisp}")"
 done
+while IFS= read -r generated_lisp; do
+  rel="${generated_lisp#"${native_baseline}/lisp/"}"
+  mkdir -p "${pdump_src}/lisp/$(dirname "${rel}")"
+  cp "${generated_lisp}" "${pdump_src}/lisp/${rel}"
+done < <(
+  find "${native_baseline}/lisp" \
+    \( -name '*loaddefs*.el' -o -name 'loaddefs.el' \) \
+    -type f | sort
+)
 
 emacs_c="${pdump_src}/src/emacs.c"
 if ! grep -q "wasmacs pbootstrap: prepend virtual FS lisp path" "${emacs_c}"; then

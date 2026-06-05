@@ -3307,4 +3307,39 @@ X2/X3 確認後、org-mode 最小確認:
   - `a` to visible redisplay and `wait-enter#2`: `50ms`
   - `wait-enter#2 queue=0 out=2565 fio=4`
 
+### Generated Loaddefs / Org Validation (2026-06-05)
+
+- The pdump copied source tree now syncs native-generated autoload/loaddefs
+  files before pbootstrap, including:
+  - `lisp/emacs-lisp/cl-loaddefs.el`
+  - `lisp/org/org-loaddefs.el`
+  - top-level `lisp/loaddefs.el`
+- This keeps the existing latency fix in place:
+  `(setq auto-save-timeout nil)` remains in the pdmp Atomics worker startup
+  args.
+- Rebuilt `artifacts/emacs-browser-atomics-pdump` after syncing generated
+  loaddefs:
+  - `temacs.wasm` sha256:
+    `4f58d61fe440b08ac9b13f934b2099315630e4a19383ef3e2bc86cffcd570be8`
+  - `bootstrap-emacs.pdmp` sha256:
+    `11ee98a6bb5a8392f9f0cc6d7f63370e7ce7341deea23ea9a085066d29007a31`
+- Validation:
+  - `node --check app/src/emacs-atomics-pdump-worker.js`: PASS.
+  - `node scripts/probe-browser-pdump-atomics-tty-command-loop.mjs`: reaches
+    Atomics wait with tty output (`tty-flush:YES`, `atomics-wait:YES`,
+    `callMain-done:NO`).
+  - Atomics pdump eval probe: `(require 'org)` returns
+    `org=t org-mode=t cl-subseq=t` and locates
+    `/usr/local/share/emacs/30.2/lisp/emacs-lisp/cl-loaddefs.el`.
+  - Atomics pdump eval probe: opening `/home/user/test.org`, entering
+    `org-mode`, and inserting `* Heading from wasmacs` returns
+    `file="/home/user/test.org" mode=org-mode buffer="* Heading from wasmacs\n"`.
+  - Browser `xterm-atomics-pdump.html` reload with the new artifact reaches
+    `interactive wait ✓` and displays `*scratch*` from a 26.7 MB pdmp.
+- Remaining verification gap:
+  - Automated browser key sequences for `C-x C-f` are blocked by the Browser
+    tool's native clipboard shortcut guard. Full UI key-driven `.org` editing
+    still needs either manual confirmation in the visible page or a dedicated
+    xterm test hook/probe.
+
 **vendor/emacs unchanged.**

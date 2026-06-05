@@ -358,3 +358,27 @@ Append-only project memory for `wasmacs`.
 - A broad worker `setTimeout` shortening patch was tested first, but did not
   improve the latency by itself; keep the final fix narrow at the Emacs startup
   setting.
+
+## 2026-06-05: M260605d pdmp generated loaddefs and Org
+
+- Keep `auto-save-timeout nil` in the pdmp Atomics worker; it preserves the
+  fast key-to-redisplay path after the 30 second timer/FIONREAD latency issue.
+- `cl-subseq` / Org eager macro-expansion failures on
+  `xterm-atomics-pdump.html` are caused by missing generated loaddefs in the
+  copied pdump source tree.  The build must sync native-generated
+  `*loaddefs*.el` and `loaddefs.el` from
+  `build/native-emacs-30.2/src/lisp` before pbootstrap.
+- Important generated files now expected in the pdump source tree:
+  `emacs-lisp/cl-loaddefs.el`, `org/org-loaddefs.el`, and top-level
+  `loaddefs.el`.
+- Validation evidence after rebuild:
+  - `(require 'org)` returns
+    `org=t org-mode=t cl-subseq=t` and locates
+    `/usr/local/share/emacs/30.2/lisp/emacs-lisp/cl-loaddefs.el`.
+  - Opening `/home/user/test.org`, entering `org-mode`, and inserting
+    `* Heading from wasmacs` returns
+    `file="/home/user/test.org" mode=org-mode`.
+- Browser `xterm-atomics-pdump.html` refreshed pdmp reaches `interactive wait ✓`
+  and visible `*scratch*`; automated `C-x C-f` was blocked by the Browser tool's
+  clipboard shortcut guard, so full UI key-driven `.org` editing still needs
+  manual confirmation or a dedicated xterm input hook/probe.
