@@ -67,6 +67,12 @@ done < <(
     -type f | sort
 )
 
+echo "=== Byte-compiling lisp files for temacs.data preload ==="
+"${native_baseline}/src/emacs" --batch \
+  --eval "(byte-recompile-directory \"${pdump_src}/lisp\" 0 t)" 2>&1 \
+  | grep -E "^(Compiling|Done|Error)" | tail -5
+echo "byte-compile done"
+
 emacs_c="${pdump_src}/src/emacs.c"
 if ! grep -q "wasmacs pbootstrap: prepend virtual FS lisp path" "${emacs_c}"; then
   echo "=== Applying emacs.c Vload_path fix for Emscripten pbootstrap ==="

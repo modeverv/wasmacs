@@ -27,6 +27,14 @@ mkdir -p "$repo_root/artifacts" "$repo_root/logs"
 rm -rf "$work_root"
 mkdir -p "$staging_root/system"
 
+# Byte-compile all .el files that lack a corresponding .elc in the native lisp tree.
+# This makes load/require fast in wasm (bytecode vs. source parse+eval).
+echo "byte-compiling lisp files..."
+"$native_root/src/emacs" --batch \
+  --eval "(byte-recompile-directory \"$native_root/lisp\" 0 t)" \
+  >>"$log_path" 2>&1
+echo "byte-compile done"
+
 {
   echo "# System Lisp Image"
   echo
