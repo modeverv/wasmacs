@@ -29,9 +29,10 @@ The current browser entrypoint is available during development at:
 http://127.0.0.1:5173/app/xterm-atomics-pdump.html
 ```
 
-`make docs` also writes a GitHub Pages bundle so the same page is served from
-`/` via `docs/index.html`. GitHub Actions builds and publishes that bundle on
-`master`; generated `docs/artifacts/` files are intentionally not committed.
+`make docs` also writes a GitHub Pages bundle. `docs/index.html` redirects `/`
+to the canonical app page at `/app/xterm-atomics-pdump.html`, and GitHub
+Actions builds and publishes that bundle on `master`; generated
+`docs/artifacts/` files are intentionally not committed.
 
 The Pages bundle uses a root `coi-serviceworker.js` to emulate COOP/COEP for
 `SharedArrayBuffer`, keeps app and artifact URLs relative so project pages work

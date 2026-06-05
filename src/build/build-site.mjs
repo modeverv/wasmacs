@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,8 +9,8 @@ const buildArtifacts = join(repoRoot, "build", "artifacts");
 const docsRoot = join(repoRoot, "docs");
 const docsApp = join(docsRoot, "app");
 const docsArtifacts = join(docsRoot, "artifacts");
-const pagesIndexSource = join(wasmSource, "xterm-atomics-pdump.html");
 const pagesIndexTarget = join(docsRoot, "index.html");
+const pagesEntrypoint = "./app/xterm-atomics-pdump.html";
 
 await import("./generate-host-abi-wit.mjs");
 
@@ -27,10 +27,22 @@ await rm(join(docsRoot, "coi-serviceworker.js"), { force: true });
 await cp(wasmSource, docsApp, { recursive: true });
 await cp(join(wasmSource, "coi-serviceworker.js"), join(docsRoot, "coi-serviceworker.js"));
 
-const pagesIndex = (await readFile(pagesIndexSource, "utf8"))
-  .replaceAll("../coi-serviceworker.js", "./coi-serviceworker.js")
-  .replaceAll("./src/", "./app/src/")
-  .replaceAll("../artifacts/", "./artifacts/");
+const pagesIndex = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="refresh" content="0; url=${pagesEntrypoint}" />
+    <title>wasmacs</title>
+    <script>
+      location.replace(${JSON.stringify(pagesEntrypoint)} + location.search + location.hash);
+    </script>
+  </head>
+  <body>
+    <p><a href="${pagesEntrypoint}">Open wasmacs</a></p>
+  </body>
+</html>
+`;
 await writeFile(pagesIndexTarget, pagesIndex);
 await copyIfExists(buildArtifacts, docsArtifacts);
 

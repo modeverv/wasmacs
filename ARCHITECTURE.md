@@ -217,12 +217,15 @@ directory and should not be recreated.
 `docs/`; `make clean` removes any legacy `dist/`, empties `build/` and `docs/`,
 and a fresh `make build` recreates the publishable `docs/` tree.
 
-For GitHub Pages, `docs/index.html` is generated from the Atomics/pdump xterm
-entrypoint and all app/artifact references are relative. `docs/coi-serviceworker.js`
-is copied to the Pages root so its default scope covers `/`, `/app/`, and
-`/artifacts/` even on project pages such as `/wasmacs/`. The publish step also
-provides `emacs-browser-atomics-pdump/temacs.js`, a JavaScript-MIME alias of
-Emscripten's extensionless `temacs` glue, because static servers reject
+For GitHub Pages, `docs/index.html` is a lightweight redirect to the canonical
+Atomics/pdump xterm entrypoint at `docs/app/xterm-atomics-pdump.html`. Keeping
+the root URL as a redirect avoids maintaining a second HTML shell with rewritten
+relative paths, which reduces stale browser cache and service-worker mismatch
+risk. `docs/coi-serviceworker.js` is copied to the Pages root so its default
+scope covers `/`, `/app/`, and `/artifacts/` even on project pages such as
+`/wasmacs/`. The publish step also provides
+`emacs-browser-atomics-pdump/temacs.js`, a JavaScript-MIME alias of Emscripten's
+extensionless `temacs` glue, because static servers reject
 `importScripts()` when that file is served as an opaque binary or text file.
 
 Runtime, validation, and probe logs may be written under `logs/`, but log files

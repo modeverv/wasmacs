@@ -3324,6 +3324,23 @@ X2/X3 確認後、org-mode 最小確認:
     `emacs-browser-atomics-pdump/temacs.js`, `temacs.wasm`, `temacs.data`, and
     `bootstrap-emacs.pdmp`, ran 61 Node/runtime contract tests, and completed
     the generated artifact size check.
+  - 2026-06-05 GitHub Pages root follow-up: a user Chrome report showed
+    `https://modeverv.github.io/wasimacs/` ending with
+    `Maximum call stack size exceeded` while the canonical
+    `/app/xterm-atomics-pdump.html` URL worked. The pasted runtime log showed
+    `pdmp 11.0 MB materialized`, so this was not the earlier Pages artifact
+    404. To remove the root/direct split, `docs/index.html` is now generated
+    as a lightweight redirect to `./app/xterm-atomics-pdump.html` instead of a
+    second copy of the app shell with rewritten relative paths.
+  - 2026-06-05 validation: `node src/build/build-site.mjs` regenerated
+    `docs/index.html`; `npm test` passed 61 runtime/contract tests plus the
+    artifact-policy and browser-worker validators. A one-liner static server
+    `python3 -m http.server 8177 --bind 127.0.0.1 --directory docs` served the
+    regenerated Pages bundle. In-app Browser opened
+    `http://127.0.0.1:8177/?probe=redirect#hashcheck`, redirected to
+    `/app/xterm-atomics-pdump.html?probe=redirect#hashcheck`, showed `SAB ✓`,
+    and after pressing Start reached `interactive wait ✓` with
+    `pdmp 11.0 MB materialized`.
 - Validation to run next:
   - Dev server smoke for
     `http://127.0.0.1:5173/app/xterm-atomics-pdump.html`
