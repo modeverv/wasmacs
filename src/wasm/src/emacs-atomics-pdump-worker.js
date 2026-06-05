@@ -275,6 +275,41 @@ function walkFS(FS, startDir, nodes) {
     } catch (_) {}
   }
 }
+
+const WASMACS_XTERM_TERM_SHIM = `
+;;; xterm.el --- wasmacs browser xterm shim -*- lexical-binding: t; -*-
+;; Keep TERM=xterm-256color while avoiding the full GNU term/xterm.el startup
+;; path in browser Workers with small JavaScript stacks.  Termcap has already
+;; installed cursor-key sequences from ku/kd/kr/kl in src/term.c.
+
+(defun terminal-init-xterm ()
+  "Initialize the wasmacs xterm tty without probing browser-hostile features."
+  (when (fboundp 'tty-set-up-initial-frame-faces)
+    (tty-set-up-initial-frame-faces))
+  (run-hooks 'terminal-init-xterm-hook))
+
+(provide 'term/xterm)
+;;; xterm.el ends here
+`.trimStart();
+
+function installXtermTermShim(FS) {
+  const termDir = "/usr/local/share/emacs/30.2/lisp/term";
+  try {
+    try { FS.mkdir("/usr"); } catch (_) {}
+    try { FS.mkdir("/usr/local"); } catch (_) {}
+    try { FS.mkdir("/usr/local/share"); } catch (_) {}
+    try { FS.mkdir("/usr/local/share/emacs"); } catch (_) {}
+    try { FS.mkdir("/usr/local/share/emacs/30.2"); } catch (_) {}
+    try { FS.mkdir("/usr/local/share/emacs/30.2/lisp"); } catch (_) {}
+    try { FS.mkdir(termDir); } catch (_) {}
+    try { FS.unlink(`${termDir}/xterm.elc`); } catch (_) {}
+    FS.writeFile(`${termDir}/xterm.el`, WASMACS_XTERM_TERM_SHIM);
+    post("status", { text: "installed wasmacs xterm terminal shim" });
+  } catch (e) {
+    post("stderr", { text: `xterm terminal shim install failed: ${e}` });
+  }
+}
+
 function createUserTar(nodes) {
   const chunks = [];
   const paths = [...nodes.keys()].filter(p => p === "/home/user" || p.startsWith("/home/user/")).sort();
@@ -413,6 +448,8 @@ async function startEmacs(pdmpBytes) {
     ENV.USER = "user";
     ENV.LOGNAME = "user";
   } catch (_) {}
+
+  installXtermTermShim(Module.FS);
 
   // Write pdmp to MEMFS AFTER runtime is ready
   if (pdmpBytes) {

@@ -31,8 +31,8 @@ mergeInto(LibraryManager.library, {
   $wasmacs_atomics_env__deps: ["$ENV", "$TTY"],
   $wasmacs_atomics_env__postset: [
     // Terminal environment (required by Emacs --nw)
-    "ENV.TERM    = ENV.TERM    || 'dumb';",
-    "ENV.TERMCAP = ENV.TERMCAP || 'dumb:co#80:li#24:cl=\\\\E[H\\\\E[2J:cm=\\\\E[%i%d;%dH:up=\\\\E[A:do=\\\\E[B:nd=\\\\E[C:bs:';",
+    "ENV.TERM    = ENV.TERM    || 'xterm-256color';",
+    "ENV.TERMCAP = ENV.TERMCAP || 'xterm-256color:co#80:li#24:Co#256:cl=\\\\E[H\\\\E[2J:cm=\\\\E[%i%d;%dH:up=\\\\E[A:do=\\\\E[B:nd=\\\\E[C:le=\\\\b:bs:ku=\\\\E[A:kd=\\\\E[B:kr=\\\\E[C:kl=\\\\E[D:kh=\\\\E[H:@7=\\\\E[F:kD=\\\\E[3~:ks=\\\\E[?1h\\\\E=:ke=\\\\E[?1l\\\\E>:ti=\\\\E[?1049h:te=\\\\E[?1049l:so=\\\\E[7m:se=\\\\E[27m:us=\\\\E[4m:ue=\\\\E[24m:md=\\\\E[1m:mr=\\\\E[7m:me=\\\\E[0m:AF=\\\\E[38;5;%dm:AB=\\\\E[48;5;%dm:op=\\\\E[39;49m:';",
     "ENV.HOME    = ENV.HOME    || '/home/user';",
     "ENV.USER    = ENV.USER    || 'wasmacs';",
     "ENV.LOGNAME = ENV.LOGNAME || 'wasmacs';",

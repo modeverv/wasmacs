@@ -3173,6 +3173,102 @@ X2/X3 確認後、org-mode 最小確認:
 
 **vendor/emacs unchanged.**
 
+### xterm-256color Terminal Profile, Mouse, and Larger Font (2026-06-06)
+
+- Promoted the fake tty terminal profile from `TERM=dumb` to
+  `TERM=xterm-256color` in both host libraries:
+  `tools/scripts/wasmacs-asyncify-host-library.js` and
+  `tools/scripts/wasmacs-atomics-host-library.js`.
+- The inline TERMCAP now advertises 256 colors, cursor-key capabilities
+  (`ku/kd/kr/kl`), keypad application mode (`ks/ke`), alternate screen
+  (`ti/te`), basic standout/underline/bold/reverse attributes, and xterm color
+  setters.  This matches Emacs' `dispnew.c` startup path through `getenv
+  ("TERM")` and `term.c` key decoding through termcap `ku/kd/kr/kl`.
+- The Atomics/pdump browser worker now installs a minimal `term/xterm.el` shim
+  before `callMain`.  This keeps `TERM=xterm-256color` visible to Emacs while
+  avoiding the full GNU `term/xterm.el` startup path, which overflows the
+  browser Worker JavaScript stack after the xterm-256color promotion.  Cursor
+  keys still come from the C termcap path (`term.c` `ku/kd/kr/kl`).
+- Mouse status: the terminal profile is xterm mouse-ready at the transport
+  boundary, but automatic Emacs `(xterm-mouse-mode 1)` startup is intentionally
+  not enabled in this slice.  In-browser attempts to enable it during startup
+  reproduced `Maximum call stack size exceeded`; keep this as the next focused
+  blocker rather than hiding it behind the terminal profile change.
+- Set the default xterm font size to `20` via
+  `DEFAULT_XTERM_FONT_SIZE` in `src/wasm/src/xterm-emacs-terminal.js`; fallback
+  terminal sizing now uses the same default cell size.
+- Added `tests/runtime/terminal-profile.test.js` and extended
+  `tests/runtime/xterm-emacs-terminal.test.js` for the xterm-256color profile
+  and default font size.
+- Added `tools/scripts/probe-browser-pdump-atomics-terminal-profile.mjs` plus
+  `npm run test:xterm-terminal-profile`.  The probe boots the exact
+  `emacs-browser-atomics-pdump` artifact, checks `WASMACS-TERM=xterm-256color`,
+  sends `abc`, cursor-left, and `Z`, and verifies the tty redraw emits the
+  expected backspace + `Zc` rewrite.
+- Added an invisible browser debug hook on
+  `src/wasm/xterm-atomics-pdump.html` so probes can inject the same byte stream
+  that xterm.js sends through `onData` without adding visible UI.
+- Rebuilt artifacts:
+  - `build/artifacts/emacs-browser-atomics-pdump/temacs.wasm` sha256:
+    `dfa35545e247130dfa1d7f24002adaccf03fc8cb22f5846359c1fb8d473c8829`.
+  - `build/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp`
+    sha256:
+    `59ba46cd87f97dfad6d1203ea0e3111f6219d42647d2166fd563bc61d9ff0a69`.
+  - `build/artifacts/emacs-browser-atomics-pdump/temacs.data` sha256:
+    `02feec44f281948c63bcd18648495106ffc8190a591b20d126e17d2a1cd37498`.
+- Validation:
+  - `npm test`: PASS (`68` tests).
+  - `node --check tools/scripts/probe-browser-pdump-atomics-terminal-profile.mjs`: PASS.
+  - `node --check src/wasm/src/xterm-emacs-terminal.js`: PASS.
+  - `node --check src/wasm/src/emacs-atomics-pdump-worker.js`: PASS.
+  - `node --check src/wasm/src/asyncify-minibuffer-worker.js`: PASS.
+  - `npm run test:xterm-pdump-dired`: PASS.
+  - `npm run test:xterm-input-latency`: PASS.
+  - `npm run test:xterm-terminal-profile`: PASS.
+  - In-app Browser at
+    `http://127.0.0.1:5174/app/xterm-atomics-pdump.html?autostart&run=xterm-profile-shim`:
+    PASS (`interactive wait ✓`; earlier validation used row font size `28px`,
+    later adjusted to default font size `20`).
+
+### xterm Font Size Adjustment (2026-06-06)
+
+- Changed `DEFAULT_XTERM_FONT_SIZE` from `28` to `20` in
+  `src/wasm/src/xterm-emacs-terminal.js`.
+- Updated `tests/runtime/xterm-emacs-terminal.test.js` expectations.
+- Validation:
+  - `node --test tests/runtime/xterm-emacs-terminal.test.js`: PASS.
+
+**vendor/emacs unchanged.**
+
+### xterm Ctrl-Key Browser Fallback (2026-06-06)
+
+- Investigation: in the in-app Browser, `Ctrl+F` reached Emacs as
+  `wait#... bytes=1 queue=1`, but one `Ctrl+B` input route produced no new
+  wait/queue event at all.  That confirms the failure is before Emacs'
+  `backward-char`; the byte was not reaching the fake tty input queue.
+- Added a capture-phase fallback in
+  `src/wasm/src/xterm-emacs-terminal.js`: when the terminal container receives
+  `Ctrl+A` through `Ctrl+Z`, it prevents browser/default handling and sends the
+  corresponding C0 byte (`C-a` = 1, `C-b` = 2, ..., `C-z` = 26) through the same
+  xterm data handler used by normal input.
+- Extended the same fallback to unmodified arrow keys.  The browser terminal
+  layer now sends xterm cursor sequences directly when keydown sees
+  `ArrowUp/Down/Right/Left` (`ESC [ A/B/C/D`), avoiding hidden textarea or
+  browser shortcut gaps before xterm.js `onData`.
+- This keeps Emacs command semantics in Emacs and only hardens the browser
+  terminal transport against shortcut interception / hidden textarea gaps.
+- Validation:
+  - `node --test tests/runtime/xterm-emacs-terminal.test.js
+    tests/runtime/emacs-key-bytes.test.js`: PASS (`15` tests).
+  - In-app Browser after reload:
+    `Ctrl+F` and `Ctrl+B` both produced `bytes=1 queue=1` wait events; `Ctrl+B`
+    advanced to `wait-enter#4` after the fallback delivered byte `2`.
+  - In-app Browser after arrow fallback:
+    textarea `press("Control+B")` produced `wait#4 bytes=1 queue=1`, and
+    `press("ArrowLeft")` advanced the terminal input wait to `wait-enter#6`.
+
+**vendor/emacs unchanged.**
+
 ### Build Tooling Dependency Notes (2026-06-05)
 
 - xterm.js is now documented as a browser-runtime CDN dependency rather than a

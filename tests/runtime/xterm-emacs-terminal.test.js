@@ -1,6 +1,57 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calculateFallbackTerminalDimensions } from "../../src/wasm/src/xterm-emacs-terminal.js";
+import {
+  calculateFallbackTerminalDimensions,
+  controlKeyEventToBytes,
+  DEFAULT_XTERM_FONT_SIZE,
+  createXtermEmacsTerminal,
+  terminalKeyEventToBytes,
+} from "../../src/wasm/src/xterm-emacs-terminal.js";
+
+test("xterm default font size is comfortable for the primary terminal surface", () => {
+  assert.equal(DEFAULT_XTERM_FONT_SIZE, 20);
+});
+
+test("createXtermEmacsTerminal passes the default font size to xterm", () => {
+  const originalWindow = globalThis.window;
+  const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+  let terminalOptions;
+
+  class FakeTerminal {
+    constructor(options) {
+      terminalOptions = options;
+      this.options = options;
+      this.cols = options.cols;
+      this.rows = options.rows;
+    }
+    open() {}
+    focus() {}
+    onData() {}
+    write() {}
+    dispose() {}
+  }
+
+  globalThis.window = {
+    Terminal: FakeTerminal,
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  globalThis.requestAnimationFrame = () => {};
+  try {
+    createXtermEmacsTerminal({
+      isConnected: false,
+      addEventListener() {},
+      removeEventListener() {},
+    });
+  } finally {
+    if (originalWindow === undefined) delete globalThis.window;
+    else globalThis.window = originalWindow;
+    if (originalRequestAnimationFrame === undefined) delete globalThis.requestAnimationFrame;
+    else globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+  }
+
+  assert.equal(terminalOptions.fontSize, 20);
+});
 
 test("fallback terminal fit derives rows and columns from container pixels", () => {
   assert.deepEqual(
@@ -35,4 +86,29 @@ test("fallback terminal fit keeps a usable minimum size", () => {
     }),
     { cols: 20, rows: 3 },
   );
+});
+
+test("control-key fallback maps Ctrl letters to terminal control bytes", () => {
+  assert.deepEqual(controlKeyEventToBytes({ ctrlKey: true, key: "b" }), [2]);
+  assert.deepEqual(controlKeyEventToBytes({ ctrlKey: true, key: "F" }), [6]);
+});
+
+test("control-key fallback ignores non-terminal control chords", () => {
+  assert.equal(controlKeyEventToBytes({ ctrlKey: true, altKey: true, key: "b" }), null);
+  assert.equal(controlKeyEventToBytes({ metaKey: true, ctrlKey: true, key: "b" }), null);
+  assert.equal(controlKeyEventToBytes({ ctrlKey: true, key: "ArrowLeft" }), null);
+  assert.equal(controlKeyEventToBytes({ key: "b" }), null);
+});
+
+test("terminal key fallback maps arrow keys to xterm cursor sequences", () => {
+  assert.deepEqual(terminalKeyEventToBytes({ key: "ArrowUp" }), [27, 91, 65]);
+  assert.deepEqual(terminalKeyEventToBytes({ key: "ArrowDown" }), [27, 91, 66]);
+  assert.deepEqual(terminalKeyEventToBytes({ key: "ArrowRight" }), [27, 91, 67]);
+  assert.deepEqual(terminalKeyEventToBytes({ key: "ArrowLeft" }), [27, 91, 68]);
+});
+
+test("terminal key fallback leaves modified arrows to xterm or browser", () => {
+  assert.equal(terminalKeyEventToBytes({ ctrlKey: true, key: "ArrowLeft" }), null);
+  assert.equal(terminalKeyEventToBytes({ altKey: true, key: "ArrowLeft" }), null);
+  assert.equal(terminalKeyEventToBytes({ metaKey: true, key: "ArrowLeft" }), null);
 });
