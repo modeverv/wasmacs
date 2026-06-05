@@ -3341,6 +3341,21 @@ X2/X3 確認後、org-mode 最小確認:
     `/app/xterm-atomics-pdump.html?probe=redirect#hashcheck`, showed `SAB ✓`,
     and after pressing Start reached `interactive wait ✓` with
     `pdmp 11.0 MB materialized`.
+  - 2026-06-05 repository rename follow-up: after renaming the GitHub
+    repository from `wasimacs` to `wasmacs`, live Pages at
+    `https://modeverv.github.io/wasmacs/` served the HTML app shell but
+    returned HTTP 404 for
+    `/wasmacs/artifacts/emacs-browser-atomics-pdump/temacs.js` and
+    `/wasmacs/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp`.
+    `gh api repos/modeverv/wasmacs/pages` showed `build_type: legacy` with
+    source `master /docs`, so GitHub's rename flow had fallen back to the
+    checked-in `docs/` tree instead of the workflow-uploaded Pages artifact.
+    Restored Pages to `build_type: workflow`, reran CI run `27012031867`, and
+    verified live `temacs.js`, `bootstrap-emacs.pdmp`, `/`, and the app page all
+    return HTTP 200 under `/wasmacs/`. In-app Browser loaded
+    `https://modeverv.github.io/wasmacs/app/xterm-atomics-pdump.html`, clicked
+    Start, and reached `interactive wait ✓` with `pdmp 11.0 MB materialized`.
+    Local `origin` was also updated to `git@github.com:modeverv/wasmacs.git`.
 - Validation to run next:
   - Dev server smoke for
     `http://127.0.0.1:5173/app/xterm-atomics-pdump.html`
