@@ -12,7 +12,7 @@
  * Boot sequence:
  *   1. Module loads + TTY patched
  *   2. pdmpBytes written to MEMFS at /bootstrap-emacs.pdmp
- *   3. callMain(["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "--nw"])
+ *   3. callMain(["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "-nw"])
  *   4. Emacs enters command loop, Atomics.wait blocks at input
  */
 const ARTIFACT_DIR = "/artifacts/emacs-browser-atomics-pdump";
@@ -292,6 +292,14 @@ async function startEmacs(pdmpBytes) {
 
   await ready;
 
+  try {
+    ENV.LANG = "C";
+    ENV.LC_ALL = "C";
+    ENV.HOME = "/home/user";
+    ENV.USER = "user";
+    ENV.LOGNAME = "user";
+  } catch (_) {}
+
   // Write pdmp to MEMFS AFTER runtime is ready
   if (pdmpBytes) {
     try {
@@ -306,8 +314,8 @@ async function startEmacs(pdmpBytes) {
   }
 
   const bootArgs = pdmpBytes
-    ? ["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "--nw"]
-    : ["--quick", "--no-splash", "--nw"];
+    ? ["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "-nw", "--eval", "(setq uniquify-trailing-separator-p nil)", "--eval", "(setq create-lockfiles nil)"]
+    : ["--quick", "--no-splash", "-nw", "--eval", "(setq uniquify-trailing-separator-p nil)", "--eval", "(setq create-lockfiles nil)"];
 
   post("status", { text: `boot: ${bootArgs.join(" ")}` });
   post("stderr", { text: `JS-BEFORE-CALLMAIN: args=${JSON.stringify(bootArgs)} callMain=${typeof Module.callMain}` });

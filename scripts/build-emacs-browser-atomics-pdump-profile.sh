@@ -8,7 +8,7 @@
 #   - Bundles pdmp alongside temacs.wasm
 #   - Same Atomics.wait blocking (NO Asyncify)
 #
-# Boot: callMain(["--dump-file=/bootstrap-emacs.pdmp","--quick","--no-splash","--nw"])
+# Boot: callMain(["--dump-file=/bootstrap-emacs.pdmp","--quick","--no-splash","-nw"])
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -20,6 +20,7 @@ atomics_host_library="${repo_root}/scripts/wasmacs-atomics-host-library.js"
 emmake_bin="${EMMAKE:-emmake}"
 emacs_wasm_cflags="${EMACS_WASM_CFLAGS:--g3 -O0}"
 initial_memory="${WASMACS_ATOMICS_PDUMP_INITIAL_MEMORY:-536870912}"
+allow_memory_growth="${WASMACS_ATOMICS_PDUMP_ALLOW_MEMORY_GROWTH:-1}"
 native_baseline="${repo_root}/build/native-emacs-30.2/src"
 
 if ! command -v "${emmake_bin}" >/dev/null 2>&1; then
@@ -36,6 +37,26 @@ if [ ! -x "${native_baseline}/lib-src/make-docfile" ] \
   echo "error: native baseline helper tools are missing; run scripts/build-native-baseline.sh first" >&2
   exit 1
 fi
+
+echo "=== Syncing generated Unicode property Lisp for pdump redisplay ==="
+if [ ! -f "${native_baseline}/lisp/international/charprop.el" ]; then
+  echo "error: missing native generated Lisp: ${native_baseline}/lisp/international/charprop.el" >&2
+  exit 1
+fi
+if [ ! -f "${native_baseline}/lisp/subdirs.el" ]; then
+  echo "error: missing native generated Lisp: ${native_baseline}/lisp/subdirs.el" >&2
+  exit 1
+fi
+mkdir -p "${pdump_src}/lisp/international"
+cp "${native_baseline}/lisp/subdirs.el" "${pdump_src}/lisp/subdirs.el"
+cp "${native_baseline}/lisp/international/charprop.el" "${pdump_src}/lisp/international/charprop.el"
+for generated_lisp in "${native_baseline}"/lisp/international/uni-*.el; do
+  if [ ! -f "${generated_lisp}" ]; then
+    echo "error: missing native generated uni-*.el files" >&2
+    exit 1
+  fi
+  cp "${generated_lisp}" "${pdump_src}/lisp/international/$(basename "${generated_lisp}")"
+done
 
 emacs_c="${pdump_src}/src/emacs.c"
 if ! grep -q "wasmacs pbootstrap: prepend virtual FS lisp path" "${emacs_c}"; then
@@ -66,7 +87,7 @@ emacs_atomics_pdump_ldflags="-sEXIT_RUNTIME=0 \
   -sSTACK_SIZE=16777216 \
   -sSTACK_OVERFLOW_CHECK=2 \
   -sINITIAL_MEMORY=${initial_memory} \
-  -sALLOW_MEMORY_GROWTH=0 \
+  -sALLOW_MEMORY_GROWTH=${allow_memory_growth} \
   --js-library ${atomics_host_library} \
   --preload-file ${pdump_src}/lisp@/usr/local/share/emacs/30.2/lisp \
   --preload-file ${pdump_src}/etc@/usr/local/share/emacs/30.2/etc"
@@ -188,4 +209,4 @@ ls -lh "${out_dir}/"
 echo "temacs.wasm: $(sha256sum "${out_dir}/temacs.wasm" | cut -d' ' -f1)"
 echo "pdmp:        $(sha256sum "${out_dir}/bootstrap-emacs.pdmp" | cut -d' ' -f1)"
 echo "ARTIFACT:${out_dir}"
-echo "Boot: callMain([\"--dump-file=/bootstrap-emacs.pdmp\",\"--quick\",\"--no-splash\",\"--nw\"])"
+echo "Boot: callMain([\"--dump-file=/bootstrap-emacs.pdmp\",\"--quick\",\"--no-splash\",\"-nw\"])"

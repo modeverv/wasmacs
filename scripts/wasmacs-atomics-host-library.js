@@ -126,6 +126,18 @@ mergeInto(LibraryManager.library, {
     for (;;) {
       var lastSeen = Atomics.load(signal, 0);
       if (Atomics.load(signal, 1) > 0) break;
+      if (typeof self !== "undefined" && typeof self.postMessage === "function") {
+        try {
+          self.postMessage({
+            type: "timing-wait-enter",
+            waitNum: waitNum,
+            ts: Date.now(),
+            queueLen: (globalThis.__wasmacsTerminalInputBytes || []).length,
+            outLen: (globalThis.__wasmacsTerminalOutputBytes || []).length,
+            fioCalls: globalThis.__wasmacsFionreadCallCount || 0,
+          });
+        } catch(e) {}
+      }
       var result = Atomics.wait(signal, 0, lastSeen);
       if (result === "ok" || Atomics.load(signal, 1) > 0) break;
     }
@@ -191,7 +203,17 @@ mergeInto(LibraryManager.library, {
   // Lightweight diagnostic hook (no-op in production).
   wasmacs_host_scheduler_checkpoint__deps: [],
   wasmacs_host_scheduler_checkpoint: function (code, _details) {
-    // intentional no-op
+    if (typeof self !== "undefined" && typeof self.postMessage === "function") {
+      try {
+        self.postMessage({
+          type: "scheduler-checkpoint",
+          code: code,
+          ts: Date.now(),
+          queueLen: (globalThis.__wasmacsTerminalInputBytes || []).length,
+          outLen: (globalThis.__wasmacsTerminalOutputBytes || []).length,
+        });
+      } catch(e) {}
+    }
   },
 
   // ── wasmacs_host_input_text ───────────────────────────────────
@@ -217,5 +239,16 @@ mergeInto(LibraryManager.library, {
   // No-op stub for latency measurement calls from os-compat waitpoint.
   wasmacs_os_timing_checkpoint__deps: [],
   wasmacs_os_timing_checkpoint: function (code) {
+    if (typeof self !== "undefined" && typeof self.postMessage === "function") {
+      try {
+        self.postMessage({
+          type: "os-timing-checkpoint",
+          code: code,
+          ts: Date.now(),
+          queueLen: (globalThis.__wasmacsTerminalInputBytes || []).length,
+          outLen: (globalThis.__wasmacsTerminalOutputBytes || []).length,
+        });
+      } catch(e) {}
+    }
   },
 });

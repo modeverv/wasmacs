@@ -27,7 +27,7 @@ button:disabled{opacity:0.4}
 <button id="btn-dl" onclick="downloadPdmp()" disabled>Download .pdmp</button>
 <button id="btn-save" onclick="saveToStorage()" disabled>Save to Storage</button>
 <button id="btn-reload" onclick="reloadEval()" disabled>Reload + Eval + GC</button>
-<button id="btn-boot" onclick="reloadBootTest()" disabled>Boot Test (--eval)</button>
+<button id="btn-boot" onclick="reloadBootTest()" disabled>Boot Test (batch)</button>
 <button id="btn-nw-pdmp" onclick="nwTest(true)" disabled>NW+pdmp test</button>
 <button id="btn-nw-cold" onclick="nwTest(false)">NW cold boot test</button>
 </div>
@@ -44,7 +44,7 @@ function setSt(h){document.getElementById("st-panel").innerHTML=h}
 function addSt(h){document.getElementById("st-panel").innerHTML+=h}
 function setStatus(h){document.getElementById("status").innerHTML=h}
 function bts(s){["gen","dl","save","reload","boot","nw-pdmp"].forEach(function(k){var el=document.getElementById("btn-"+k);if(el)el.disabled=!s[k]})}
-function mkWorker(fn){var w=new Worker("/app/src/pdump-diagnostic-worker.js");w.onmessage=function(e){fn(e.data,w)};w.onerror=function(e){addOut('<span class="error">Worker error: '+esc(e.message||"")+'</span>')};return w}
+function mkWorker(fn){var w=new Worker("/app/src/pdump-diagnostic-worker.js?v="+Date.now());w.onmessage=function(e){fn(e.data,w)};w.onerror=function(e){addOut('<span class="error">Worker error: '+esc(e.message||"")+'</span>')};return w}
 
 function onCaps(msg){
   addSt('<div class="info" style="font-size:10px">caps: callMain='+esc(msg.callMain)+' _main='+esc(msg._main)+' thisProgram='+esc(msg.thisProgram)+'</div>');
@@ -87,7 +87,7 @@ if(msg.type==="reload-results"){
   addSt('<div style="font-size:9px">cmdline-args: '+esc((msg.cla.r||"").substring(0,500))+'</div>');
   var ok=(/LOADED/.test(msg.pdump.r));
   if(ok&&/GC-OK/.test(msg.gc.r))addSt('<div class="ok"><b>D3+D4 PASS</b></div>');
-  else addSt('<div class="warn">pdump='+esc(msg.pdump.r)+' (use Boot Test for callMain-eval evidence)</div>');
+	  else addSt('<div class="warn">pdump='+esc(msg.pdump.r)+' (use Boot Test for callMain boot evidence)</div>');
   setStatus('<span class="'+(ok?'ok':'warn')+'">Done</span>');
   setTimeout(function(){wr.terminate();bts({gen:true,dl:true,save:true,reload:true,boot:true,'nw-pdmp':true})},500)}
 if(msg.type==="lifecycle")addSt('<div>lifecycle:'+esc(msg.phase||"")+'</div>')});
@@ -95,14 +95,14 @@ w.postMessage({type:"reload-eval",pdmpBase64:pdmpBase64})}
 
 function reloadBootTest(){
 if(!pdmpBase64){setStatus('<span class="warn">Generate first.</span>');return}
-abortAll();setStatus('<span class="info">Boot test (callMain --eval)...</span>');setSt("");bts({gen:false,dl:false,save:false,reload:false,boot:false});
+	abortAll();setStatus('<span class="info">Boot test (callMain batch + eval)...</span>');setSt("");bts({gen:false,dl:false,save:false,reload:false,boot:false});
 var w=mkWorker(function(msg,wr){
 if(msg.type==="checkpoint")addCk(msg.kind);
 if(msg.type==="stdout")addOut(esc(msg.text));
 if(msg.type==="stderr")addOut('<span class="warn">'+esc(msg.text)+'</span>');
 if(msg.type==="module-capabilities")onCaps(msg);
 if(msg.type==="boot-callmain-results"){
-  addSt('<div class="sep">=== Boot via callMain --eval ===</div>');
+	  addSt('<div class="sep">=== Boot via callMain batch + ccall eval ===</div>');
   addSt('<div><b>file='+(msg.fileExists?'YES':'NO')+'</b> size='+(msg.statSize/1024/1024).toFixed(1)+'MB exit='+msg.exit+(msg.exitErr?' err='+esc(msg.exitErr):'')+'</div>');
   addSt('<div>BOOT-VER: <b>'+esc(msg.ver)+'</b></div>');
   addSt('<div>BOOT-PDUMP: <b>'+esc(msg.pdump)+'</b></div>');

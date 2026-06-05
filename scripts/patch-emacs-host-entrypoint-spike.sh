@@ -1245,25 +1245,105 @@ extern void wasmacs_os_timing_checkpoint (int code);\
         while (s/#ifdef __EMSCRIPTEN__\n\t  if \(kbd_fetch_ptr == kbd_store_ptr\).*?\n#else\n((?:#ifdef __EMSCRIPTEN__.*?#endif\n)*)\t  wait_reading_process_output \(0, 0, -1, do_display, Qnil, NULL, 0\);\n#endif/$1\t  wait_reading_process_output (0, 0, -1, do_display, Qnil, NULL, 0);\n/sg) {}
       ' "${keyboard_file}"
 
-      export WASMACS_KBD_WAIT_OSCOMPAT_PATCH='#ifdef __EMSCRIPTEN__
+	      export WASMACS_KBD_WAIT_OSCOMPAT_PATCH='#ifdef __EMSCRIPTEN__
 	  if (kbd_fetch_ptr == kbd_store_ptr)
 	    {
 	      wasmacs_host_wait_for_input ();
 	      wasmacs_os_timing_checkpoint (10);
-	      struct terminal *t;
-	      struct input_event ie;
-	      for (t = terminal_list; t; t = t->next_terminal)
-		if (t->read_socket_hook)
-		  while ((*t->read_socket_hook) (t, &ie) > 0)
-		    ;
-	      wasmacs_os_timing_checkpoint (20);
+	      gobble_input ();
+	      wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 21 : 22);
 	    }
-	  wasmacs_os_timing_checkpoint (30);
+	  wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 31 : 32);
 #else
 	  wait_reading_process_output (0, 0, -1, do_display, Qnil, NULL, 0);
 #endif'
-      perl -0pi -e 'BEGIN { $p = $ENV{"WASMACS_KBD_WAIT_OSCOMPAT_PATCH"} } s#\t  wait_reading_process_output \(0, 0, -1, do_display, Qnil, NULL, 0\);#${p}#' "${keyboard_file}"
-      ;;
+	      perl -0pi -e 'BEGIN { $p = $ENV{"WASMACS_KBD_WAIT_OSCOMPAT_PATCH"} } s#\t  wait_reading_process_output \(0, 0, -1, do_display, Qnil, NULL, 0\);#${p}#' "${keyboard_file}"
+	      perl -0pi -e 's#\n\s+wasmacs_os_timing_checkpoint \(40\);\n\s+/\* See https://lists\.gnu\.org/r/emacs-devel/2005-05/msg00297\.html#\n      /* See https://lists.gnu.org/r/emacs-devel/2005-05/msg00297.html#' "${keyboard_file}"
+	      perl -0pi -e 's#\n\s+wasmacs_os_timing_checkpoint \(51\);##g' "${keyboard_file}"
+	      if ! rg 'wasmacs_os_timing_checkpoint \(41\)' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's~(\n\s+obj = make_lispy_event \(&event->ie\);\n)~$1		      wasmacs_os_timing_checkpoint (41);\n~' "${keyboard_file}"
+	      fi
+	      if ! rg 'wasmacs_os_timing_checkpoint \(42\)' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's~(      switch \(event->kind\)\n      \{.*?\n\s*default:\n\s*\{\n)~$1#ifdef __EMSCRIPTEN__\n		  wasmacs_os_timing_checkpoint (42);\n#endif\n~s' "${keyboard_file}"
+	      fi
+	      perl -0pi -e 's#\n\s+wasmacs_os_timing_checkpoint \(43\);##g' "${keyboard_file}"
+	      if ! rg 'wasmacs os-compat: do not synthesize switch-frame for tty keystrokes' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's~(\n\s+if \(!EQ \(frame, internal_last_event_frame\)\n\s+&& !EQ \(frame, selected_frame\)\)\n\s+obj = make_lispy_switch_frame \(frame\);)~\n		  /* wasmacs os-compat: do not synthesize switch-frame for tty keystrokes.\n		     The pdmp-restored terminal frame can compare unequal here even though\n		     the key belongs to the active terminal; returning switch-frame first\n		     leaves the real key queued and the browser page never redisplays it. */\n#ifdef __EMSCRIPTEN__\n		  if (!(event->ie.kind == ASCII_KEYSTROKE_EVENT\n		        || event->ie.kind == MULTIBYTE_CHAR_KEYSTROKE_EVENT\n		        || event->ie.kind == NON_ASCII_KEYSTROKE_EVENT)\n		      && !EQ (frame, internal_last_event_frame)\n		      && !EQ (frame, selected_frame))\n		    obj = make_lispy_switch_frame (frame);\n#else$1\n#endif~' "${keyboard_file}"
+	      fi
+	      if ! rg 'wasmacs os-compat: selected_frame for lispy tty keystrokes' "${keyboard_file}" >/dev/null; then
+	        export WASMACS_LISPY_FRAME_OSCOMPAT_PATCH='#ifdef __EMSCRIPTEN__
+		  /* wasmacs os-compat: selected_frame for lispy tty keystrokes.
+		     For terminal keystrokes the pdmp-restored frame_or_window can
+		     refer to a stale frame object.  Use the active selected frame
+		     before the normal focus lookup touches XFRAME (frame). */
+		  wasmacs_os_timing_checkpoint (420);
+		  if (event->kind == ASCII_KEYSTROKE_EVENT
+		      || event->kind == MULTIBYTE_CHAR_KEYSTROKE_EVENT
+		      || event->kind == NON_ASCII_KEYSTROKE_EVENT)
+		    {
+		      frame = selected_frame;
+		      wasmacs_os_timing_checkpoint (421);
+		    }
+		  else
+		    {
+#endif
+		  frame = event->ie.frame_or_window;
+		  if (CONSP (frame))
+		    frame = XCAR (frame);
+		  else if (WINDOWP (frame))
+		    frame = WINDOW_FRAME (XWINDOW (frame));
+
+		  focus = FRAME_FOCUS_FRAME (XFRAME (frame));
+		  if (! NILP (focus))
+		    frame = focus;
+#ifdef __EMSCRIPTEN__
+		    }
+#endif'
+	        perl -0pi -e 'BEGIN { $p = $ENV{"WASMACS_LISPY_FRAME_OSCOMPAT_PATCH"} } s~\s*frame = event->ie\.frame_or_window;\n\s*if \(CONSP \(frame\)\)\n\s*frame = XCAR \(frame\);\n\s*else if \(WINDOWP \(frame\)\)\n\s*frame = WINDOW_FRAME \(XWINDOW \(frame\)\);\n\n\s*focus = FRAME_FOCUS_FRAME \(XFRAME \(frame\)\);\n\s*if \(! NILP \(focus\)\)\n\s*frame = focus;~\n$p~' "${keyboard_file}"
+	      fi
+	      if ! rg 'wasmacs_os_timing_checkpoint \(420\)' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's~(		  /\* wasmacs os-compat: selected_frame for lispy tty keystrokes\.\n		     For terminal keystrokes the pdmp-restored frame_or_window can\n		     refer to a stale frame object\.  Use the active selected frame\n		     before the normal focus lookup touches XFRAME \(frame\)\. \*/\n)~$1		  wasmacs_os_timing_checkpoint (420);\n~' "${keyboard_file}"
+	      fi
+	      if ! rg 'wasmacs_os_timing_checkpoint \(421\)' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's~(\n\s*)frame = selected_frame;~${1}{\n		      frame = selected_frame;\n		      wasmacs_os_timing_checkpoint (421);\n${1}}~' "${keyboard_file}"
+	      fi
+	      perl -0pi -e 's~\}#ifdef __EMSCRIPTEN__\n\s*wasmacs_os_timing_checkpoint \(44\);\n#endif~}~g' "${keyboard_file}"
+	      if ! rg 'wasmacs_os_timing_checkpoint \(45\)' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's~(\s*internal_last_event_frame = frame;\n)~$1#ifdef __EMSCRIPTEN__\n		  wasmacs_os_timing_checkpoint (45);\n#endif\n~' "${keyboard_file}"
+	      fi
+	      if ! rg 'wasmacs_os_timing_checkpoint \(46\)' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's~(\s*/\* If we didn.t decide to make a switch-frame event, go ahead\n\s*and build a real event from the queue entry\.  \*/\n)~$1#ifdef __EMSCRIPTEN__\n		  wasmacs_os_timing_checkpoint (46);\n#endif\n~' "${keyboard_file}"
+	      fi
+	      if ! rg 'wasmacs_os_timing_checkpoint \(47\)' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's~(\n		      obj = make_lispy_event \(&event->ie\);\n)~\n#ifdef __EMSCRIPTEN__\n		      wasmacs_os_timing_checkpoint (47);\n#endif\n$1#ifdef __EMSCRIPTEN__\n		      wasmacs_os_timing_checkpoint (48);\n#endif\n~' "${keyboard_file}"
+	      fi
+	      if ! rg 'wasmacs_os_timing_checkpoint \(51\)' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's#(	  /\* Handle things that only apply to characters\.  \*/\n	  if \(FIXNUMP \(c\)\)\n	    \{\n)#${1}	      wasmacs_os_timing_checkpoint (51);\n#' "${keyboard_file}"
+	      fi
+	      if ! rg 'wasmacs_os_timing_checkpoint \(33\)' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's~(\n#ifdef HAVE_X_WINDOWS\n  /\* Handle pending selection requests)~\n#ifdef __EMSCRIPTEN__\n  wasmacs_os_timing_checkpoint (33);\n#endif\n$1~' "${keyboard_file}"
+	      fi
+	      if ! rg 'wasmacs_os_timing_checkpoint \(40\)' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's#(  /\* At this point, we know that there is a readable event available\n     somewhere\.  If the event queue is empty, then there must be a\n     mouse movement enabled and available\.  \*/\n  if \(kbd_fetch_ptr != kbd_store_ptr\)\n    \{\n)#${1}      wasmacs_os_timing_checkpoint (40);\n#' "${keyboard_file}"
+	      fi
+	      perl -0pi -e 's#\n\s+wasmacs_os_timing_checkpoint \(1000 \+ event->kind\);##g' "${keyboard_file}"
+	      if ! rg 'wasmacs_os_timing_checkpoint \(1000 \+ event->kind\)' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's#(      wasmacs_os_timing_checkpoint \(40\);\n      union buffered_input_event \*event = kbd_fetch_ptr;\n)#${1}      wasmacs_os_timing_checkpoint (1000 + event->kind);\n#' "${keyboard_file}"
+	      fi
+	      if ! rg 'wasmacs os-compat: current_kboard for terminal keystrokes' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's~      \*kbp = event_to_kboard \(&event->ie\);\n#ifdef __EMSCRIPTEN__\n      wasmacs_os_timing_checkpoint \(1100 \+ event->kind\);\n#endif~      *kbp = event_to_kboard (&event->ie);~g' "${keyboard_file}"
+	        perl -0pi -e 's~      \*kbp = event_to_kboard \(&event->ie\);~      /* wasmacs os-compat: current_kboard for terminal keystrokes.\n         Avoid event_to_kboard reading a pdmp-restored stale frame_or_window\n         before the real keystroke is converted into a Lisp event. */\n#ifdef __EMSCRIPTEN__\n      if (event->kind == ASCII_KEYSTROKE_EVENT\n          || event->kind == MULTIBYTE_CHAR_KEYSTROKE_EVENT\n          || event->kind == NON_ASCII_KEYSTROKE_EVENT)\n        *kbp = current_kboard;\n      else\n        *kbp = event_to_kboard (&event->ie);\n      wasmacs_os_timing_checkpoint (1100 + event->kind);\n#else\n      *kbp = event_to_kboard (&event->ie);\n#endif~' "${keyboard_file}"
+	      fi
+	      if ! rg 'wasmacs_os_timing_checkpoint \(1110 \+ event->kind\)' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's~(      if \(\*kbp == 0\)\n\t\*kbp = current_kboard;  /\* Better than returning null ptr\\?  \*/\n)~$1#ifdef __EMSCRIPTEN__\n      wasmacs_os_timing_checkpoint (1110 + event->kind);\n#endif\n~' "${keyboard_file}"
+	      fi
+	      if ! rg 'wasmacs_os_timing_checkpoint \(1120 \+ event->kind\)' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's~(      obj = Qnil;\n)~$1#ifdef __EMSCRIPTEN__\n      wasmacs_os_timing_checkpoint (1120 + event->kind);\n#endif\n~' "${keyboard_file}"
+	      fi
+	      if ! rg 'wasmacs os-compat: selected_frame for terminal ASCII input' "${keyboard_file}" >/dev/null; then
+	        perl -0pi -e 's~(      /\* Set the frame corresponding to the active tty\.  Note that the\n         value of selected_frame is not reliable here, redisplay tends\n         to temporarily change it\.  \*/\n      buf\.frame_or_window = tty->top_frame;)~      /* wasmacs os-compat: selected_frame for terminal ASCII input.\n         pdmp-restored termcap frames can otherwise synthesize a switch-frame\n         event before the actual key and fail to return to redisplay. */\n#ifdef __EMSCRIPTEN__\n      buf.frame_or_window = selected_frame;\n#else\n$1\n#endif~' "${keyboard_file}"
+	      fi
+	      ;;
     minibuf-setup)
       perl -0pi -e 's#static Lisp_Object\nread_minibuf #/\* wasmacs asyncify minibuffer setup waitpoint spike. \*/\nextern int wasmacs_host_wait_for_input (void);\n\nstatic Lisp_Object\nread_minibuf #' "${minibuf_file}"
 

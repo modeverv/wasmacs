@@ -1784,6 +1784,127 @@ Inventory the old command bridge, mark it as legacy, designate the xterm.js path
 
 **vendor/emacs unchanged.**
 
+## Task M260605b: pdmp Atomics X4 input/redisplay
+
+### Result (2026-06-05)
+
+`xterm-atomics-pdump.html` now accepts a typed `a` through the host wait path,
+redisplays it in `*scratch*`, and returns to the next Atomics waitpoint.
+
+Evidence from the in-app browser page:
+
+| Signal | Result |
+|--------|--------|
+| Initial wait | `wait-enter#1 queue=0 out=2471` |
+| Input consumed | `wait#1 bytes=1 queue=1` |
+| Keyboard buffer event | `os-timing-checkpoint:1001` (`ASCII_KEYSTROKE_EVENT`) |
+| Kboard bypass reached | `os-timing-checkpoint:1101` |
+| Default lispy event branch reached | `os-timing-checkpoint:42` |
+| Selected frame branch reached | `os-timing-checkpoint:420`, `421` |
+| Redisplay / next wait | `wait-enter#2 queue=0 out=2565` |
+| Screen | user-visible `a` in `*scratch*`; page text extraction later also included `a` |
+
+### Fix Shape
+
+- Changed the wasm host waitpoint path in generated `keyboard.c` from manually
+  calling terminal hooks to `gobble_input()`, matching Emacs' own input
+  collection path more closely.
+- For wasm terminal keystrokes, route `*kbp` through `current_kboard` instead
+  of immediately deriving it from `event->frame_or_window`; this avoids
+  pdmp-restored stale frame objects before the real key is converted.
+- For lispy terminal keystrokes, use `selected_frame` before normal frame/focus
+  resolution touches `XFRAME(frame)`.
+- Suppress wasm switch-frame synthesis for tty keystrokes so the queued key is
+  converted into a Lisp event instead of being left behind.
+
+Latest artifact hashes:
+
+- `temacs.wasm`:
+  `3812ecc58f01ac9c88e93b3af050d7036109488e412352347854f15edf478ab3`
+- `bootstrap-emacs.pdmp`:
+  `fe66c16d682ac8ecbbaafc15d029752db0262153a09351532d5ab2a31f6d5b0e`
+
+Validation:
+
+- `scripts/build-emacs-browser-atomics-pdump-profile.sh`
+- `node scripts/probe-browser-pdump-atomics-tty-command-loop.mjs`
+- `node --check app/src/emacs-atomics-pdump-worker.js`
+- `node --check app/src/pdump-diagnostic-worker.js`
+- `node --check scripts/probe-browser-pdump-atomics-tty-command-loop.mjs`
+- `node --check scripts/wasmacs-atomics-host-library.js`
+
+**vendor/emacs unchanged.**
+
+## 2026-06-05: M260605 pdmp + Atomics `-nw` integrated proof
+
+Goal: clear the two remaining blockers before treating
+`xterm-atomics-pdump.html` as ready to fold into the main atomic route:
+page Boot Test failing on `japan-util`, and pdmp `--nw` aborting before
+Atomics.wait.
+
+Findings:
+
+- `vendor/emacs/src/bidi.c:bidi_initialize` aborts if Unicode property
+  char-tables such as `bidi-class`, `mirroring`, or `bracket-type` are missing.
+  The pdump copied source tree did not contain native-generated
+  `international/charprop.el` or `international/uni-*.el`, so redisplay reached
+  `bidi_initialize` before input wait and aborted.
+- `language/japanese.el` registers `(features japan-util)` for Japanese, and
+  `international/mule-cmds.el` later requires those features. The copied pdump
+  source tree also lacked generated `lisp/subdirs.el`, so `language/` was not on
+  the normal startup `load-path`, producing the `japan-util` error.
+- Once `subdirs.el` was restored, Emacs parsed the interactive option far
+  enough to reveal that the correct no-window-system option is `-nw`, not
+  `--nw`.
+
+Changes:
+
+- `scripts/build-emacs-browser-atomics-pdump-profile.sh` now syncs
+  `lisp/subdirs.el`, `international/charprop.el`, and all
+  `international/uni-*.el` from `build/native-emacs-30.2/src/lisp` before
+  pbootstrap.
+- `app/src/emacs-atomics-pdump-worker.js`,
+  `app/src/pdump-diagnostic-worker.js`, and
+  `scripts/probe-browser-pdump-atomics-tty-command-loop.mjs` use `-nw`.
+- `app/src/emacs-atomics-pdump-worker.js` sets `LANG/LC_ALL=C` and
+  `HOME=/home/user` before `callMain`.
+- `scripts/wasmacs-atomics-host-library.js` posts `timing-wait-enter` before
+  blocking in `Atomics.wait`; `app/xterm-atomics-pdump.html` displays this as
+  `interactive wait ✓`.
+- `pdump-diagnostic.html` Boot Test now uses batch `callMain` plus the exported
+  eval bridge and labels the path as `Boot Test (batch)`.
+
+Validation:
+
+- Rebuilt `artifacts/emacs-browser-atomics-pdump`:
+  - `temacs.wasm` sha256
+    `07b7fd96c63f36b93fbee8f5afcd0b8c5855e2b6d40d3877cbe4ec5c26002312`
+  - `bootstrap-emacs.pdmp` sha256
+    `9b38b2761a1a0bbcfa3512fdcd44561bbcbccb8e5b99dc4d222e52e688828717`
+- `node --check` passed for the touched JS worker/probe/library files.
+- `node scripts/probe-browser-pdump-atomics-tty-command-loop.mjs`:
+  `tty-flush:YES`, `atomics-wait:YES`, `callMain-done:NO`,
+  `Wait at: ttyOutLen=2476, hasTtyOutput=true`.
+- Browser `pdump-diagnostic.html` Generate + Boot Test:
+  `BOOT-VER: 30.2`, `BOOT-PDUMP: LOADED`, `BOOT-GC: PASS`.
+- Browser `xterm-atomics-pdump.html` after clearing pdmp cache:
+  `pdmp 26.4 MB materialized`, `SAB ✓`, `interactive wait ✓`,
+  `wait-enter#1 queue=0 out=2471 fio=1`; terminal shows `*scratch*` in Lisp
+  Interaction mode with no `japan-util` or unknown-option warning.
+
+X4 input follow-up:
+
+- Fixed-memory builds aborted after the first input byte with OOM just above
+  the configured limit (`536870912`, then `805306368`). The pdmp Atomics build
+  now defaults to `ALLOW_MEMORY_GROWTH=1`.
+- Browser CUA typed `a`; debug showed `wait#1 bytes=1 queue=1` and
+  os timing checkpoints 10/20/30 consumed the byte. No OOM occurred with growth
+  enabled.
+- Superseded by `Task M260605b`: `a` now appears in `*scratch*`, terminal
+  output advances, and the worker posts `wait-enter#2`.
+
+**vendor/emacs unchanged.**
+
 ## 2026-06-05: M260605 atomic pdmp Reload+Eval+GC recovery
 
 - Recreated `build/emacs-pdump-configure-probe` from a fresh Emacs 30.2 copy

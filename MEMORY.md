@@ -286,3 +286,58 @@ Append-only project memory for `wasmacs`.
   missing `japan-util`; `--nw` still aborts before Atomics.wait. Treat these as
   separate callMain/argument lifecycle or TTY command-loop issues, not as pdmp
   artifact generation failures.
+
+## 2026-06-05: M260605 pdmp + Atomics wait proof
+
+- The `japan-util` and pre-wait abort blockers were resolved for the
+  `emacs-browser-atomics-pdump` route. The copied pdump source tree must include
+  native-generated `lisp/subdirs.el`, `international/charprop.el`, and all
+  `international/uni-*.el` before pbootstrap.
+- Source-backed causes:
+  - `vendor/emacs/src/bidi.c:bidi_initialize` aborts when Unicode property
+    char-tables such as `bidi-class` are missing.
+  - `vendor/emacs/lisp/language/japanese.el` registers `features japan-util`;
+    `vendor/emacs/lisp/international/mule-cmds.el` requires those features, so
+    `lisp/subdirs.el` is needed to put `language/` on `load-path`.
+- Use `-nw`, not `--nw`, for Emacs no-window-system startup. After restoring
+  `subdirs.el`, Emacs reached option parsing far enough to report
+  `Unknown option '--nw'`.
+- Current proven artifact pair:
+  - `temacs.wasm` sha256:
+    `07b7fd96c63f36b93fbee8f5afcd0b8c5855e2b6d40d3877cbe4ec5c26002312`
+  - `bootstrap-emacs.pdmp` sha256:
+    `9b38b2761a1a0bbcfa3512fdcd44561bbcbccb8e5b99dc4d222e52e688828717`
+- Proven browser path:
+  `pdump-diagnostic.html` Generate + Boot Test reports `BOOT-VER: 30.2`,
+  `BOOT-PDUMP: LOADED`, `BOOT-GC: PASS`; `xterm-atomics-pdump.html` reports
+  `interactive wait ✓` with `wait-enter#1` and visible `*scratch*`.
+- X4 input was initially incomplete after host input consumption, but the
+  follow-up M260605b entry below now proves redisplayed `a` and `wait-enter#2`.
+
+## 2026-06-05: M260605b pdmp Atomics X4 input/redisplay proof
+
+- X4 is now proven for `xterm-atomics-pdump.html`: typing `a` through the
+  browser reaches the host wait path, is consumed by Emacs, appears in
+  `*scratch*`, and returns to the next Atomics waitpoint.
+- Browser evidence:
+  - `wait-enter#1 queue=0 out=2471`
+  - `wait#1 bytes=1 queue=1`
+  - `os-timing-checkpoint:1001` (`ASCII_KEYSTROKE_EVENT`)
+  - `os-timing-checkpoint:1101`, `1121`, `42`, `420`, `421`
+  - `wait-enter#2 queue=0 out=2565`
+  - Page text extraction included a standalone `a` in `*scratch*`; the user also
+    confirmed the `a` was visible on screen before automation text extraction
+    caught up.
+- Fix shape in `scripts/patch-emacs-host-entrypoint-spike.sh`:
+  - After `wasmacs_host_wait_for_input()`, call `gobble_input()` so Emacs'
+    terminal input path fills `kbd_buffer`.
+  - For wasm tty keystrokes, set `*kbp = current_kboard` before the
+    `event_to_kboard(&event->ie)` frame lookup.
+  - For lispy tty keystrokes, use `selected_frame` before normal frame/focus
+    resolution touches `XFRAME(frame)`.
+  - Suppress wasm switch-frame synthesis for tty keystrokes.
+- Latest proven artifact pair:
+  - `temacs.wasm` sha256:
+    `3812ecc58f01ac9c88e93b3af050d7036109488e412352347854f15edf478ab3`
+  - `bootstrap-emacs.pdmp` sha256:
+    `fe66c16d682ac8ecbbaafc15d029752db0262153a09351532d5ab2a31f6d5b0e`

@@ -37,6 +37,7 @@ if (!isMainThread) {
         locateFile: p => `${temacsDir}/${p}`,
         print(t)   { ck("stdout", { t: t.substring(0, 1000) }); },
         printErr(t) { ck("stderr", { t: t.substring(0, 1000) }); },
+        onAbort(what) { ck("onAbort", { what: String(what).substring(0, 1000) }); },
         onRuntimeInitialized() { ck("rt-init"); rdy(); },
       },
       Buffer, TextDecoder, TextEncoder, URL, WebAssembly, SharedArrayBuffer,
@@ -82,11 +83,18 @@ if (!isMainThread) {
     catch (e) { ck("pdmp-fail", { e: e.message }); }
 
     ck("before-callMain");
-    const bootArgs = workerData.bootArgs || ["--dump-file=/bootstrap-emacs.pdmp","--quick","--no-splash","--nw"];
+    const bootArgs = workerData.bootArgs || [
+      "--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "-nw",
+      "--eval", "(setq uniquify-trailing-separator-p nil)",
+      "--eval", "(setq create-lockfiles nil)"
+    ];
     ck("boot-args", { args: JSON.stringify(bootArgs) });
     try { const r = ctx.Module.callMain(bootArgs); ck("callMain-ret", { r }); }
     catch (e) {
-      ck("callMain-threw", { e: e.message.substring(0, 200) });
+      ck("callMain-threw", {
+        e: e.message.substring(0, 200),
+        stack: String(e.stack || "").substring(0, 2000)
+      });
       ck("callMain-blocked-or-crashed");
     }
     if (ttyOut.length) {
@@ -104,7 +112,7 @@ if (!isMainThread) {
   writeFileSync(logJ, "");
 
   const { Worker } = await import("node:worker_threads");
-  new Worker(new URL(import.meta.url), {
+  const worker = new Worker(new URL(import.meta.url), {
     env: process.env,
     workerData: {
       pdmpPath:   `${repoRoot}/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp`,
@@ -135,4 +143,5 @@ if (!isMainThread) {
     if (waitE) console.log(`Wait at: ttyOutLen=${waitE.ttyOutLen}, hasTtyOutput=${waitE.hasTtyOutput}`);
     writeFileSync(logT, raw);
   } catch (e) { console.log(`No log: ${e.message}`); }
+  await worker.terminate();
 }

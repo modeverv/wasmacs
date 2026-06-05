@@ -183,7 +183,7 @@ function initTerminal() {
 function generatePdmp() {
   return new Promise((resolve, reject) => {
     setStatus("generating pdmp (loadup+pbootstrap)…", "generating");
-    const worker = new Worker("/app/src/pdump-diagnostic-worker.js");
+    const worker = new Worker("/app/src/pdump-diagnostic-worker.js?v=" + Date.now());
     let resolved = false;
 
     worker.onmessage = (evt) => {
@@ -236,7 +236,7 @@ function startEmacsWithPdmp(pdmpBytes) {
 
   initTerminal();
 
-  emacsWorker = new Worker("/app/src/emacs-atomics-pdump-worker.js");
+  emacsWorker = new Worker("/app/src/emacs-atomics-pdump-worker.js?v=" + Date.now());
 
   emacsWorker.onmessage = (evt) => {
     const msg = evt.data;
@@ -256,6 +256,20 @@ function startEmacsWithPdmp(pdmpBytes) {
       terminal.writeBytes(msg.bytes);
       if (!statusEl.classList.contains("interactive"))
         setStatus("interactive ✓", "interactive");
+    }
+
+    if (msg.type === "timing") {
+      addLog("cp", `wait#${msg.waitNum} bytes=${msg.byteCount} queue=${msg.queueLen} fio=${msg.fioCalls}`);
+      setStatus("interactive wait ✓", "interactive");
+    }
+
+    if (msg.type === "timing-wait-enter") {
+      addLog("cp", `wait-enter#${msg.waitNum} queue=${msg.queueLen} out=${msg.outLen} fio=${msg.fioCalls}`);
+      setStatus("interactive wait ✓", "interactive");
+    }
+
+    if (msg.type === "scheduler-checkpoint" || msg.type === "os-timing-checkpoint") {
+      addLog("cp", `${msg.type}:${msg.code} queue=${msg.queueLen} out=${msg.outLen}`);
     }
 
     if (msg.type === "status") {

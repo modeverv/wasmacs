@@ -3217,12 +3217,78 @@ X2/X3 確認後、org-mode 最小確認:
 
 ### Remaining Blockers
 
-- `Boot Test (--eval)` in the page still falls into a normal-top-level path and
-  currently ends at `Cannot open load file: No such file or directory, japan-util`.
-  The independent Node batch probe proves the same artifact can load pdmp and
-  run eval/GC, so this is now a page worker callMain/argument lifecycle issue.
-- `--quick --no-splash --nw` with pdmp still aborts before the Atomics.wait
-  checkpoint in `scripts/probe-browser-pdump-atomics-tty-command-loop.mjs`.
-  X2/X3/X4 remain open.
+- Cleared in follow-up:
+  - Page Boot Test now uses `callMain(["--dump-file=...","--batch"])` plus the
+    exported eval bridge and reports `BOOT-PDUMP: LOADED`, `BOOT-GC: PASS`.
+  - `--quick --no-splash -nw` with pdmp now emits terminal bytes and reaches the
+    Atomics waitpoint in `scripts/probe-browser-pdump-atomics-tty-command-loop.mjs`.
+  - `xterm-atomics-pdump.html` now reaches `interactive wait ✓` with real
+    `*scratch*` terminal output.
+
+### Follow-up Fixes Applied (2026-06-05)
+
+- Root cause for the pdmp `--nw` abort: the copied pdump source tree lacked
+  generated Unicode property Lisp (`charprop.el`, `uni-*.el`). Redisplay called
+  `bidi_initialize` (`vendor/emacs/src/bidi.c`) before the input waitpoint, and
+  the missing `bidi-class`/mirroring/bracket char-tables made it abort.
+- Root cause for `japan-util` during normal startup: the copied pdump source
+  tree also lacked generated `lisp/subdirs.el`, so `language/` was not added to
+  `load-path`; `language/japanese.el` registers `features japan-util`, then
+  `international/mule-cmds.el` requires it.
+- Synced native-generated `lisp/subdirs.el`, `international/charprop.el`, and
+  all `international/uni-*.el` into the pdump source tree before pbootstrap.
+- Corrected interactive startup args from `--nw` to Emacs' accepted `-nw`.
+- Added a `timing-wait-enter` host-library checkpoint so the browser page can
+  show the real Atomics waitpoint before input wakes it.
+
+### Current Evidence (2026-06-05)
+
+- Artifact hashes after regeneration:
+  - `temacs.wasm`: `07b7fd96c63f36b93fbee8f5afcd0b8c5855e2b6d40d3877cbe4ec5c26002312`
+  - `bootstrap-emacs.pdmp`: `9b38b2761a1a0bbcfa3512fdcd44561bbcbccb8e5b99dc4d222e52e688828717`
+- Browser `pdump-diagnostic.html`:
+  - `BOOT-VER: 30.2`
+  - `BOOT-PDUMP: LOADED`
+  - `BOOT-GC: PASS`
+- CLI probe:
+  - `tty-flush:YES`
+  - `atomics-wait:YES`
+  - `callMain-done:NO`
+- Browser `xterm-atomics-pdump.html`:
+  - `pdmp 26.4 MB materialized`
+  - `SAB ✓`
+  - `interactive wait ✓`
+  - debug checkpoint `wait-enter#1 queue=0 out=2471 fio=1`
+  - terminal shows `*scratch*` in Lisp Interaction mode without `japan-util` or
+    unknown-option warnings.
+
+### Remaining Scope
+
+- X4 was initially partially verified only through host input consumption, but
+  the follow-up below now clears the input/redisplay-loop blocker.
+
+### X4 Input/Redisplay Resolution (2026-06-05)
+
+- X4 is now verified on `xterm-atomics-pdump.html`.
+- Browser page:
+  `http://localhost:5173/app/xterm-atomics-pdump.html?run=1780624320762`
+- Evidence:
+  - User-visible xterm showed typed `a` in `*scratch*`.
+  - Page text extraction later also included a standalone `a` line in
+    `*scratch*`.
+  - Debug log reached `wait-enter#2 queue=0 out=2565`, after initial
+    `wait-enter#1 queue=0 out=2471`, proving redisplay/output advanced and the
+    command loop returned to the next Atomics waitpoint.
+- Source-grounded fix shape:
+  - `kbd_buffer_get_event` uses `gobble_input()` after the host waitpoint so
+    terminal input is moved into Emacs' keyboard buffer.
+  - Terminal keystrokes avoid stale pdmp-restored frame/kboard lookup by using
+    `current_kboard` before `event_to_kboard` and `selected_frame` before lispy
+    event frame/focus resolution.
+  - The wasm-specific switch-frame path is suppressed for tty keystrokes so the
+    real key event is converted and consumed.
+- Current artifact hashes after the latest rebuild:
+  - `temacs.wasm`: `3812ecc58f01ac9c88e93b3af050d7036109488e412352347854f15edf478ab3`
+  - `bootstrap-emacs.pdmp`: `fe66c16d682ac8ecbbaafc15d029752db0262153a09351532d5ab2a31f6d5b0e`
 
 **vendor/emacs unchanged.**

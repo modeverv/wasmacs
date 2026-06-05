@@ -262,9 +262,8 @@ self.onmessage = function(evt) {
       });
       break;
 
-    // Boot test: check pdumper state from WITHIN Emacs via --eval in callMain.
-    // This separates "pdmp boot" evidence from "post-exit eval" evidence.
-    // BOOT-PDUMP:LOADED in stdout = pdmp loaded during callMain startup.
+    // Boot test: run callMain in batch mode, then query Emacs state through the
+    // exported eval bridge while the same runtime image remains alive.
     case "reload-eval-via-callmain":
       whenReady(function() {
         ENV.LANG = "C"; ENV.LC_ALL = "C";
@@ -281,13 +280,7 @@ self.onmessage = function(evt) {
         var fileExists = false, statSize = 0;
         try { var fst2 = FS.stat(dumpArg); fileExists = true; statSize = fst2.size; } catch(e) {}
 
-        var bootArgs = [
-          "--dump-file=" + dumpArg, "--batch",
-          "--eval", '(princ (format "BOOT-VER:%s\\n" emacs-version))',
-          "--eval", '(princ (format "BOOT-PDUMP:%s\\n" (if (fboundp (quote pdumper-stats)) (if (pdumper-stats) "LOADED" "NIL") "NO-FB")))',
-          "--eval", '(progn (garbage-collect) (princ "BOOT-GC:PASS\\n"))',
-          "--eval", '(princ (format "BOOT-CLA:%s\\n" (if (boundp (quote command-line-args)) (prin1-to-string command-line-args) "UNBOUND")))'
-        ];
+        var bootArgs = ["--dump-file=" + dumpArg, "--batch"];
 
         checkpoint("callmain-boot-args", {
           argsJson: JSON.stringify(bootArgs),
@@ -296,28 +289,16 @@ self.onmessage = function(evt) {
           statSize: statSize
         });
 
-        var captured = [];
-        var origPrint = Module.print;
-        Module.print = function(text) { captured.push(text); logStdout(text); };
         var exit = -1, exitErr = "";
         try { exit = Module.callMain(bootArgs); } catch(e) { exitErr = String(e).substring(0, 200); }
-        Module.print = origPrint;
-        try {
-          var ttyOut = globalThis.__wasmacsTerminalOutputBytes || [];
-          if (ttyOut.length > 0) {
-            var ttyText = new TextDecoder().decode(new Uint8Array(ttyOut));
-            captured.push(ttyText);
-            logStdout(ttyText.slice(-8192));
-            ttyOut.length = 0;
-          }
-        } catch(ex) {}
+        checkpoint("callmain-boot-done", { exit: exit, err: exitErr });
 
-        checkpoint("callmain-boot-done", { exit: exit, err: exitErr, capturedN: captured.length });
-
-        var stdout = captured.join("\n");
-        function extr(prefix) {
-          var m = stdout.match(new RegExp(prefix + "([^\\n]*)"));
-          return m ? m[1].trim() : "NOT-FOUND";
+        function q(expr) {
+          try {
+            var ok = (Module.ccall("wasmacs_eval_string", "number", ["string"], [expr]) === 0);
+            var r = Module.ccall("wasmacs_last_result", "string", [], []) || "";
+            return ok ? r : "ERR:" + r;
+          } catch(e) { return "ERR:" + String(e).substring(0, 100); }
         }
 
         postMessage({
@@ -325,17 +306,17 @@ self.onmessage = function(evt) {
           fileExists: fileExists, statSize: statSize,
           bootArgs: JSON.stringify(bootArgs),
           exit: exit, exitErr: exitErr,
-          ver: extr("BOOT-VER:"),
-          pdump: extr("BOOT-PDUMP:"),
-          gc: extr("BOOT-GC:"),
-          cla: extr("BOOT-CLA:")
+          ver: q("emacs-version"),
+          pdump: q('(if (fboundp (quote pdumper-stats)) (if (pdumper-stats) "LOADED" "NIL") "NO-FB")'),
+          gc: q('(progn (garbage-collect) "PASS")'),
+          cla: q('(if (boundp (quote command-line-args)) (prin1-to-string command-line-args) "UNBOUND")')
         });
         checkpoint("boot-test-done");
         setTimeout(function() { postMessage({ type: "done" }); }, 200);
       });
       break;
 
-    // NW comparison test: --quick --no-splash --nw with/without pdmp
+    // NW comparison test: --quick --no-splash -nw with/without pdmp
     case "nw-test":
       whenReady(function() {
         ENV.LANG = "C"; ENV.LC_ALL = "C";
@@ -348,8 +329,8 @@ self.onmessage = function(evt) {
           checkpoint("nw-test-pdmp-materialized", { size: bytes.length });
         }
         var bootArgs = withPdmp
-          ? ["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "--nw"]
-          : ["--quick", "--no-splash", "--nw"];
+          ? ["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "-nw", "--eval", "(setq uniquify-trailing-separator-p nil)", "--eval", "(setq create-lockfiles nil)"]
+          : ["--quick", "--no-splash", "-nw", "--eval", "(setq uniquify-trailing-separator-p nil)", "--eval", "(setq create-lockfiles nil)"];
         if (withPdmp) ensureArgv0Executable();
         checkpoint("nw-test-callmain-start", { args: JSON.stringify(bootArgs), withPdmp: withPdmp });
         var exit = -1, exitErr = "";
