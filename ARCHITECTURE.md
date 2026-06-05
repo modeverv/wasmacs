@@ -409,6 +409,18 @@ host.process
 
 Milestone 6 ではこの境界を `docs/host-abi.md` と `wit/host-abi.wit` に落とした。WIT world は `emacs-core-host` とし、filesystem、clock、random、environment、stdio、process、gui を別 interface として import する。GUI は input event、frame metrics、redisplay/draw、clipboard に限定し、filesystem host calls とは混ぜない。
 
+Dired の初期 route は `host.process` を開けず、`ls-lisp` を使う。
+`loadup.el` のコピーソース patch で `(load "ls-lisp" nil t)`、
+`ls-lisp-use-insert-directory-program nil`、`insert-directory-program nil`
+を設定し、`insert-directory` が外部 `ls` ではなく Emacs の
+`directory-files` / `directory-files-and-attributes` / `file-attributes`
+系 primitive に落ちるようにする。このため Dired MVP の OS compatible
+条件は subprocess ではなく、`readdir`、`stat/lstat`、`readlink`、
+`access` 相当の filesystem capability を安定させることに置く。
+pdump 復元を使う Atomics xterm route では、古い pdmp cache や復元済み
+Lisp state に左右されないよう、worker 起動時にも同じ `ls-lisp`
+設定を idempotent に再適用する。
+
 初期 build route は Emscripten-first なので、WIT をそのまま toolchain に食わせられない可能性がある。その場合でも WIT は契約であり、JS glue や Emscripten FS hooks は adapter 層でこの意味論へ寄せる。`emacs-core.wasm` が DOM、OPFS、IndexedDB、Clipboard API、Canvas、File System Access API を直接呼ぶ構造にはしない。
 
 ## 実装フェーズ

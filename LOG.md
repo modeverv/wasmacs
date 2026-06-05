@@ -1784,6 +1784,77 @@ Inventory the old command bridge, mark it as legacy, designate the xterm.js path
 
 **vendor/emacs unchanged.**
 
+## 2026-06-05: Dired without external ls
+
+- Source check: `find-file` / `find-file-noselect` does not require external
+  `ls`; the external command path is `insert-directory` / Dired listing.
+- Decision: browser MVP keeps `host.process` unavailable and forces Dired
+  listing through `ls-lisp`.
+- Copied-source patch:
+  - `loadup.el` loads `ls-lisp` for the wasm profile.
+  - `ls-lisp-use-insert-directory-program` is set to nil.
+  - `insert-directory-program` is set to nil as an additional guard.
+- Added C/wasm facade exports:
+  `wasmacs_os_configure_dired_without_ls`,
+  `wasmacs_os_dired_without_ls_probe`, and
+  `wasmacs_os_filesystem_dired_state`.
+- Added `scripts/probe-browser-dired-without-ls.mjs` to run
+  `insert-directory` through `ls-lisp` and verify the required Emacs
+  primitives:
+  `directory-files`, `directory-files-and-attributes`, `file-attributes`,
+  `file-directory-p`, `file-readable-p`, and `file-symlink-p`.
+- Updated small OS contracts and docs so Dired MVP depends on filesystem
+  primitives (`readdir`, `stat/lstat`, `readlink`, access/open checks), not an
+  `ls` subprocess.
+- Validation:
+  - Rebuilt `artifacts/emacs-browser-persistent-spike`.
+  - `node scripts/probe-browser-dired-without-ls.mjs`: PASS.
+  - Probe readback:
+    `:backend ls-lisp`, `:host-process nil`, `:directory-files t`,
+    `:directory-files-and-attributes t`, `:file-attributes t`,
+    `:file-directory-p t`, `:file-readable-p t`.
+  - `npm test`: PASS.
+  - `npm run test:persistent`: PASS.
+
+**vendor/emacs unchanged.**
+
+## 2026-06-05: Dired on xterm Atomics pdump page
+
+- Brought the Dired-without-external-`ls` route to the
+  `emacs-browser-atomics-pdump` artifact used by
+  `app/xterm-atomics-pdump.html`.
+- `app/src/emacs-atomics-pdump-worker.js` now starts Emacs with an idempotent
+  `ls-lisp` eval so stale/restored pdmp state cannot silently re-enable
+  `insert-directory-program`.
+- Added `scripts/probe-browser-pdump-atomics-dired-without-ls.mjs` and
+  `npm run test:xterm-pdump-dired`.
+- Fixed malformed Perl substitutions in the os-compat branch of
+  `scripts/patch-emacs-host-entrypoint-spike.sh`; the Atomics pdump build
+  patch now applies cleanly again to the copied Emacs source.
+- Rebuilt `artifacts/emacs-browser-atomics-pdump`:
+  - `temacs.wasm`:
+    `afe4fb5c0737bb876ff1e9b56c69751e637b8735a82e0e760982e065f9e3c0e8`
+  - `bootstrap-emacs.pdmp`:
+    `de0bbd20c3a94c0ac5afd0429af6ea63e6443a339b1048150c2a15c4d3c960ff`
+  - `temacs.data`:
+    `65a90c0ca637934d5bd1130e21b1bbf233dc7e4ed062911bec54cfe98b9eac66`
+- Validation:
+  - `bash -n scripts/patch-emacs-host-entrypoint-spike.sh scripts/build-emacs-browser-atomics-pdump-profile.sh`: PASS.
+  - `node --check scripts/probe-browser-pdump-atomics-dired-without-ls.mjs`: PASS.
+  - `node --check app/src/emacs-atomics-pdump-worker.js`: PASS.
+  - `npm run test:xterm-pdump-dired`: PASS.
+  - `node scripts/probe-browser-pdump-atomics-tty-command-loop.mjs`: PASS.
+  - In-app Browser:
+    `http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart` reached
+    `interactive wait ✓`, showed `*scratch*`, and debug boot args contained
+    `(progn (require 'ls-lisp) (setq ls-lisp-use-insert-directory-program nil insert-directory-program nil))`.
+- Browser automation caveat: `Alt-x` did not reach Emacs through the Browser
+  tool and `C-x` was blocked as a native clipboard-like shortcut, so the
+  browser evidence is page boot/wait plus the artifact-level Dired probe rather
+  than a fully typed Dired command.
+
+**vendor/emacs unchanged.**
+
 ## Task M260605b: pdmp Atomics X4 input/redisplay
 
 ### Result (2026-06-05)

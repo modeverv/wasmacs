@@ -148,6 +148,7 @@ test("low-level root, pdump, and relocation facades are not JS-owned product beh
 test("current product scaffold facades are pending command and terminal tty", () => {
   const productScaffolds = Object.values(SmallOsFacades).filter((facade) => facade.status === FacadeStatus.productScaffold);
   assert.deepEqual(productScaffolds.map((facade) => facade.id).sort(), [
+    "dired-without-ls-facade",
     "pending-command-guard-facade",
     "terminal-tty-facade",
   ]);
@@ -160,6 +161,13 @@ test("current product scaffold facades are pending command and terminal tty", ()
   assert.equal(terminal.jsRole, JsRoles.hostCapabilityProvider);
   assert.equal(terminal.ownerServices.includes(SmallOsServices.terminalTty), true);
   assert.equal(terminal.sourceSurfaces.includes("vendor/emacs/src/term.c"), true);
+
+  const dired = facadeContract("dired-without-ls-facade");
+  assert.equal(dired.jsRole, JsRoles.hostCapabilityProvider);
+  assert.equal(dired.ownerServices.includes(SmallOsServices.filesystemPersistence), true);
+  assert.equal(dired.ownerServices.includes(SmallOsServices.hostCapability), true);
+  assert.equal(dired.sourceSurfaces.includes("vendor/emacs/lisp/ls-lisp.el"), true);
+  assert.equal(dired.cWasmEntrypoints.includes("wasmacs_os_dired_without_ls_probe"), true);
 });
 
 test("terminal tty startup is a product route with lifecycle and browser boundary checks", () => {
@@ -171,6 +179,18 @@ test("terminal tty startup is a product route with lifecycle and browser boundar
   assert.equal(terminal.crossServiceChecks.includes(CrossServiceChecks.terminalBrowserGui), true);
   assert.equal(terminal.sourceSurfaces.includes("vendor/emacs/src/dispnew.c"), true);
   assert.match(terminal.acceptance, /command_loop/);
+});
+
+test("Dired without ls is a product route over filesystem primitives, not host.process", () => {
+  const dired = createSubstrateRecord(SmallOsOperations.diredWithoutLs.id);
+  assert.equal(dired.treatment, BehaviorTreatment.product);
+  assert.equal(dired.ownerServices.includes(SmallOsServices.filesystemPersistence), true);
+  assert.equal(dired.ownerServices.includes(SmallOsServices.hostCapability), true);
+  assert.equal(dired.crossServiceChecks.includes(CrossServiceChecks.filesystemCommandLifecycle), true);
+  assert.equal(dired.sourceSurfaces.includes("vendor/emacs/src/dired.c"), true);
+  assert.equal(dired.sourceSurfaces.includes("vendor/emacs/lisp/ls-lisp.el"), true);
+  assert.match(dired.acceptance, /directory-files-and-attributes/);
+  assert.match(dired.acceptance, /host\.process/);
 });
 
 test("OS compatibility boundary inventory covers every small OS service", () => {

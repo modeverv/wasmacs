@@ -1,0 +1,13 @@
+READY
+ERR:warning: unsupported syscall: __syscall_mprotect
+ERR:warning: unsupported syscall: __syscall_prlimit64
+ERR:warning: unsupported syscall: __syscall_prlimit64
+ERR:warning: unsupported syscall: __syscall_prlimit64
+ERR:program exited (with status: 0), but keepRuntimeAlive() is set (counter=0) due to an async operation, so halting execution but not exiting the runtime or preventing further async execution (you can use emscripten_force_exit, if you want to force a true shutdown)
+PDMP_BYTES:12038560
+BOOT_EXIT:0
+CONFIGURE_STATUS:0
+CONFIGURE_READBACK:dired-without-ls-configured
+STATE:{"service":"Filesystem and Persistence","owner":"C/wasm facade","status":"product-scaffold","diredBackend":"ls-lisp","usesHostProcess":false,"requiredPrimitives":["directory-files","directory-files-and-attributes","file-attributes","file-directory-p","file-readable-p","file-symlink-p"],"probe":"wasmacs_os_dired_without_ls_probe"}
+PROBE_STATUS:0
+PROBE_READBACK:(:backend ls-lisp :host-process nil :dir /tmp :directory-files t :directory-files-and-attributes t :file-attributes t :file-directory-p t :file-readable-p t :file-symlink-p nil :listing-bytes 83 :listing-has-total 0)

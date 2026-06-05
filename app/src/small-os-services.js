@@ -56,8 +56,11 @@ export const EmacsSourceSurfaces = Object.freeze({
   callint: "vendor/emacs/src/callint.c",
   minibufferEl: "vendor/emacs/lisp/minibuffer.el",
   fileio: "vendor/emacs/src/fileio.c",
+  diredC: "vendor/emacs/src/dired.c",
   buffer: "vendor/emacs/src/buffer.c",
   filesEl: "vendor/emacs/lisp/files.el",
+  diredEl: "vendor/emacs/lisp/dired.el",
+  lsLispEl: "vendor/emacs/lisp/ls-lisp.el",
   insdel: "vendor/emacs/src/insdel.c",
   bindingsEl: "vendor/emacs/lisp/bindings.el",
   process: "vendor/emacs/src/process.c",
@@ -224,11 +227,14 @@ export const OsCompatibilityBoundaryInventory = Object.freeze({
     risk: BoundaryRisk.productScaffold,
     sourceSurfaces: [
       EmacsSourceSurfaces.fileio,
+      EmacsSourceSurfaces.diredC,
       EmacsSourceSurfaces.buffer,
       EmacsSourceSurfaces.filesEl,
+      EmacsSourceSurfaces.diredEl,
+      EmacsSourceSurfaces.lsLispEl,
       EmacsSourceSurfaces.insdel,
     ],
-    nextFacadeOrProbe: "wasmacs_os_filesystem_sync_boundary_state",
+    nextFacadeOrProbe: "wasmacs_os_dired_without_ls_probe",
   }),
   preloadedState: Object.freeze({
     service: SmallOsServices.preloadedState,
@@ -512,6 +518,30 @@ export const SmallOsFacades = Object.freeze({
     status: FacadeStatus.productScaffold,
     acceptance: "Browser worker --nw startup reaches command_loop/read_char/tty_read_avail_input, terminal bytes are observed in JS, and printable bytes resume Emacs through tty input.",
   }),
+  diredWithoutLs: Object.freeze({
+    id: "dired-without-ls-facade",
+    capability: "Make Dired use Emacs filesystem primitives through ls-lisp instead of host.process, shell, or an external ls binary.",
+    ownerServices: [
+      SmallOsServices.filesystemPersistence,
+      SmallOsServices.hostCapability,
+    ],
+    sourceSurfaces: [
+      EmacsSourceSurfaces.fileio,
+      EmacsSourceSurfaces.diredC,
+      EmacsSourceSurfaces.filesEl,
+      EmacsSourceSurfaces.diredEl,
+      EmacsSourceSurfaces.lsLispEl,
+      EmacsSourceSurfaces.callproc,
+    ],
+    cWasmEntrypoints: [
+      "wasmacs_os_configure_dired_without_ls",
+      "wasmacs_os_dired_without_ls_probe",
+      "wasmacs_os_filesystem_dired_state",
+    ],
+    jsRole: JsRoles.hostCapabilityProvider,
+    status: FacadeStatus.productScaffold,
+    acceptance: "Dired listing setup requires ls-lisp, forces ls-lisp-use-insert-directory-program to nil, and insert-directory over a mounted directory succeeds without calling insert-directory-program or host.process.",
+  }),
 });
 
 export const SmallOsOperations = Object.freeze({
@@ -607,6 +637,21 @@ export const SmallOsOperations = Object.freeze({
     ],
     treatment: BehaviorTreatment.product,
     acceptance: "Reverse sync happens after command completion or explicit save, then live visited buffers keep undo state.",
+  }),
+  diredWithoutLs: Object.freeze({
+    id: "dired-without-ls",
+    ownerServices: [SmallOsServices.filesystemPersistence, SmallOsServices.hostCapability],
+    crossServiceChecks: [CrossServiceChecks.filesystemCommandLifecycle, CrossServiceChecks.hostCapabilityBrowserGui],
+    sourceSurfaces: [
+      EmacsSourceSurfaces.fileio,
+      EmacsSourceSurfaces.diredC,
+      EmacsSourceSurfaces.filesEl,
+      EmacsSourceSurfaces.diredEl,
+      EmacsSourceSurfaces.lsLispEl,
+      EmacsSourceSurfaces.callproc,
+    ],
+    treatment: BehaviorTreatment.product,
+    acceptance: "Mounted filesystem supports directory-files, directory-files-and-attributes, file-attributes, file-directory-p, file-readable-p, and file-symlink-p well enough for ls-lisp insert-directory to build a Dired listing without host.process.",
   }),
   unavailableBrowserBoundary: Object.freeze({
     id: "unavailable-browser-boundary",

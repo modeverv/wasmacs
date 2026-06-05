@@ -3344,6 +3344,88 @@ X2/X3 確認後、org-mode 最小確認:
 
 **vendor/emacs unchanged.**
 
+### Dired Without External `ls` Slice (2026-06-05)
+
+- Goal: make the first Dired route depend on filesystem primitives rather than
+  `host.process`, shell, or an external `ls` binary.
+- Source-grounded decision:
+  - `vendor/emacs/lisp/files.el` `find-file` / `find-file-noselect` uses
+    file primitives for file visits.
+  - `vendor/emacs/lisp/minibuffer.el` file completion reaches
+    `file-name-completion` / `file-name-all-completions`.
+  - `vendor/emacs/src/dired.c` implements `directory-files`,
+    `directory-files-and-attributes`, and file-name completion over directory
+    reads.
+  - `vendor/emacs/lisp/files.el` `insert-directory` only needs an external
+    `insert-directory-program` when `ls-lisp-use-insert-directory-program`
+    remains non-nil.
+- Implementation:
+  - Added `dired-without-ls-facade` and `dired-without-ls` operation contracts
+    to `app/src/small-os-services.js`.
+  - Updated `scripts/patch-emacs-host-entrypoint-spike.sh` so copied
+    `loadup.el` loads `ls-lisp`, sets
+    `ls-lisp-use-insert-directory-program nil`, and sets
+    `insert-directory-program nil`.
+  - Added C/wasm exports:
+    `wasmacs_os_configure_dired_without_ls`,
+    `wasmacs_os_dired_without_ls_probe`, and
+    `wasmacs_os_filesystem_dired_state`.
+  - Added `scripts/probe-browser-dired-without-ls.mjs` and included it in
+    `npm run test:persistent`.
+- Dired MVP compatibility requirement is now explicit:
+  `directory-files`, `directory-files-and-attributes`, `file-attributes`,
+  `file-directory-p`, `file-readable-p`, and `file-symlink-p` must be backed by
+  `readdir`, `stat/lstat`, `readlink`, and access/open checks. External `ls`
+  remains unavailable for MVP.
+- Validation:
+  - Rebuilt `artifacts/emacs-browser-persistent-spike`.
+  - `artifacts/emacs-browser-persistent-spike/temacs.wasm` sha256:
+    `d5d4cc471e1e265ff5ba89aedf05c74f3ab60dbc7adbccbd281c75f8cd45c6ea`.
+  - `artifacts/emacs-browser-persistent-spike/temacs.data` sha256:
+    `30a8923eb76af119360244ab9d4c6f61ed2d493d1adef16c1c800c87487f3b00`.
+  - `node scripts/probe-browser-dired-without-ls.mjs`: PASS; readback reports
+    `:backend ls-lisp`, `:host-process nil`, `:directory-files t`,
+    `:directory-files-and-attributes t`, `:file-attributes t`,
+    `:file-directory-p t`, `:file-readable-p t`, and a generated listing.
+  - `npm test`: PASS.
+  - `npm run test:persistent`: PASS.
+
+### Dired on Atomics pdump xterm page (2026-06-05)
+
+- User-facing target:
+  `http://127.0.0.1:5173/app/xterm-atomics-pdump.html`.
+- Implementation:
+  - The Atomics pdump build exports
+    `wasmacs_os_configure_dired_without_ls`,
+    `wasmacs_os_dired_without_ls_probe`, and
+    `wasmacs_os_filesystem_dired_state`.
+  - `app/src/emacs-atomics-pdump-worker.js` now applies the same runtime eval
+    used by the persistent route:
+    `(require 'ls-lisp)` plus
+    `ls-lisp-use-insert-directory-program nil` and
+    `insert-directory-program nil`.
+  - Added `scripts/probe-browser-pdump-atomics-dired-without-ls.mjs` and
+    `npm run test:xterm-pdump-dired` so the exact
+    `emacs-browser-atomics-pdump` artifact is checked before browser delivery.
+- Validation:
+  - Rebuilt `artifacts/emacs-browser-atomics-pdump`.
+  - `artifacts/emacs-browser-atomics-pdump/temacs.wasm` sha256:
+    `afe4fb5c0737bb876ff1e9b56c69751e637b8735a82e0e760982e065f9e3c0e8`.
+  - `artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp` sha256:
+    `de0bbd20c3a94c0ac5afd0429af6ea63e6443a339b1048150c2a15c4d3c960ff`.
+  - `artifacts/emacs-browser-atomics-pdump/temacs.data` sha256:
+    `65a90c0ca637934d5bd1130e21b1bbf233dc7e4ed062911bec54cfe98b9eac66`.
+  - `npm run test:xterm-pdump-dired`: PASS.
+  - `node scripts/probe-browser-pdump-atomics-tty-command-loop.mjs`: PASS;
+    reached Atomics wait with tty output.
+  - In-app Browser opened
+    `http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart`; page
+    reached `interactive wait ✓`, displayed `*scratch*`, and debug boot args
+    included the `ls-lisp` Dired eval.
+- Automation caveat: the Browser tool still blocks native clipboard-like
+  control-key injection (`C-x`), so the page-level evidence is boot/wait plus
+  artifact probe rather than a full typed `C-x d` flow.
+
 ### Atomics pdump `.wasifs` Import/Export Fix (2026-06-05)
 
 - Symptom reported during `.wasifs` export/import work: export could produce a

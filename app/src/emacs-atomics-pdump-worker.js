@@ -391,6 +391,7 @@ async function startEmacs(pdmpBytes) {
     "--eval", "(setq uniquify-trailing-separator-p nil)",
     "--eval", "(setq create-lockfiles nil)",
     "--eval", "(setq auto-save-timeout nil)",
+    "--eval", "(progn (require 'ls-lisp) (setq ls-lisp-use-insert-directory-program nil insert-directory-program nil))",
   ];
   const bootArgs = pdmpBytes
     ? ["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "-nw", ...COMMON_EVALS]

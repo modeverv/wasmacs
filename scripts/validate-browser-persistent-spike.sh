@@ -33,6 +33,9 @@ rg "Module\\['_wasmacs_os_gc_permission'\\].*wasmacs_os_gc_permission" "${artifa
 rg "Module\\['_wasmacs_os_gc_permission_state'\\].*wasmacs_os_gc_permission_state" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_os_root_safety_probe'\\].*wasmacs_os_root_safety_probe" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_os_pending_command_state'\\].*wasmacs_os_pending_command_state" "${artifact_dir}/temacs" >/dev/null
+rg "Module\\['_wasmacs_os_configure_dired_without_ls'\\].*wasmacs_os_configure_dired_without_ls" "${artifact_dir}/temacs" >/dev/null
+rg "Module\\['_wasmacs_os_dired_without_ls_probe'\\].*wasmacs_os_dired_without_ls_probe" "${artifact_dir}/temacs" >/dev/null
+rg "Module\\['_wasmacs_os_filesystem_dired_state'\\].*wasmacs_os_filesystem_dired_state" "${artifact_dir}/temacs" >/dev/null
 rg "Module\\['_wasmacs_command_begin_minibuffer_probe'\\].*wasmacs_command_begin_minibuffer_probe" "${artifact_dir}/temacs" >/dev/null
 
 (

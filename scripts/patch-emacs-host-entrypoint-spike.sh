@@ -7,6 +7,7 @@ source_file="${spike_src}/src/emacs.c"
 keyboard_file="${spike_src}/src/keyboard.c"
 minibuf_file="${spike_src}/src/minibuf.c"
 sysdep_file="${spike_src}/src/sysdep.c"
+loadup_file="${spike_src}/lisp/loadup.el"
 waitpoint_mode="${WASMACS_ASYNCIFY_WAITPOINT_MODE:-read-char}"
 terminal_tty_enabled="${WASMACS_ENABLE_ASYNCIFY_WAITPOINT:-0}"
 
@@ -19,13 +20,12 @@ if [ ! -f "${source_file}" ] || [ ! -f "${keyboard_file}" ] || [ ! -f "${minibuf
 fi
 
 if rg 'wasmacs terminal tty service spike' "${sysdep_file}" >/dev/null; then
-  perl -0pi -e 's#\n/\* wasmacs terminal tty service spike\. \*/\nextern int wasmacs_host_wait_for_input \(void\);\nextern int wasmacs_host_terminal_input_available \(void\);\nextern int wasmacs_host_terminal_read_byte \(void\);\nextern int wasmacs_host_is_tty_fd \(int fd\);\nextern int wasmacs_host_scheduler_checkpoint \(int code\);\n##' "${sysdep_file}"
+  perl -0pi -e 's~\n/\* wasmacs terminal tty service spike\. \*/\nextern int wasmacs_host_wait_for_input \(void\);\nextern int wasmacs_host_terminal_input_available \(void\);\nextern int wasmacs_host_terminal_read_byte \(void\);\nextern int wasmacs_host_is_tty_fd \(int fd\);\nextern int wasmacs_host_scheduler_checkpoint \(int code\);\n~~' "${sysdep_file}"
   perl -0pi -e 's~\n#ifdef __EMSCRIPTEN__\n  if \(wasmacs_host_is_tty_fd \(fd\)\)\n    \{\n      unsigned char \*tty_buf = buf;\n      ptrdiff_t bytes_read = 0;\n\n      while \(bytes_read == 0\)\n        \{\n          while \(bytes_read < nbyte\)\n            \{\n              int byte = wasmacs_host_terminal_read_byte \(\);\n              if \(byte < 0\)\n                break;\n              tty_buf\[bytes_read\+\+\] = \(unsigned char\) byte;\n            \}\n\n          if \(bytes_read > 0\)\n            return bytes_read;\n\n          if \(interruptible\)\n            maybe_quit \(\);\n          wasmacs_host_wait_for_input \(\);\n        \}\n    \}\n#endif\n~~' "${sysdep_file}"
 fi
 
 if [ "${terminal_tty_enabled}" = "1" ] && [ "${waitpoint_mode}" != "os-compat" ]; then
-  perl -0pi -e 's#/\* Read from FD to a buffer BUF with size NBYTE\.\n#/* wasmacs terminal tty service spike. */\nextern int wasmacs_host_wait_for_input (void);\nextern int wasmacs_host_terminal_input_available (void);\nextern int wasmacs_host_terminal_read_byte (void);\nextern int wasmacs_host_is_tty_fd (int fd);\nextern int wasmacs_host_scheduler_checkpoint (int code);
-extern void wasmacs_os_timing_checkpoint (int code);\n\n/* Read from FD to a buffer BUF with size NBYTE.\n#' "${sysdep_file}"
+  perl -0pi -e 's#/\* Read from FD to a buffer BUF with size NBYTE\.\n#/* wasmacs terminal tty service spike. */\nextern int wasmacs_host_wait_for_input (void);\nextern int wasmacs_host_terminal_input_available (void);\nextern int wasmacs_host_terminal_read_byte (void);\nextern int wasmacs_host_is_tty_fd (int fd);\nextern int wasmacs_host_scheduler_checkpoint (int code);\nextern void wasmacs_os_timing_checkpoint (int code);\n\n/* Read from FD to a buffer BUF with size NBYTE.\n#' "${sysdep_file}"
 
   perl -0pi -e 's~  ssize_t result;\n\n  do~  ssize_t result;\n\n#ifdef __EMSCRIPTEN__\n  if (wasmacs_host_is_tty_fd (fd))\n    {\n      unsigned char *tty_buf = buf;\n      ptrdiff_t bytes_read = 0;\n\n      while (bytes_read == 0)\n        {\n          while (bytes_read < nbyte)\n            {\n              int byte = wasmacs_host_terminal_read_byte ();\n              if (byte < 0)\n                break;\n              wasmacs_host_scheduler_checkpoint (102);\n              tty_buf[bytes_read++] = (unsigned char) byte;\n            }\n\n          if (bytes_read > 0)\n            return bytes_read;\n\n          if (interruptible)\n            maybe_quit ();\n          wasmacs_host_scheduler_checkpoint (100);\n          wasmacs_host_wait_for_input ();\n          wasmacs_host_scheduler_checkpoint (101);\n        }\n    }\n#endif\n\n  do~' "${sysdep_file}"
 fi
@@ -39,6 +39,7 @@ static char *wasmacs_last_os_lifecycle_state;
 static char *wasmacs_last_os_stack_bounds_probe;
 static char *wasmacs_last_os_gc_permission_state;
 static char *wasmacs_last_os_root_safety_probe;
+static char *wasmacs_last_os_filesystem_dired_state;
 static int wasmacs_command_busy;
 static int wasmacs_eval_had_error;
 static int wasmacs_entrypoint_refresh_count;
@@ -57,10 +58,13 @@ int wasmacs_os_pop_gc_guard (void);
 int wasmacs_os_begin_command (const char *kind);
 int wasmacs_os_finish_command (void);
 int wasmacs_os_cancel_command (void);
+int wasmacs_os_configure_dired_without_ls (void);
+int wasmacs_os_dired_without_ls_probe (void);
 const char *wasmacs_os_lifecycle_state (void);
 const char *wasmacs_os_stack_bounds_probe (void);
 const char *wasmacs_os_gc_permission_state (void);
 const char *wasmacs_os_root_safety_probe (void);
+const char *wasmacs_os_filesystem_dired_state (void);
 static char const *wasmacs_os_phase_name (void);
 static Lisp_Object wasmacs_eval_error_handler (Lisp_Object error);
 static Lisp_Object wasmacs_recursive_edit_body (Lisp_Object ignored);
@@ -1129,6 +1133,87 @@ wasmacs_os_cancel_command (void)
   return 0;
 }
 
+/* --- C/wasm OS compat kernel: Filesystem / Dired without host.process --- */
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_os_configure_dired_without_ls (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  wasmacs_eval_had_error = 0;
+  Lisp_Object result = internal_condition_case_1 (wasmacs_eval_body,
+                                                 build_string ("(progn (require 'ls-lisp) (setq ls-lisp-use-insert-directory-program nil) (setq insert-directory-program nil) 'dired-without-ls-configured)"),
+                                                 Qt,
+                                                 wasmacs_eval_error_handler);
+  wasmacs_store_result (result);
+
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return wasmacs_eval_had_error ? 1 : 0;
+}
+
+__attribute__ ((used, visibility ("default")))
+int
+wasmacs_os_dired_without_ls_probe (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  wasmacs_eval_had_error = 0;
+  Lisp_Object source = build_string (
+    "(progn"
+    " (require 'ls-lisp)"
+    " (setq ls-lisp-use-insert-directory-program nil)"
+    " (setq insert-directory-program nil)"
+    " (let* ((dir (cond ((file-directory-p \"/home/user\") \"/home/user\")"
+    "                   ((file-directory-p \"/tmp\") \"/tmp\")"
+    "                   (t default-directory)))"
+    "        (entries (directory-files dir nil nil t))"
+    "        (attrs (directory-files-and-attributes dir nil nil t 'integer))"
+    "        (dir-attrs (file-attributes dir 'integer))"
+    "        (listing (with-temp-buffer"
+    "                   (insert-directory dir \"-al\" nil t)"
+    "                   (buffer-string))))"
+    "   (list :backend 'ls-lisp"
+    "         :host-process nil"
+    "         :dir dir"
+    "         :directory-files (consp entries)"
+    "         :directory-files-and-attributes (consp attrs)"
+    "         :file-attributes (consp dir-attrs)"
+    "         :file-directory-p (file-directory-p dir)"
+    "         :file-readable-p (file-readable-p dir)"
+    "         :file-symlink-p (file-symlink-p dir)"
+    "         :listing-bytes (length listing)"
+    "         :listing-has-total (string-match-p \"\\\\`total\" listing))))");
+  Lisp_Object result = internal_condition_case_1 (wasmacs_eval_body, source,
+                                                 Qt,
+                                                 wasmacs_eval_error_handler);
+  wasmacs_store_result (result);
+
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return wasmacs_eval_had_error ? 1 : 0;
+}
+
+__attribute__ ((used, visibility ("default")))
+const char *
+wasmacs_os_filesystem_dired_state (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  char *state = xmalloc (1024);
+  snprintf (state, 1024,
+            "{\"service\":\"Filesystem and Persistence\",\"owner\":\"C/wasm facade\","
+            "\"status\":\"product-scaffold\",\"diredBackend\":\"ls-lisp\","
+            "\"usesHostProcess\":false,\"requiredPrimitives\":["
+            "\"directory-files\",\"directory-files-and-attributes\","
+            "\"file-attributes\",\"file-directory-p\",\"file-readable-p\","
+            "\"file-symlink-p\"],\"probe\":\"wasmacs_os_dired_without_ls_probe\"}");
+
+  xfree (wasmacs_last_os_filesystem_dired_state);
+  wasmacs_last_os_filesystem_dired_state = state;
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return wasmacs_last_os_filesystem_dired_state;
+}
+
 EOF
 export WASMACS_ENTRYPOINT_BLOCK="${entrypoint_block}"
 
@@ -1138,12 +1223,28 @@ fi
 
 perl -0pi -e 'BEGIN { $block = $ENV{"WASMACS_ENTRYPOINT_BLOCK"} } s/DEFUN \("invocation-name", Finvocation_name, Sinvocation_name, 0, 0, 0,\n/${block}\nDEFUN ("invocation-name", Finvocation_name, Sinvocation_name, 0, 0, 0,\n/' "$source_file"
 
+if [ -f "${loadup_file}" ] && ! rg 'wasmacs os-compat: Dired without external ls' "${loadup_file}" >/dev/null; then
+  perl -0pi -e 's#(\(load "bindings"\)\n)#$1\n;; wasmacs os-compat: Dired without external ls.\n;; Browser MVP keeps host.process unavailable, so directory listing must use\n;; Emacs filesystem primitives through ls-lisp instead of an ls subprocess.\n(load "ls-lisp" nil t)\n(setq ls-lisp-use-insert-directory-program nil)\n(setq insert-directory-program nil)\n#' "${loadup_file}"
+fi
+
 if rg 'wasmacs_host_wait_for_input' "${keyboard_file}" >/dev/null; then
-  perl -0pi -e 's#/\* wasmacs browser input injection spike\. \*/.*?\nvoid\nkbd_buffer_store_event#void\nkbd_buffer_store_event#sg' "${keyboard_file}"
+  perl -0pi -e 's~/\* wasmacs browser input injection spike\. \*/.*?\nvoid\nkbd_buffer_store_event~void\nkbd_buffer_store_event~sg' "${keyboard_file}"
   perl -0pi -e 's/\n\/\* wasmacs asyncify input waitpoint spike\. \*\/\nextern int wasmacs_host_wait_for_input \(void\);\n//s' "${keyboard_file}"
+  perl -0pi -e 's~\n/\* wasmacs os-compat terminal input injection spike\. \*/\nextern int wasmacs_host_wait_for_input \(void\);\n(?:extern int wasmacs_host_terminal_input_available \(void\);\n)?(?:extern int wasmacs_host_terminal_read_byte \(void\);)?(?:extern void wasmacs_os_timing_checkpoint \(int code\);)?\n*~~g' "${keyboard_file}"
+  perl -0pi -e 's~\nextern int wasmacs_host_terminal_input_available \(void\);\n~~g' "${keyboard_file}"
+  perl -0pi -e 's~\nextern int wasmacs_host_terminal_read_byte \(void\);(?:extern void wasmacs_os_timing_checkpoint \(int code\);)?\n~\n~g' "${keyboard_file}"
   perl -0pi -e 's/\nextern int wasmacs_host_scheduler_checkpoint \(int code\);\n//s' "${keyboard_file}"
+  perl -0pi -e 's/\nextern void wasmacs_os_timing_checkpoint \(int code\);\n//g' "${keyboard_file}"
   perl -0pi -e 's/\n\s+\/\* wasmacs asyncify input waitpoint spike: yield only while an\n\s+active minibuffer read is waiting for real input\.  The JS import is\n\s+currently a no-op probe hook; later input-event work must make this\n\s+the suspension point that browser input resumes\.  \*\/\n\s+if \(minibuf_level > 0 && !end_time && !input_pending\n\s+&& !detect_input_pending_run_timers \(0\)\)\n\s+wasmacs_host_wait_for_input \(\);\n//s' "${keyboard_file}"
   perl -0pi -e 's~\n#ifdef __EMSCRIPTEN__\n  wasmacs_host_scheduler_checkpoint \(200\);\n#endif[ \t]*~\n~' "${keyboard_file}"
+  if [ "${terminal_tty_enabled}" != "1" ] || [ "${waitpoint_mode}" != "os-compat" ]; then
+    perl -0pi -e 's~\n#ifdef __EMSCRIPTEN__\n\s+if \(kbd_fetch_ptr == kbd_store_ptr\)\n\s+\{\n\s+wasmacs_host_wait_for_input \(\);\n\s+wasmacs_os_timing_checkpoint \(10\);\n\s+struct terminal \*t;\n\s+struct input_event ie;\n\s+for \(t = terminal_list; t; t = t->next_terminal\)\n\s+if \(t->read_socket_hook\)\n\s+while \(\(\*t->read_socket_hook\) \(t, &ie\) > 0\)\n\s+;\n\s+wasmacs_os_timing_checkpoint \(20\);\n\s+\}\n\s+wasmacs_os_timing_checkpoint \(30\);\n#else\n\s+wait_reading_process_output \(0, 0, -1, do_display, Qnil, NULL, 0\);\n#endif~\n\t  wait_reading_process_output (0, 0, -1, do_display, Qnil, NULL, 0);~sg' "${keyboard_file}"
+    perl -0pi -e 's~\n#ifdef __EMSCRIPTEN__\n\s+if \(kbd_fetch_ptr == kbd_store_ptr\)\n\s+\{\n\s+wasmacs_host_wait_for_input \(\);\n\s+wasmacs_os_timing_checkpoint \(10\);\n\s+gobble_input \(\);\n\s+wasmacs_os_timing_checkpoint \(kbd_fetch_ptr != kbd_store_ptr \? 21 : 22\);\n\s+\}\n\s+wasmacs_os_timing_checkpoint \(kbd_fetch_ptr != kbd_store_ptr \? 31 : 32\);\n#else\n\s+wait_reading_process_output \(0, 0, -1, do_display, Qnil, NULL, 0\);\n#endif~\n\t  wait_reading_process_output (0, 0, -1, do_display, Qnil, NULL, 0);~sg' "${keyboard_file}"
+    perl -0pi -e 's~\n#ifdef __EMSCRIPTEN__\n\s+if \(kbd_fetch_ptr == kbd_store_ptr\)\n\s+\{\n\s+wasmacs_host_wait_for_input \(\);\n\s+wasmacs_os_timing_checkpoint \(11\);\n\s+gobble_input \(\);\n\s+wasmacs_os_timing_checkpoint \(kbd_fetch_ptr != kbd_store_ptr \? 23 : 24\);\n\s+\}\n#else\n\s+wait_reading_process_output \(min \(duration\.tv_sec,\n\s+WAIT_READING_MAX\),\n\s+duration\.tv_nsec,\n\s+-1, 1, Qnil, NULL, 0\);\n#endif~\n\t      wait_reading_process_output (min (duration.tv_sec,\n\t\t\t\t\t\tWAIT_READING_MAX),\n\t\t\t\t\t   duration.tv_nsec,\n\t\t\t\t\t   -1, 1, Qnil, NULL, 0);~sg' "${keyboard_file}"
+  fi
+  if [ "${WASMACS_ENABLE_ASYNCIFY_WAITPOINT:-0}" != "1" ]; then
+    perl -ni -e 'print unless /wasmacs_host_wait_for_input|wasmacs_host_terminal_input_available|wasmacs_host_terminal_read_byte|wasmacs_os_timing_checkpoint/' "${keyboard_file}"
+  fi
 fi
 
 if rg 'wasmacs_host_wait_for_input' "${minibuf_file}" >/dev/null; then
@@ -1192,7 +1293,7 @@ EOF
 export WASMACS_INPUT_BLOCK="${input_block}"
 
 if rg 'wasmacs_input_text' "${keyboard_file}" >/dev/null; then
-  perl -0pi -e 's#/\* wasmacs browser input injection spike\. \*/.*?\nvoid\nkbd_buffer_store_event#void\nkbd_buffer_store_event#sg' "${keyboard_file}"
+  perl -0pi -e 's~/\* wasmacs browser input injection spike\. \*/.*?\nvoid\nkbd_buffer_store_event~void\nkbd_buffer_store_event~sg' "${keyboard_file}"
 fi
 
 perl -0pi -e 'BEGIN { $block = $ENV{"WASMACS_INPUT_BLOCK"} } s#void\nkbd_buffer_store_event \(register struct input_event \*event\)\n\{#\n\n${block}\nvoid\nkbd_buffer_store_event (register struct input_event *event)\n{#' "${keyboard_file}"
@@ -1200,12 +1301,12 @@ perl -0pi -e 'BEGIN { $block = $ENV{"WASMACS_INPUT_BLOCK"} } s#void\nkbd_buffer_
 if [ "${WASMACS_ENABLE_ASYNCIFY_WAITPOINT:-0}" = "1" ]; then
   case "${waitpoint_mode}" in
     read-char)
-      perl -0pi -e 's#\n      /\* wasmacs asyncify input waitpoint spike:.*?\n\n      c = read_decoded_event_from_main_queue#\n      c = read_decoded_event_from_main_queue#sg' "${keyboard_file}"
-      perl -0pi -e 's#/\* Read a character from the keyboard; call the redisplay if needed\.  \*/#/\* wasmacs asyncify input waitpoint spike. \*/\nextern int wasmacs_host_wait_for_input (void);\nextern int wasmacs_host_scheduler_checkpoint (int code);
+      perl -0pi -e 's~\n      /\* wasmacs asyncify input waitpoint spike:.*?\n\n      c = read_decoded_event_from_main_queue#\n      c = read_decoded_event_from_main_queue~sg' "${keyboard_file}"
+      perl -0pi -e 's~/\* Read a character from the keyboard; call the redisplay if needed\.  \*/#/\* wasmacs asyncify input waitpoint spike. \*/\nextern int wasmacs_host_wait_for_input (void);\nextern int wasmacs_host_scheduler_checkpoint (int code);
 extern void wasmacs_os_timing_checkpoint (int code);\n\n/\* Read a character from the keyboard; call the redisplay if needed.  \*/#' "${keyboard_file}"
       perl -0pi -e 's~read_char \(int commandflag, Lisp_Object map,\n\t   Lisp_Object prev_event,\n\t   bool \*used_mouse_menu, struct timespec \*end_time\)\n\{~read_char (int commandflag, Lisp_Object map,\n\t   Lisp_Object prev_event,\n\t   bool *used_mouse_menu, struct timespec *end_time)\n{\n#ifdef __EMSCRIPTEN__\n  wasmacs_host_scheduler_checkpoint (200);\n#endif\n~' "${keyboard_file}"
 
-      perl -0pi -e 's#  if \(NILP \(c\)\)\n    \{\n      c = read_decoded_event_from_main_queue \(end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu\);#  if (NILP (c))\n    {\n      /* wasmacs asyncify input waitpoint spike: yield when an interactive\n         command loop would otherwise block for real browser input.  In the\n         browser host, stdin readiness can look like input_pending without a\n         real Emacs key event, so JS owns the actual wait/resume boundary. */\n      if (!noninteractive && !end_time)\n        {\n          wasmacs_host_scheduler_checkpoint (201);\n          wasmacs_host_wait_for_input ();\n          wasmacs_host_scheduler_checkpoint (202);\n        }\n\n      c = read_decoded_event_from_main_queue (end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu);#' "${keyboard_file}"
+      perl -0pi -e 's~  if \(NILP \(c\)\)\n    \{\n      c = read_decoded_event_from_main_queue \(end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu\);#  if (NILP (c))\n    {\n      /* wasmacs asyncify input waitpoint spike: yield when an interactive\n         command loop would otherwise block for real browser input.  In the\n         browser host, stdin readiness can look like input_pending without a\n         real Emacs key event, so JS owns the actual wait/resume boundary. */\n      if (!noninteractive && !end_time)\n        {\n          wasmacs_host_scheduler_checkpoint (201);\n          wasmacs_host_wait_for_input ();\n          wasmacs_host_scheduler_checkpoint (202);\n        }\n\n      c = read_decoded_event_from_main_queue (end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu);#' "${keyboard_file}"
 
       # Patch kbd_buffer_get_event: replace wait_reading_process_output with our
       # OS-level blocking wait. Eliminates select()/setitimer loop overhead.
@@ -1230,15 +1331,16 @@ extern void wasmacs_os_timing_checkpoint (int code);\n\n/\* Read a character fro
 	      #   Atomics.wait → __wasmacsTerminalInputBytes
 	      #   → tty_read_avail_input → emacs_read → emfile_read → read()
 	      #   → TTY get_char → kbd_buffer_store_event
-	      perl -0pi -e 's#/\* wasmacs os-compat terminal input injection spike\. \*/.*?/\* Read a character from the keyboard; call the redisplay if needed\.  \*/#/* Read a character from the keyboard; call the redisplay if needed.  */#sg' "${keyboard_file}"
-	      perl -0pi -e 's#/\* Read a character from the keyboard.*?\*/#/\* wasmacs os-compat terminal input injection spike. \*/\
-	extern int wasmacs_host_wait_for_input (void);\
-extern int wasmacs_host_terminal_input_available (void);\
-extern int wasmacs_host_terminal_read_byte (void);\
+	      perl -0pi -e 's~/\* wasmacs os-compat terminal input injection spike\. \*/.*?/\* Read a character from the keyboard; call the redisplay if needed\.  \*/~/* Read a character from the keyboard; call the redisplay if needed.  */~sg' "${keyboard_file}"
+	      export WASMACS_KBD_OSCOMPAT_HEADER='/* wasmacs os-compat terminal input injection spike. */
+extern int wasmacs_host_wait_for_input (void);
+extern int wasmacs_host_terminal_input_available (void);
+extern int wasmacs_host_terminal_read_byte (void);
 extern int wasmacs_host_scheduler_checkpoint (int code);
-extern void wasmacs_os_timing_checkpoint (int code);\
-\
-/\* Read a character from the keyboard; call the redisplay if needed.  \*/#' "${keyboard_file}"
+extern void wasmacs_os_timing_checkpoint (int code);
+
+/* Read a character from the keyboard; call the redisplay if needed.  */'
+	      perl -0pi -e 'BEGIN { $p = $ENV{"WASMACS_KBD_OSCOMPAT_HEADER"} } s~/\* Read a character from the keyboard.*?\*/~$p~s' "${keyboard_file}"
 
       # Clean up any previous kbd_buffer_get_event patches
       perl -0pi -e '
@@ -1274,15 +1376,15 @@ extern void wasmacs_os_timing_checkpoint (int code);\
 	  wait_reading_process_output (0, 0, -1, do_display, Qnil, NULL, 0);
 #endif'
 	      perl -0pi -e 'BEGIN { $p = $ENV{"WASMACS_KBD_WAIT_OSCOMPAT_PATCH"} } s#\t  wait_reading_process_output \(0, 0, -1, do_display, Qnil, NULL, 0\);#${p}#' "${keyboard_file}"
-	      perl -0pi -e 's#\n\s+wasmacs_os_timing_checkpoint \(40\);\n\s+/\* See https://lists\.gnu\.org/r/emacs-devel/2005-05/msg00297\.html#\n      /* See https://lists.gnu.org/r/emacs-devel/2005-05/msg00297.html#' "${keyboard_file}"
-	      perl -0pi -e 's#\n\s+wasmacs_os_timing_checkpoint \(51\);##g' "${keyboard_file}"
+	      perl -0pi -e 's~\n\s+wasmacs_os_timing_checkpoint \(40\);\n\s+/\* See https://lists\.gnu\.org/r/emacs-devel/2005-05/msg00297\.html~\n      /* See https://lists.gnu.org/r/emacs-devel/2005-05/msg00297.html~' "${keyboard_file}"
+	      perl -0pi -e 's~\n\s+wasmacs_os_timing_checkpoint \(51\);~~g' "${keyboard_file}"
 	      if ! rg 'wasmacs_os_timing_checkpoint \(41\)' "${keyboard_file}" >/dev/null; then
 	        perl -0pi -e 's~(\n\s+obj = make_lispy_event \(&event->ie\);\n)~$1		      wasmacs_os_timing_checkpoint (41);\n~' "${keyboard_file}"
 	      fi
 	      if ! rg 'wasmacs_os_timing_checkpoint \(42\)' "${keyboard_file}" >/dev/null; then
 	        perl -0pi -e 's~(      switch \(event->kind\)\n      \{.*?\n\s*default:\n\s*\{\n)~$1#ifdef __EMSCRIPTEN__\n		  wasmacs_os_timing_checkpoint (42);\n#endif\n~s' "${keyboard_file}"
 	      fi
-	      perl -0pi -e 's#\n\s+wasmacs_os_timing_checkpoint \(43\);##g' "${keyboard_file}"
+	      perl -0pi -e 's~\n\s+wasmacs_os_timing_checkpoint \(43\);~~g' "${keyboard_file}"
 	      if ! rg 'wasmacs os-compat: do not synthesize switch-frame for tty keystrokes' "${keyboard_file}" >/dev/null; then
 	        perl -0pi -e 's~(\n\s+if \(!EQ \(frame, internal_last_event_frame\)\n\s+&& !EQ \(frame, selected_frame\)\)\n\s+obj = make_lispy_switch_frame \(frame\);)~\n		  /* wasmacs os-compat: do not synthesize switch-frame for tty keystrokes.\n		     The pdmp-restored terminal frame can compare unequal here even though\n		     the key belongs to the active terminal; returning switch-frame first\n		     leaves the real key queued and the browser page never redisplays it. */\n#ifdef __EMSCRIPTEN__\n		  if (!(event->ie.kind == ASCII_KEYSTROKE_EVENT\n		        || event->ie.kind == MULTIBYTE_CHAR_KEYSTROKE_EVENT\n		        || event->ie.kind == NON_ASCII_KEYSTROKE_EVENT)\n		      && !EQ (frame, internal_last_event_frame)\n		      && !EQ (frame, selected_frame))\n		    obj = make_lispy_switch_frame (frame);\n#else$1\n#endif~' "${keyboard_file}"
 	      fi
@@ -1334,17 +1436,17 @@ extern void wasmacs_os_timing_checkpoint (int code);\
 	        perl -0pi -e 's~(\n		      obj = make_lispy_event \(&event->ie\);\n)~\n#ifdef __EMSCRIPTEN__\n		      wasmacs_os_timing_checkpoint (47);\n#endif\n$1#ifdef __EMSCRIPTEN__\n		      wasmacs_os_timing_checkpoint (48);\n#endif\n~' "${keyboard_file}"
 	      fi
 	      if ! rg 'wasmacs_os_timing_checkpoint \(51\)' "${keyboard_file}" >/dev/null; then
-	        perl -0pi -e 's#(	  /\* Handle things that only apply to characters\.  \*/\n	  if \(FIXNUMP \(c\)\)\n	    \{\n)#${1}	      wasmacs_os_timing_checkpoint (51);\n#' "${keyboard_file}"
+	        perl -0pi -e 's~(	  /\* Handle things that only apply to characters\.  \*/\n	  if \(FIXNUMP \(c\)\)\n	    \{\n)~${1}	      wasmacs_os_timing_checkpoint (51);\n~' "${keyboard_file}"
 	      fi
 	      if ! rg 'wasmacs_os_timing_checkpoint \(33\)' "${keyboard_file}" >/dev/null; then
 	        perl -0pi -e 's~(\n#ifdef HAVE_X_WINDOWS\n  /\* Handle pending selection requests)~\n#ifdef __EMSCRIPTEN__\n  wasmacs_os_timing_checkpoint (33);\n#endif\n$1~' "${keyboard_file}"
 	      fi
 	      if ! rg 'wasmacs_os_timing_checkpoint \(40\)' "${keyboard_file}" >/dev/null; then
-	        perl -0pi -e 's#(  /\* At this point, we know that there is a readable event available\n     somewhere\.  If the event queue is empty, then there must be a\n     mouse movement enabled and available\.  \*/\n  if \(kbd_fetch_ptr != kbd_store_ptr\)\n    \{\n)#${1}      wasmacs_os_timing_checkpoint (40);\n#' "${keyboard_file}"
+	        perl -0pi -e 's~(  /\* At this point, we know that there is a readable event available\n     somewhere\.  If the event queue is empty, then there must be a\n     mouse movement enabled and available\.  \*/\n  if \(kbd_fetch_ptr != kbd_store_ptr\)\n    \{\n)~${1}      wasmacs_os_timing_checkpoint (40);\n~' "${keyboard_file}"
 	      fi
-	      perl -0pi -e 's#\n\s+wasmacs_os_timing_checkpoint \(1000 \+ event->kind\);##g' "${keyboard_file}"
+	      perl -0pi -e 's~\n\s+wasmacs_os_timing_checkpoint \(1000 \+ event->kind\);~~g' "${keyboard_file}"
 	      if ! rg 'wasmacs_os_timing_checkpoint \(1000 \+ event->kind\)' "${keyboard_file}" >/dev/null; then
-	        perl -0pi -e 's#(      wasmacs_os_timing_checkpoint \(40\);\n      union buffered_input_event \*event = kbd_fetch_ptr;\n)#${1}      wasmacs_os_timing_checkpoint (1000 + event->kind);\n#' "${keyboard_file}"
+	        perl -0pi -e 's~(      wasmacs_os_timing_checkpoint \(40\);\n      union buffered_input_event \*event = kbd_fetch_ptr;\n)~${1}      wasmacs_os_timing_checkpoint (1000 + event->kind);\n~' "${keyboard_file}"
 	      fi
 	      if ! rg 'wasmacs os-compat: current_kboard for terminal keystrokes' "${keyboard_file}" >/dev/null; then
 	        perl -0pi -e 's~      \*kbp = event_to_kboard \(&event->ie\);\n#ifdef __EMSCRIPTEN__\n      wasmacs_os_timing_checkpoint \(1100 \+ event->kind\);\n#endif~      *kbp = event_to_kboard (&event->ie);~g' "${keyboard_file}"
@@ -1361,9 +1463,9 @@ extern void wasmacs_os_timing_checkpoint (int code);\
 	      fi
 	      ;;
     minibuf-setup)
-      perl -0pi -e 's#static Lisp_Object\nread_minibuf #/\* wasmacs asyncify minibuffer setup waitpoint spike. \*/\nextern int wasmacs_host_wait_for_input (void);\n\nstatic Lisp_Object\nread_minibuf #' "${minibuf_file}"
+      perl -0pi -e 's~static Lisp_Object\nread_minibuf #/\* wasmacs asyncify minibuffer setup waitpoint spike. \*/\nextern int wasmacs_host_wait_for_input (void);\n\nstatic Lisp_Object\nread_minibuf #' "${minibuf_file}"
 
-      perl -0pi -e 's#\n  recursive_edit_1 \(\);#\n  /* wasmacs asyncify minibuffer setup waitpoint spike: yield after\n     the minibuffer buffer, prompt, window, keymap, and setup hook are active,\n     but before recursive_edit_1 starts consuming input.  This compares a\n     shallower suspend boundary against the read_char waitpoint.  */\n  wasmacs_host_wait_for_input ();\n\n  recursive_edit_1 ();#' "${minibuf_file}"
+      perl -0pi -e 's~\n  recursive_edit_1 \(\);#\n  /* wasmacs asyncify minibuffer setup waitpoint spike: yield after\n     the minibuffer buffer, prompt, window, keymap, and setup hook are active,\n     but before recursive_edit_1 starts consuming input.  This compares a\n     shallower suspend boundary against the read_char waitpoint.  */\n  wasmacs_host_wait_for_input ();\n\n  recursive_edit_1 ();#' "${minibuf_file}"
       ;;
     *)
       echo "error: unsupported WASMACS_ASYNCIFY_WAITPOINT_MODE=${waitpoint_mode}" >&2
