@@ -6673,7 +6673,7 @@ var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
       for (;;) {
         var lastSeen = Atomics.load(signal, 0);
         if (Atomics.load(signal, 1) > 0) break;
-        if (typeof self !== "undefined" && typeof self.postMessage === "function") {
+        if (globalThis.__wasmacsDiagnosticLog && typeof self !== "undefined" && typeof self.postMessage === "function") {
           try {
             self.postMessage({
               type: "timing-wait-enter",
@@ -6724,7 +6724,7 @@ var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
     }
 
   function _wasmacs_os_timing_checkpoint(code) {
-      if (typeof self !== "undefined" && typeof self.postMessage === "function") {
+      if (globalThis.__wasmacsDiagnosticLog && typeof self !== "undefined" && typeof self.postMessage === "function") {
         try {
           self.postMessage({
             type: "os-timing-checkpoint",

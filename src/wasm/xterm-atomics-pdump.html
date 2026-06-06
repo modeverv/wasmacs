@@ -228,6 +228,7 @@ let pendingTerminalResize = null;
 let terminalResizeTimer = null;
 const debugBootOptions = {
   noDefaultInit: pageParams.get("no-default-init") === "1",
+  debugLog: pageParams.get("debug-log") === "1",
   extraEvals: pageParams.getAll("extra-eval"),
 };
 
@@ -389,13 +390,14 @@ function startEmacsWithPdmp(pdmpBytes) {
     }
 
     if (msg.type === "timing") {
-      addLog("cp", `wait#${msg.waitNum} bytes=${msg.byteCount} queue=${msg.queueLen} fio=${msg.fioCalls}`);
+      if (debugBootOptions.debugLog)
+        addLog("cp", `wait#${msg.waitNum} bytes=${msg.byteCount} queue=${msg.queueLen} fio=${msg.fioCalls}`);
       flushInputToEmacs();
       emacsInteractive = true;
       setStatus("interactive wait ✓", "interactive");
     }
 
-    if (msg.type === "timing-wait-enter") {
+    if (debugBootOptions.debugLog && msg.type === "timing-wait-enter") {
       addLog("cp", `wait-enter#${msg.waitNum} queue=${msg.queueLen} out=${msg.outLen} fio=${msg.fioCalls}`);
       emacsInteractive = true;
       setStatus("interactive wait ✓", "interactive");
@@ -405,7 +407,7 @@ function startEmacsWithPdmp(pdmpBytes) {
       addLog("cp", `winsize: ${msg.cols}x${msg.rows} v${msg.version ?? "?"}`);
     }
 
-    if (msg.type === "scheduler-checkpoint" || msg.type === "os-timing-checkpoint") {
+    if (debugBootOptions.debugLog && (msg.type === "scheduler-checkpoint" || msg.type === "os-timing-checkpoint")) {
       addLog("cp", `${msg.type}:${msg.code} queue=${msg.queueLen} out=${msg.outLen}`);
     }
 
@@ -423,12 +425,15 @@ function startEmacsWithPdmp(pdmpBytes) {
       binInfo.textContent = `${msg.artifactDir.split("/").pop()} thisProgram=${msg.thisProgram} callMain=${msg.callMainType}`;
       addLog("info", `binary: ${msg.artifactDir} | thisProgram=${msg.thisProgram} | callMain=${msg.callMainType}`);
     }
-    if (msg.type === "stdout") { console.log("[emacs stdout]", msg.text); addLog("info", "OUT: " + msg.text); }
+    if (debugBootOptions.debugLog && msg.type === "stdout") {
+      console.log("[emacs stdout]", msg.text);
+      addLog("info", "OUT: " + msg.text);
+    }
     if (msg.type === "stderr") {
-      console.warn("[emacs stderr]", msg.text);
       const isErr = /error|failed|abort/i.test(msg.text);
+      if (isErr || debugBootOptions.debugLog) console.warn("[emacs stderr]", msg.text);
       if (isErr) { addLogErr("ERR: " + msg.text); }
-      else { addLog("cp", "ERR: " + msg.text); }
+      else if (debugBootOptions.debugLog) { addLog("cp", "ERR: " + msg.text); }
       if (isErr && !statusEl.classList.contains("interactive"))
         setStatus(`stderr: ${msg.text.slice(0, 80)}`, "error");
     }

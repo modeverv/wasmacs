@@ -4237,3 +4237,30 @@ X2/X3 確認後、org-mode 最小確認:
     `resize: 71x28` was logged as `resize suppressed: 71x28`.
 
 **vendor/emacs unchanged.**
+
+### Quiet Atomics/pdump diagnostics by default (2026-06-06)
+
+- Symptom: DevTools sessions still received large volumes of diagnostic
+  messages such as `wait-enter` and repeated `os-timing-checkpoint` entries.
+  These logs are not the direct C/wasm stack owner, but they add JS glue calls,
+  worker `postMessage` traffic, DOM log appends, and DevTools instrumentation
+  pressure while the runtime is already close to browser stack limits.
+- Fix: Atomics/pdump diagnostic logs are now opt-in with `?debug-log=1`.
+  Default runs suppress `timing-wait-enter`, `scheduler-checkpoint`,
+  `os-timing-checkpoint`, verbose boot stderr (`JS-BEFORE-CALLMAIN` /
+  `JS-CALLMAIN-*`), non-error Emscripten `printErr` warnings, and main-page
+  DOM log rendering for routine timing/stdout messages.
+- The essential `timing` event remains available internally so the browser-side
+  input queue can flush after Emacs consumes a SAB input chunk, but it is not
+  rendered to the debug panel unless `?debug-log=1` is set.
+- Validation:
+  - `npm test`: PASS (`90` tests).
+  - `npm run build`: PASS; `docs/app` and checked-in Pages artifacts include
+    the quiet-log guards.
+  - In-app Browser dev-server check at
+    `http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart&no-live-resize=1&verify=quiet-log-local`:
+    boot reached `interactive ✓`, `pdmp 12.2 MB materialized`, and the debug
+    panel contained only 6 entries: resize/binary-info lines, no
+    `os-timing-checkpoint` or `wait-enter` stream.
+
+**vendor/emacs unchanged.**

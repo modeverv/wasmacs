@@ -121,7 +121,7 @@ mergeInto(LibraryManager.library, {
     if (outBytes.length > sentCount) {
       var newBytes = Array.prototype.slice.call(outBytes, sentCount);
       globalThis.__wasmacsSentOutputCount = outBytes.length;
-      if (typeof self !== "undefined" && typeof self.postMessage === "function") {
+      if (globalThis.__wasmacsDiagnosticLog && typeof self !== "undefined" && typeof self.postMessage === "function") {
         self.postMessage({ type: "terminal-output-bytes", bytes: newBytes });
       }
     }
@@ -167,7 +167,7 @@ mergeInto(LibraryManager.library, {
     }
 
     // ── 4. Timing diagnostic ─────────────────────────────────────
-    if (typeof self !== "undefined" && typeof self.postMessage === "function") {
+    if (globalThis.__wasmacsDiagnosticLog && typeof self !== "undefined" && typeof self.postMessage === "function") {
       try {
         var s0 = FS.getStream(0);
         self.postMessage({
@@ -236,7 +236,7 @@ mergeInto(LibraryManager.library, {
     globalThis.__wasmacsTerminalResizeSeen = Atomics.load(signal, 0);
     globalThis.__wasmacsTerminalCols = Atomics.load(signal, 1) || globalThis.__wasmacsTerminalCols || 80;
     globalThis.__wasmacsTerminalRows = Atomics.load(signal, 2) || globalThis.__wasmacsTerminalRows || 24;
-    if (typeof self !== "undefined" && typeof self.postMessage === "function") {
+    if (globalThis.__wasmacsDiagnosticLog && typeof self !== "undefined" && typeof self.postMessage === "function") {
       try {
         self.postMessage({
           type: "terminal-resized",

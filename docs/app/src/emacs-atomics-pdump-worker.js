@@ -467,6 +467,7 @@ function createUserTar(nodes) {
 // ═══════════════════════════════════════════════════════════════
 
 async function startEmacs(pdmpBytes, debugOptions = {}) {
+  globalThis.__wasmacsDiagnosticLog = debugOptions.debugLog === true;
   post("ready", { sab: INPUT_SAB, terminalSizeSAB: TERMINAL_SIZE_SAB });
 
   const userNodes = await loadUserImage();
@@ -492,8 +493,12 @@ async function startEmacs(pdmpBytes, debugOptions = {}) {
     print(text) { post("stdout", { text }); },
     printErr(text) {
       if (!shouldPostStderr(String(text))) return;
-      console.warn("[pdump worker]", text);
-      post("stderr", { text });
+      if (globalThis.__wasmacsDiagnosticLog) {
+        console.warn("[pdump worker]", text);
+        post("stderr", { text });
+      } else if (/error|failed|abort|panic/i.test(String(text))) {
+        post("stderr", { text });
+      }
     },
     onAbort(what) { post("session-ended", { error: `abort: ${what}` }); },
     preRun: [function() {
@@ -621,12 +626,13 @@ async function startEmacs(pdmpBytes, debugOptions = {}) {
     : ["--quick", "--no-splash", "-nw", ...COMMON_EVALS];
 
   post("status", { text: `boot: ${bootArgs.join(" ")}` });
-  post("stderr", { text: `JS-BEFORE-CALLMAIN: args=${JSON.stringify(bootArgs)} callMain=${typeof Module.callMain}` });
+  if (globalThis.__wasmacsDiagnosticLog)
+    post("stderr", { text: `JS-BEFORE-CALLMAIN: args=${JSON.stringify(bootArgs)} callMain=${typeof Module.callMain}` });
 
   try {
-    post("stderr", { text: "JS-CALLMAIN-START" });
+    if (globalThis.__wasmacsDiagnosticLog) post("stderr", { text: "JS-CALLMAIN-START" });
     const status = Module.callMain(bootArgs);
-    post("stderr", { text: `JS-CALLMAIN-RETURNED: ${status}` });
+    if (globalThis.__wasmacsDiagnosticLog) post("stderr", { text: `JS-CALLMAIN-RETURNED: ${status}` });
     if (status) postTerminalTail(`status=${status}`);
     postUserImageSnapshot(Module.FS, "session-ended");
     post("session-ended", { status });

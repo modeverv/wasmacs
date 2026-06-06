@@ -124,6 +124,19 @@ test("Atomics pdump worker suppresses Emscripten run dependency stderr spam", as
   assert.match(source, /if \(!shouldPostStderr\(String\(text\)\)\) return/);
 });
 
+test("Atomics pdump diagnostics are opt-in for DevTools stability", async () => {
+  const page = await readFile(join(repoRoot, "src/wasm/xterm-atomics-pdump.html"), "utf8");
+  const worker = await readFile(join(repoRoot, "src/wasm/src/emacs-atomics-pdump-worker.js"), "utf8");
+  const hostLibrary = await readFile(join(repoRoot, "tools/scripts/wasmacs-atomics-host-library.js"), "utf8");
+
+  assert.match(page, /pageParams\.get\("debug-log"\) === "1"/);
+  assert.match(page, /debugBootOptions\.debugLog && msg\.type === "timing-wait-enter"/);
+  assert.match(page, /debugBootOptions\.debugLog && \(msg\.type === "scheduler-checkpoint"/);
+  assert.match(worker, /__wasmacsDiagnosticLog = debugOptions\.debugLog === true/);
+  assert.match(worker, /if \(globalThis\.__wasmacsDiagnosticLog\)\s+post\("stderr", \{ text: `JS-BEFORE-CALLMAIN/);
+  assert.match(hostLibrary, /__wasmacsDiagnosticLog && typeof self !== "undefined"/);
+});
+
 test("Atomics pdump worker loads split preload data parts", async () => {
   const source = await readFile(
     join(repoRoot, "src/wasm/src/emacs-atomics-pdump-worker.js"),
