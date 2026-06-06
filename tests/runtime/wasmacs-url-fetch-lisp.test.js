@@ -87,7 +87,9 @@ test("Atomics pdump browser runtime enables fetch-backed url.el by default", asy
   assert.match(source, /\(require 'wasmacs-url-fetch\)/);
   assert.match(source, /\(wasmacs-url-fetch-enable\)/);
   assert.match(source, /WASMACS-URL-FETCH=%S/);
-  assert.match(source, /"--eval", WASMACS_DEFAULT_LISP_INIT/);
+  assert.match(source, /if \(!debugOptions\.noDefaultInit\)/);
+  assert.match(source, /COMMON_EVALS\.splice\(8, 0, "--eval", WASMACS_DEFAULT_LISP_INIT\)/);
+  assert.match(source, /debugOptions\.extraEvals/);
 });
 
 test("Atomics pdump worker suppresses Emscripten run dependency stderr spam", async () => {

@@ -106,7 +106,7 @@ self.onmessage = async (event) => {
   if (msg?.type === "start") {
     updateTerminalSize(msg.terminalSize);
     const pdmpBytes = msg.pdmpBytes ? new Uint8Array(msg.pdmpBytes) : null;
-    await startEmacs(pdmpBytes);
+    await startEmacs(pdmpBytes, msg.debugOptions || {});
   }
   if (msg?.type === "export-wasifs") {
     try {
@@ -429,7 +429,7 @@ function createUserTar(nodes) {
 // Emacs bootstrap
 // ═══════════════════════════════════════════════════════════════
 
-async function startEmacs(pdmpBytes) {
+async function startEmacs(pdmpBytes, debugOptions = {}) {
   post("ready", { sab: INPUT_SAB, terminalSizeSAB: TERMINAL_SIZE_SAB });
 
   const userNodes = await loadUserImage();
@@ -565,9 +565,14 @@ async function startEmacs(pdmpBytes) {
     "--eval", "(setq create-lockfiles nil)",
     "--eval", "(setq auto-save-timeout nil)",
     "--eval", "(progn (require 'ls-lisp) (setq ls-lisp-use-insert-directory-program nil insert-directory-program nil))",
-    "--eval", WASMACS_DEFAULT_LISP_INIT,
     "--eval", "(progn (require 'xt-mouse) (xterm-mouse-mode 1) (message \"WASMACS-XTERM-MOUSE=%S\" xterm-mouse-mode))",
   ];
+  if (!debugOptions.noDefaultInit) {
+    COMMON_EVALS.splice(8, 0, "--eval", WASMACS_DEFAULT_LISP_INIT);
+  }
+  for (const expr of debugOptions.extraEvals || []) {
+    if (typeof expr === "string" && expr.length > 0) COMMON_EVALS.push("--eval", expr);
+  }
   const bootArgs = pdmpBytes
     ? ["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "-nw", ...COMMON_EVALS]
     : ["--quick", "--no-splash", "-nw", ...COMMON_EVALS];

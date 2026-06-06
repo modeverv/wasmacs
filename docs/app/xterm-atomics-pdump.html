@@ -219,6 +219,11 @@ let inputSAB  = null;
 let terminalSizeSAB = null;
 let emacsWorker = null;
 let lastTerminalSize = { cols: 80, rows: 24 };
+const pageParams = new URLSearchParams(location.search);
+const debugBootOptions = {
+  noDefaultInit: pageParams.get("no-default-init") === "1",
+  extraEvals: pageParams.getAll("extra-eval"),
+};
 
 function sendInputToEmacs(bytes) {
   if (!inputSAB || !bytes.length) return;
@@ -421,6 +426,7 @@ function startEmacsWithPdmp(pdmpBytes) {
     type: "start",
     pdmpBytes: copy.buffer,
     terminalSize: lastTerminalSize,
+    debugOptions: debugBootOptions,
   }, [copy.buffer]);
 }
 

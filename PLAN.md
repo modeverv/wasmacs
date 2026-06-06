@@ -2139,6 +2139,18 @@ Validation notes:
   used Emscripten 5.0.7. CI now pins `mymindstorm/setup-emsdk@v14` to `5.0.7`
   so published browser artifacts are built with the same toolchain family as
   the verified local route.
+- 2026-06-06: after the pinned CI deploy (`de61269`), GitHub Pages still
+  reproduced the same `RangeError: Maximum call stack size exceeded` in
+  `temacs.wasm.exec_byte_code` immediately after the default
+  `wasmacs-url-fetch-enable` eval. The deploy log confirms
+  `pages_build_version=de61269569f9075935fee4b676a0cc788d5eb120` and the live
+  worker/HTML hashes match the current `docs`, while CI-generated
+  `temacs.wasm`/pdmp/data hashes differ from the local macOS build. The
+  Atomics+pdump page now accepts diagnostic boot query parameters:
+  `?no-default-init=1` skips the built-in url-fetch init, and repeated
+  `extra-eval=...` parameters append explicit Lisp forms. Normal boot remains
+  unchanged. Validation: `npm test` passed 85 tests;
+  `tools/scripts/validate-host-abi.sh` passed.
 
 ## Milestone 15: High-Performance Renderer
 
