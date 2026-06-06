@@ -57,6 +57,14 @@ rsync -a \
   --exclude='*' \
   "$native_root/lisp/" "$staging_root/system/lisp/"
 
+if [[ -d "$repo_root/src/emacs-lisp" ]]; then
+  rsync -a \
+    --include='*/' \
+    --include='*.el' \
+    --exclude='*' \
+    "$repo_root/src/emacs-lisp/" "$staging_root/system/lisp/"
+fi
+
 rsync -a \
   --include='*/' \
   --include='charsets/***' \

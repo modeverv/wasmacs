@@ -75,6 +75,47 @@ Stdio/logging:
 - `stderr(bytes)` writes process-style stderr.
 - `debug-log(level, message)` writes structured runtime diagnostics.
 
+## Network Fetch
+
+`host.network` is a narrow HTTP(S) request surface for url.el/package.el style
+downloads. It is not a socket API and must not expose browser fetch objects to
+the Emacs core.
+
+MVP call:
+
+```text
+fetch(request) -> response
+```
+
+Request:
+
+```text
+url
+method
+headers
+body?
+```
+
+Response:
+
+```text
+final-url
+status
+status-text
+headers
+body
+```
+
+Rules:
+
+- Only `http:` and `https:` are in scope for the first loader.
+- Workspace or runtime capability policy may restrict origins.
+- TLS is handled by the browser/runtime host, not by GnuTLS inside wasm.
+- Redirects, CORS failures, permission denials, and network failures are
+  returned as ABI errors.
+- `url.el` may adapt this response into a normal URL response buffer for
+  `package.el`, `url-retrieve`, and `url-retrieve-synchronously`.
+
 ## GUI Protocol
 
 GUI messages are separate from host filesystem calls. The runtime host owns

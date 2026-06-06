@@ -4,6 +4,7 @@ export const SmallOsServices = Object.freeze({
   controlFlow: "control-flow",
   blockingInputScheduler: "blocking-input-scheduler",
   filesystemPersistence: "filesystem-persistence",
+  networkFetch: "network-fetch",
   preloadedState: "preloaded-state",
   terminalTty: "terminal-tty",
   hostCapability: "host-capability",
@@ -36,6 +37,8 @@ export const CrossServiceChecks = Object.freeze({
   terminalLifecycle: "Terminal x Lifecycle",
   terminalInputScheduler: "Terminal x Input Scheduler",
   terminalBrowserGui: "Terminal x Browser GUI",
+  networkFilesystem: "Network Fetch x Filesystem",
+  networkCapabilityPolicy: "Network Fetch x Capability Policy",
   hostCapabilityBrowserGui: "Host Capability x Browser GUI",
 });
 
@@ -65,6 +68,11 @@ export const EmacsSourceSurfaces = Object.freeze({
   bindingsEl: "vendor/emacs/lisp/bindings.el",
   process: "vendor/emacs/src/process.c",
   callproc: "vendor/emacs/src/callproc.c",
+  packageEl: "vendor/emacs/lisp/emacs-lisp/package.el",
+  urlEl: "vendor/emacs/lisp/url/url.el",
+  urlHttpEl: "vendor/emacs/lisp/url/url-http.el",
+  networkStreamEl: "vendor/emacs/lisp/net/network-stream.el",
+  wasmacsUrlFetchEl: "src/emacs-lisp/wasmacs-url-fetch.el",
   sysdep: "vendor/emacs/src/sysdep.c",
   xdisp: "vendor/emacs/src/xdisp.c",
   window: "vendor/emacs/src/window.c",
@@ -235,6 +243,35 @@ export const OsCompatibilityBoundaryInventory = Object.freeze({
       EmacsSourceSurfaces.insdel,
     ],
     nextFacadeOrProbe: "wasmacs_os_dired_without_ls_probe",
+  }),
+  networkFetch: Object.freeze({
+    service: SmallOsServices.networkFetch,
+    currentOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.jsWorker,
+      OwnershipLayers.browserMain,
+    ],
+    currentStateOwners: [
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.jsWorker,
+    ],
+    desiredOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.jsWorker,
+      OwnershipLayers.browserMain,
+    ],
+    jsAllowedRoles: [JsRoles.hostCapabilityProvider, JsRoles.browserCoordinator],
+    risk: BoundaryRisk.productScaffold,
+    sourceSurfaces: [
+      EmacsSourceSurfaces.packageEl,
+      EmacsSourceSurfaces.urlEl,
+      EmacsSourceSurfaces.urlHttpEl,
+      EmacsSourceSurfaces.networkStreamEl,
+      EmacsSourceSurfaces.wasmacsUrlFetchEl,
+    ],
+    nextFacadeOrProbe: "wasmacs_url_fetch_phase1_smoke",
   }),
   preloadedState: Object.freeze({
     service: SmallOsServices.preloadedState,
@@ -542,6 +579,29 @@ export const SmallOsFacades = Object.freeze({
     status: FacadeStatus.productScaffold,
     acceptance: "Dired listing setup requires ls-lisp, forces ls-lisp-use-insert-directory-program to nil, and insert-directory over a mounted directory succeeds without calling insert-directory-program or host.process.",
   }),
+  urlFetch: Object.freeze({
+    id: "url-fetch-facade",
+    capability: "Route url.el HTTP(S) retrieval through host.network.fetch so package.el/use-package can download archives without opening host.process or raw sockets.",
+    ownerServices: [
+      SmallOsServices.networkFetch,
+      SmallOsServices.filesystemPersistence,
+      SmallOsServices.hostCapability,
+    ],
+    sourceSurfaces: [
+      EmacsSourceSurfaces.packageEl,
+      EmacsSourceSurfaces.urlEl,
+      EmacsSourceSurfaces.urlHttpEl,
+      EmacsSourceSurfaces.networkStreamEl,
+      EmacsSourceSurfaces.wasmacsUrlFetchEl,
+    ],
+    cWasmEntrypoints: [
+      "wasmacs_os_network_fetch_json",
+      "wasmacs_os_url_fetch_loader_state",
+    ],
+    jsRole: JsRoles.hostCapabilityProvider,
+    status: FacadeStatus.productScaffold,
+    acceptance: "url-retrieve and url-retrieve-synchronously return normal URL response buffers from host.network.fetch, package-refresh-contents can read archive metadata, and package installation writes only under /home/user/.emacs.d/elpa.",
+  }),
 });
 
 export const SmallOsOperations = Object.freeze({
@@ -652,6 +712,26 @@ export const SmallOsOperations = Object.freeze({
     ],
     treatment: BehaviorTreatment.product,
     acceptance: "Mounted filesystem supports directory-files, directory-files-and-attributes, file-attributes, file-directory-p, file-readable-p, and file-symlink-p well enough for ls-lisp insert-directory to build a Dired listing without host.process.",
+  }),
+  urlFetchPackageInstall: Object.freeze({
+    id: "url-fetch-package-install",
+    ownerServices: [
+      SmallOsServices.networkFetch,
+      SmallOsServices.filesystemPersistence,
+      SmallOsServices.hostCapability,
+    ],
+    crossServiceChecks: [
+      CrossServiceChecks.networkFilesystem,
+      CrossServiceChecks.networkCapabilityPolicy,
+    ],
+    sourceSurfaces: [
+      EmacsSourceSurfaces.packageEl,
+      EmacsSourceSurfaces.urlEl,
+      EmacsSourceSurfaces.urlHttpEl,
+      EmacsSourceSurfaces.wasmacsUrlFetchEl,
+    ],
+    treatment: BehaviorTreatment.product,
+    acceptance: "Fetch-backed url.el can retrieve HTTP(S) archive metadata and package tarballs, while package.el extracts them into /home/user/.emacs.d/elpa without enabling raw network processes.",
   }),
   unavailableBrowserBoundary: Object.freeze({
     id: "unavailable-browser-boundary",

@@ -105,6 +105,36 @@ interface stdio {
   debug-log: func(level: log-level, message: string);
 }
 
+interface network {
+  record header {
+    name: string,
+    value: string,
+  }
+
+  record fetch-request {
+    url: string,
+    method: string,
+    headers: list<header>,
+    body: option<list<u8>>,
+  }
+
+  record fetch-response {
+    final-url: string,
+    status: u16,
+    status-text: string,
+    headers: list<header>,
+    body: list<u8>,
+  }
+
+  variant network-error {
+    permission-denied(string),
+    unsupported(string),
+    fetch-failed(string),
+  }
+
+  fetch: func(request: fetch-request) -> result<fetch-response, network-error>;
+}
+
 interface process {
   process-unavailable: func() -> string;
 }
@@ -167,6 +197,7 @@ world emacs-core-host {
   import random;
   import environment;
   import stdio;
+  import network;
   import process;
   import gui;
 }

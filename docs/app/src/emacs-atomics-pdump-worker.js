@@ -275,6 +275,99 @@ function walkFS(FS, startDir, nodes) {
     } catch (_) {}
   }
 }
+
+const WASMACS_XTERM_TERM_SHIM = `
+;;; xterm.el --- wasmacs browser xterm shim -*- lexical-binding: t; -*-
+;; Keep TERM=xterm-256color while avoiding the full GNU term/xterm.el startup
+;; path in browser Workers with small JavaScript stacks.  Termcap has already
+;; installed cursor-key sequences from ku/kd/kr/kl in src/term.c.
+
+(require 'term/tty-colors)
+
+(defvar xterm-standard-colors
+  '((\"black\"          0 (  0   0   0))
+    (\"red\"            1 (205   0   0))
+    (\"green\"          2 (  0 205   0))
+    (\"yellow\"         3 (205 205   0))
+    (\"blue\"           4 (  0   0 238))
+    (\"magenta\"        5 (205   0 205))
+    (\"cyan\"           6 (  0 205 205))
+    (\"white\"          7 (229 229 229))
+    (\"brightblack\"    8 (127 127 127))
+    (\"brightred\"      9 (255   0   0))
+    (\"brightgreen\"   10 (  0 255   0))
+    (\"brightyellow\"  11 (255 255   0))
+    (\"brightblue\"    12 ( 92  92 255))
+    (\"brightmagenta\" 13 (255   0 255))
+    (\"brightcyan\"    14 (  0 255 255))
+    (\"brightwhite\"   15 (255 255 255))))
+
+(defun xterm-rgb-convert-to-16bit (prim)
+  (logior prim (ash prim 8)))
+
+(defun wasmacs-xterm-register-colors ()
+  "Register xterm's palette without running full xterm probes."
+  (let* ((cells (display-color-cells))
+         (ncolors (if (= cells 16777216) 256 cells)))
+    (when (> ncolors 0)
+      (tty-color-clear))
+    (dolist (color xterm-standard-colors)
+      (when (> ncolors 0)
+        (tty-color-define (car color) (cadr color)
+                          (mapcar #'xterm-rgb-convert-to-16bit
+                                  (car (cddr color))))
+        (setq ncolors (1- ncolors))))
+    (when (= ncolors 240)
+      (let ((r 0) (g 0) (b 0))
+        (while (> ncolors 24)
+          (tty-color-define (format \"color-%d\" (- 256 ncolors))
+                            (- 256 ncolors)
+                            (mapcar #'xterm-rgb-convert-to-16bit
+                                    (list (if (zerop r) 0 (+ (* r 40) 55))
+                                          (if (zerop g) 0 (+ (* g 40) 55))
+                                          (if (zerop b) 0 (+ (* b 40) 55)))))
+          (setq b (1+ b))
+          (when (> b 5) (setq g (1+ g) b 0))
+          (when (> g 5) (setq r (1+ r) g 0))
+          (setq ncolors (1- ncolors))))
+      (while (> ncolors 0)
+        (let ((gray (xterm-rgb-convert-to-16bit
+                     (+ 8 (* (- 24 ncolors) 10)))))
+          (tty-color-define (format \"color-%d\" (- 256 ncolors))
+                            (- 256 ncolors)
+                            (list gray gray gray)))
+        (setq ncolors (1- ncolors))))
+    (clear-face-cache)))
+
+(defun terminal-init-xterm ()
+  "Initialize the wasmacs xterm tty without probing browser-hostile features."
+  (wasmacs-xterm-register-colors)
+  (when (fboundp 'tty-set-up-initial-frame-faces)
+    (tty-set-up-initial-frame-faces))
+  (run-hooks 'terminal-init-xterm-hook))
+
+(provide 'term/xterm)
+;;; xterm.el ends here
+`.trimStart();
+
+function installXtermTermShim(FS) {
+  const termDir = "/usr/local/share/emacs/30.2/lisp/term";
+  try {
+    try { FS.mkdir("/usr"); } catch (_) {}
+    try { FS.mkdir("/usr/local"); } catch (_) {}
+    try { FS.mkdir("/usr/local/share"); } catch (_) {}
+    try { FS.mkdir("/usr/local/share/emacs"); } catch (_) {}
+    try { FS.mkdir("/usr/local/share/emacs/30.2"); } catch (_) {}
+    try { FS.mkdir("/usr/local/share/emacs/30.2/lisp"); } catch (_) {}
+    try { FS.mkdir(termDir); } catch (_) {}
+    try { FS.unlink(`${termDir}/xterm.elc`); } catch (_) {}
+    FS.writeFile(`${termDir}/xterm.el`, WASMACS_XTERM_TERM_SHIM);
+    post("status", { text: "installed wasmacs xterm terminal shim" });
+  } catch (e) {
+    post("stderr", { text: `xterm terminal shim install failed: ${e}` });
+  }
+}
+
 function createUserTar(nodes) {
   const chunks = [];
   const paths = [...nodes.keys()].filter(p => p === "/home/user" || p.startsWith("/home/user/")).sort();
@@ -412,7 +505,12 @@ async function startEmacs(pdmpBytes) {
     ENV.HOME = "/home/user";
     ENV.USER = "user";
     ENV.LOGNAME = "user";
+    ENV.TERM = "xterm-256color";
+    ENV.COLORTERM = "truecolor";
+    ENV.TERMCAP = "xterm-256color:co#80:li#24:Co#16777216:cl=\\E[H\\E[2J:cm=\\E[%i%d;%dH:up=\\E[A:do=\\E[B:nd=\\E[C:le=\\b:bs:ku=\\E[A:kd=\\E[B:kr=\\E[C:kl=\\E[D:kh=\\E[H:@7=\\E[F:kD=\\E[3~:ks=\\E[?1h\\E=:ke=\\E[?1l\\E>:ti=\\E[?1049h:te=\\E[?1049l:so=\\E[7m:se=\\E[27m:us=\\E[4m:ue=\\E[24m:md=\\E[1m:mr=\\E[7m:me=\\E[0m:AF=\\E[38;5;%dm:AB=\\E[48;5;%dm:op=\\E[39;49m:";
   } catch (_) {}
+
+  installXtermTermShim(Module.FS);
 
   // Write pdmp to MEMFS AFTER runtime is ready
   if (pdmpBytes) {
@@ -427,11 +525,20 @@ async function startEmacs(pdmpBytes) {
     }
   }
 
+  const WASMACS_DEFAULT_LISP_INIT = [
+    "(progn",
+    "  (require 'wasmacs-url-fetch)",
+    "  (wasmacs-url-fetch-enable)",
+    "  (message \"WASMACS-URL-FETCH=%S\" (featurep 'wasmacs-url-fetch)))",
+  ].join("\n");
+
   const COMMON_EVALS = [
     "--eval", "(setq uniquify-trailing-separator-p nil)",
     "--eval", "(setq create-lockfiles nil)",
     "--eval", "(setq auto-save-timeout nil)",
     "--eval", "(progn (require 'ls-lisp) (setq ls-lisp-use-insert-directory-program nil insert-directory-program nil))",
+    "--eval", WASMACS_DEFAULT_LISP_INIT,
+    "--eval", "(progn (require 'xt-mouse) (xterm-mouse-mode 1) (message \"WASMACS-XTERM-MOUSE=%S\" xterm-mouse-mode))",
   ];
   const bootArgs = pdmpBytes
     ? ["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "-nw", ...COMMON_EVALS]

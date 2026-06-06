@@ -1,13 +1,16 @@
 import { randomBytes } from "node:crypto";
+import { createNetworkPolicy, fetchUrlWithPolicy } from "./network-fetch.js";
 
 export class CoreHost {
-  constructor({ fs, env = {}, cwd = "/home/user" }) {
+  constructor({ fs, env = {}, cwd = "/home/user", fetchImpl = globalThis.fetch, networkPolicy } = {}) {
     this.fs = fs;
     this.env = { ...env };
     this.currentDirectory = cwd;
     this.stdoutChunks = [];
     this.stderrChunks = [];
     this.debugLogs = [];
+    this.fetchImpl = fetchImpl;
+    this.networkPolicy = networkPolicy ?? createNetworkPolicy();
   }
 
   wallNowMs() {
@@ -53,5 +56,12 @@ export class CoreHost {
 
   processUnavailable() {
     return "host.process is unavailable in the MVP";
+  }
+
+  async fetchUrl(request) {
+    return fetchUrlWithPolicy(request, {
+      fetchImpl: this.fetchImpl,
+      policy: this.networkPolicy,
+    });
   }
 }

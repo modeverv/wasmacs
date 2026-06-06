@@ -66,6 +66,10 @@ done < <(
     \( -name '*loaddefs*.el' -o -name 'loaddefs.el' \) \
     -type f | sort
 )
+if [ -d "${repo_root}/src/emacs-lisp" ]; then
+  rsync -a --include='*.el' --exclude='*' \
+    "${repo_root}/src/emacs-lisp/" "${pdump_src}/lisp/"
+fi
 
 echo "=== Byte-compiling lisp files for temacs.data preload ==="
 "${native_baseline}/src/emacs" --batch \
@@ -101,7 +105,7 @@ base_exports="${base_exports},_wasmacs_os_gc_permission,_wasmacs_os_gc_permissio
 base_exports="${base_exports},_wasmacs_os_root_safety_probe,_wasmacs_os_pending_command_state"
 base_exports="${base_exports},_wasmacs_os_pin_backtrace_args,_wasmacs_os_release_backtrace_args"
 base_exports="${base_exports},_wasmacs_os_push_gc_guard,_wasmacs_os_pop_gc_guard"
-base_exports="${base_exports},_wasmacs_os_begin_command,_wasmacs_os_finish_command,_wasmacs_os_cancel_command,_wasmacs_os_configure_dired_without_ls,_wasmacs_os_dired_without_ls_probe,_wasmacs_os_filesystem_dired_state,_wasmacs_os_apply_terminal_resize"
+base_exports="${base_exports},_wasmacs_os_begin_command,_wasmacs_os_finish_command,_wasmacs_os_cancel_command,_wasmacs_os_configure_dired_without_ls,_wasmacs_os_dired_without_ls_probe,_wasmacs_os_filesystem_dired_state,_wasmacs_os_network_fetch_json,_wasmacs_os_url_fetch_loader_state,_wasmacs_os_apply_terminal_resize"
 base_exports="${base_exports},_wasmacs_input_text,_wasmacs_input_cancel,_wasmacs_os_timing_checkpoint"
 
 # Atomics (no Asyncify)

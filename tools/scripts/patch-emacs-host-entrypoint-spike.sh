@@ -105,6 +105,7 @@ static char *wasmacs_last_os_gc_permission_state;
 static char *wasmacs_last_os_root_safety_probe;
 static char *wasmacs_last_os_filesystem_dired_state;
 static char *wasmacs_last_os_terminal_resize_state;
+static char *wasmacs_last_os_network_fetch_state;
 static int wasmacs_command_busy;
 static int wasmacs_eval_had_error;
 static int wasmacs_entrypoint_refresh_count;
@@ -131,6 +132,8 @@ const char *wasmacs_os_stack_bounds_probe (void);
 const char *wasmacs_os_gc_permission_state (void);
 const char *wasmacs_os_root_safety_probe (void);
 const char *wasmacs_os_filesystem_dired_state (void);
+const char *wasmacs_os_network_fetch_json (const char *request_json);
+const char *wasmacs_os_url_fetch_loader_state (void);
 static char const *wasmacs_os_phase_name (void);
 static Lisp_Object wasmacs_eval_error_handler (Lisp_Object error);
 static Lisp_Object wasmacs_recursive_edit_body (Lisp_Object ignored);
@@ -142,6 +145,109 @@ static void wasmacs_append_specpdl_summary (char **buffer, ptrdiff_t *length,
                                             ptrdiff_t *capacity,
                                             union specbinding *first,
                                             union specbinding *limit);
+
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+EM_JS (const char *, wasmacs_host_network_fetch_json,
+       (const char *request_json),
+       {
+         function returnJson(value) {
+           var json = JSON.stringify(value);
+           var size = lengthBytesUTF8(json) + 1;
+           var ptr = _malloc(size);
+           if (!ptr)
+             return 0;
+           stringToUTF8(json, ptr, size);
+           return ptr;
+         }
+         function fail(message) {
+           return returnJson({ error: String(message) });
+         }
+         function proxyFetch(request, directError) {
+           var proxyUrl = new URL("/__wasmacs_network_fetch",
+                                  typeof location !== "undefined" ? location.href : "http://127.0.0.1:5173/").href;
+           var proxy = new XMLHttpRequest();
+           proxy.open("POST", proxyUrl, false);
+           proxy.setRequestHeader("content-type", "application/json");
+           proxy.send(JSON.stringify(request));
+           if (proxy.responseText) {
+             try {
+               return returnJson(JSON.parse(proxy.responseText));
+             } catch (parseError) {
+               return fail("host.network.fetch proxy returned invalid JSON: " + parseError.message);
+             }
+           }
+           return fail("host.network.fetch direct request failed"
+                       + (directError && directError.message ? ": " + directError.message : "")
+                       + "; proxy status " + proxy.status);
+         }
+         function bytesToBase64(bytes) {
+           var chunkSize = 0x8000;
+           var binary = "";
+           for (var offset = 0; offset < bytes.length; offset += chunkSize) {
+             var chunk = bytes.subarray(offset, offset + chunkSize);
+             binary += String.fromCharCode.apply(null, chunk);
+           }
+           return btoa(binary);
+         }
+         try {
+           var request = JSON.parse(UTF8ToString(request_json));
+           var url = String(request.url || "");
+           var parsed = new URL(url, typeof location !== "undefined" ? location.href : undefined);
+           if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
+             return fail("unsupported URL scheme: " + parsed.protocol);
+
+           var method = String(request.method || "GET").toUpperCase();
+           var xhr = new XMLHttpRequest();
+           xhr.open(method, parsed.href, false);
+           var headers = Array.isArray(request.headers) ? request.headers : [];
+           for (var i = 0; i < headers.length; i++) {
+             var header = headers[i];
+             if (Array.isArray(header) && header.length >= 2)
+               xhr.setRequestHeader(String(header[0]), String(header[1]));
+             else if (header && typeof header === "object" && header.name)
+               xhr.setRequestHeader(String(header.name), String(header.value || ""));
+           }
+           xhr.responseType = "arraybuffer";
+           xhr.send(request.body || null);
+
+           var responseHeaders = [];
+           var rawHeaders = xhr.getAllResponseHeaders() || "";
+           rawHeaders.trim().split(String.fromCharCode(10)).forEach(function (line) {
+             if (line.charCodeAt(line.length - 1) === 13)
+               line = line.slice(0, -1);
+             if (!line) return;
+             var colon = line.indexOf(":");
+             if (colon <= 0) return;
+             responseHeaders.push({
+               name: line.slice(0, colon).trim().toLowerCase(),
+               value: line.slice(colon + 1).trim(),
+             });
+           });
+           var bodyBytes = new Uint8Array(xhr.response || new ArrayBuffer(0));
+           return returnJson({
+             url: xhr.responseURL || parsed.href,
+             status: xhr.status,
+             statusText: xhr.statusText || "",
+             headers: responseHeaders,
+             bodyBase64: bytesToBase64(bodyBytes),
+           });
+         } catch (error) {
+           try {
+             var fallbackRequest = JSON.parse(UTF8ToString(request_json));
+             return proxyFetch(fallbackRequest, error);
+           } catch (fallbackError) {
+             return fail(fallbackError && fallbackError.message ? fallbackError.message : fallbackError);
+           }
+         }
+       });
+#else
+static const char *
+wasmacs_host_network_fetch_json (const char *request_json)
+{
+  return "{\"error\":\"host.network.fetch is only available in the wasm browser host\"}";
+}
+#endif
 
 #define WASMACS_ENTER_HOST_ENTRYPOINT(saved_bottom_name, saved_top_name) \
   void *wasmacs_entrypoint_stack_sentry; \
@@ -164,6 +270,30 @@ const char *
 wasmacs_last_result (void)
 {
   return wasmacs_last_eval_result ? wasmacs_last_eval_result : "";
+}
+
+__attribute__ ((used, visibility ("default")))
+const char *
+wasmacs_os_network_fetch_json (const char *request_json)
+{
+  return wasmacs_host_network_fetch_json (request_json);
+}
+
+DEFUN ("wasmacs-os-network-fetch-json", Fwasmacs_os_network_fetch_json,
+       Swasmacs_os_network_fetch_json, 1, 1, 0,
+       doc: /* Fetch a URL through the wasmacs host network service.
+REQUEST-JSON is a JSON object with url, method, headers, and optional body.
+Return a JSON response with status, statusText, headers, and bodyBase64.  */)
+  (Lisp_Object request_json)
+{
+  CHECK_STRING (request_json);
+  char const *response
+    = wasmacs_os_network_fetch_json ((char const *) SSDATA (request_json));
+  if (!response)
+    return build_string ("{\"error\":\"host.network.fetch returned null\"}");
+  Lisp_Object result = build_string (response);
+  xfree ((void *) response);
+  return result;
 }
 
 __attribute__ ((used, visibility ("default")))
@@ -1320,6 +1450,26 @@ wasmacs_os_filesystem_dired_state (void)
   return wasmacs_last_os_filesystem_dired_state;
 }
 
+__attribute__ ((used, visibility ("default")))
+const char *
+wasmacs_os_url_fetch_loader_state (void)
+{
+  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+
+  char *state = xmalloc (1024);
+  snprintf (state, 1024,
+            "{\"service\":\"Network Fetch\",\"owner\":\"C/wasm facade\","
+            "\"status\":\"product-scaffold\",\"hostProcess\":false,"
+            "\"loader\":\"wasmacs-url-fetch\","
+            "\"primitive\":\"wasmacs-os-network-fetch-json\","
+            "\"scope\":[\"http\",\"https\",\"package.el\",\"url.el\"]}");
+
+  xfree (wasmacs_last_os_network_fetch_state);
+  wasmacs_last_os_network_fetch_state = state;
+  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
+  return wasmacs_last_os_network_fetch_state;
+}
+
 EOF
 export WASMACS_ENTRYPOINT_BLOCK="${entrypoint_block}"
 
@@ -1328,6 +1478,8 @@ if rg 'wasmacs_eval_string' "${source_file}" >/dev/null; then
 fi
 
 perl -0pi -e 'BEGIN { $block = $ENV{"WASMACS_ENTRYPOINT_BLOCK"} } s/DEFUN \("invocation-name", Finvocation_name, Sinvocation_name, 0, 0, 0,\n/${block}\nDEFUN ("invocation-name", Finvocation_name, Sinvocation_name, 0, 0, 0,\n/' "$source_file"
+perl -0pi -e 's/\n  defsubr \(&Swasmacs_os_network_fetch_json\);//g' "$source_file"
+perl -0pi -e 's/  defsubr \(&Sinvocation_name\);/  defsubr (\&Swasmacs_os_network_fetch_json);\n  defsubr (\&Sinvocation_name);/' "$source_file"
 
 if [ -f "${loadup_file}" ] && ! rg 'wasmacs os-compat: Dired without external ls' "${loadup_file}" >/dev/null; then
   perl -0pi -e 's#(\(load "bindings"\)\n)#$1\n;; wasmacs os-compat: Dired without external ls.\n;; Browser MVP keeps host.process unavailable, so directory listing must use\n;; Emacs filesystem primitives through ls-lisp instead of an ls subprocess.\n(load "ls-lisp" nil t)\n(setq ls-lisp-use-insert-directory-program nil)\n(setq insert-directory-program nil)\n#' "${loadup_file}"

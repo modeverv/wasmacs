@@ -1,9 +1,12 @@
 --- a/src/emacs.c
 +++ b/src/emacs.c
-@@ -656,8 +656,1190 @@
-     }
- 
-   unbind_to (count, Qnil);
+@@ -653,11 +653,1385 @@
+ 	   locale-coding-system.  */
+ 	Vcommand_line_args
+ 	  = Fcons (build_unibyte_string (argv[i]), Vcommand_line_args);
++    }
++
++  unbind_to (count, Qnil);
 +}
 +
 +static char *wasmacs_last_eval_result;
@@ -15,6 +18,8 @@
 +static char *wasmacs_last_os_gc_permission_state;
 +static char *wasmacs_last_os_root_safety_probe;
 +static char *wasmacs_last_os_filesystem_dired_state;
++static char *wasmacs_last_os_terminal_resize_state;
++static char *wasmacs_last_os_network_fetch_state;
 +static int wasmacs_command_busy;
 +static int wasmacs_eval_had_error;
 +static int wasmacs_entrypoint_refresh_count;
@@ -35,11 +40,14 @@
 +int wasmacs_os_cancel_command (void);
 +int wasmacs_os_configure_dired_without_ls (void);
 +int wasmacs_os_dired_without_ls_probe (void);
++int wasmacs_os_apply_terminal_resize (int width, int height);
 +const char *wasmacs_os_lifecycle_state (void);
 +const char *wasmacs_os_stack_bounds_probe (void);
 +const char *wasmacs_os_gc_permission_state (void);
 +const char *wasmacs_os_root_safety_probe (void);
 +const char *wasmacs_os_filesystem_dired_state (void);
++const char *wasmacs_os_network_fetch_json (const char *request_json);
++const char *wasmacs_os_url_fetch_loader_state (void);
 +static char const *wasmacs_os_phase_name (void);
 +static Lisp_Object wasmacs_eval_error_handler (Lisp_Object error);
 +static Lisp_Object wasmacs_recursive_edit_body (Lisp_Object ignored);
@@ -51,6 +59,109 @@
 +                                            ptrdiff_t *capacity,
 +                                            union specbinding *first,
 +                                            union specbinding *limit);
++
++#ifdef __EMSCRIPTEN__
++#include <emscripten.h>
++EM_JS (const char *, wasmacs_host_network_fetch_json,
++       (const char *request_json),
++       {
++         function returnJson(value) {
++           var json = JSON.stringify(value);
++           var size = lengthBytesUTF8(json) + 1;
++           var ptr = _malloc(size);
++           if (!ptr)
++             return 0;
++           stringToUTF8(json, ptr, size);
++           return ptr;
++         }
++         function fail(message) {
++           return returnJson({ error: String(message) });
++         }
++         function proxyFetch(request, directError) {
++           var proxyUrl = new URL("/__wasmacs_network_fetch",
++                                  typeof location !== "undefined" ? location.href : "http://127.0.0.1:5173/").href;
++           var proxy = new XMLHttpRequest();
++           proxy.open("POST", proxyUrl, false);
++           proxy.setRequestHeader("content-type", "application/json");
++           proxy.send(JSON.stringify(request));
++           if (proxy.responseText) {
++             try {
++               return returnJson(JSON.parse(proxy.responseText));
++             } catch (parseError) {
++               return fail("host.network.fetch proxy returned invalid JSON: " + parseError.message);
++             }
++           }
++           return fail("host.network.fetch direct request failed"
++                       + (directError && directError.message ? ": " + directError.message : "")
++                       + "; proxy status " + proxy.status);
++         }
++         function bytesToBase64(bytes) {
++           var chunkSize = 0x8000;
++           var binary = "";
++           for (var offset = 0; offset < bytes.length; offset += chunkSize) {
++             var chunk = bytes.subarray(offset, offset + chunkSize);
++             binary += String.fromCharCode.apply(null, chunk);
++           }
++           return btoa(binary);
++         }
++         try {
++           var request = JSON.parse(UTF8ToString(request_json));
++           var url = String(request.url || "");
++           var parsed = new URL(url, typeof location !== "undefined" ? location.href : undefined);
++           if (parsed.protocol !== "http:" && parsed.protocol !== "https:")
++             return fail("unsupported URL scheme: " + parsed.protocol);
++
++           var method = String(request.method || "GET").toUpperCase();
++           var xhr = new XMLHttpRequest();
++           xhr.open(method, parsed.href, false);
++           var headers = Array.isArray(request.headers) ? request.headers : [];
++           for (var i = 0; i < headers.length; i++) {
++             var header = headers[i];
++             if (Array.isArray(header) && header.length >= 2)
++               xhr.setRequestHeader(String(header[0]), String(header[1]));
++             else if (header && typeof header === "object" && header.name)
++               xhr.setRequestHeader(String(header.name), String(header.value || ""));
++           }
++           xhr.responseType = "arraybuffer";
++           xhr.send(request.body || null);
++
++           var responseHeaders = [];
++           var rawHeaders = xhr.getAllResponseHeaders() || "";
++           rawHeaders.trim().split(String.fromCharCode(10)).forEach(function (line) {
++             if (line.charCodeAt(line.length - 1) === 13)
++               line = line.slice(0, -1);
++             if (!line) return;
++             var colon = line.indexOf(":");
++             if (colon <= 0) return;
++             responseHeaders.push({
++               name: line.slice(0, colon).trim().toLowerCase(),
++               value: line.slice(colon + 1).trim(),
++             });
++           });
++           var bodyBytes = new Uint8Array(xhr.response || new ArrayBuffer(0));
++           return returnJson({
++             url: xhr.responseURL || parsed.href,
++             status: xhr.status,
++             statusText: xhr.statusText || "",
++             headers: responseHeaders,
++             bodyBase64: bytesToBase64(bodyBytes),
++           });
++         } catch (error) {
++           try {
++             var fallbackRequest = JSON.parse(UTF8ToString(request_json));
++             return proxyFetch(fallbackRequest, error);
++           } catch (fallbackError) {
++             return fail(fallbackError && fallbackError.message ? fallbackError.message : fallbackError);
++           }
++         }
++       });
++#else
++static const char *
++wasmacs_host_network_fetch_json (const char *request_json)
++{
++  return "{\"error\":\"host.network.fetch is only available in the wasm browser host\"}";
++}
++#endif
 +
 +#define WASMACS_ENTER_HOST_ENTRYPOINT(saved_bottom_name, saved_top_name) \
 +  void *wasmacs_entrypoint_stack_sentry; \
@@ -73,6 +184,30 @@
 +wasmacs_last_result (void)
 +{
 +  return wasmacs_last_eval_result ? wasmacs_last_eval_result : "";
++}
++
++__attribute__ ((used, visibility ("default")))
++const char *
++wasmacs_os_network_fetch_json (const char *request_json)
++{
++  return wasmacs_host_network_fetch_json (request_json);
++}
++
++DEFUN ("wasmacs-os-network-fetch-json", Fwasmacs_os_network_fetch_json,
++       Swasmacs_os_network_fetch_json, 1, 1, 0,
++       doc: /* Fetch a URL through the wasmacs host network service.
++REQUEST-JSON is a JSON object with url, method, headers, and optional body.
++Return a JSON response with status, statusText, headers, and bodyBase64.  */)
++  (Lisp_Object request_json)
++{
++  CHECK_STRING (request_json);
++  char const *response
++    = wasmacs_os_network_fetch_json ((char const *) SSDATA (request_json));
++  if (!response)
++    return build_string ("{\"error\":\"host.network.fetch returned null\"}");
++  Lisp_Object result = build_string (response);
++  xfree ((void *) response);
++  return result;
 +}
 +
 +__attribute__ ((used, visibility ("default")))
@@ -333,8 +468,48 @@
 +  wasmacs_last_os_root_safety_probe = state;
 +  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
 +  return wasmacs_last_os_root_safety_probe;
- }
- 
++}
++
++__attribute__ ((used, visibility ("default")))
++int
++wasmacs_os_apply_terminal_resize (int width, int height)
++{
++  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
++
++  int status = 0;
++  const char *reason = "applied";
++  if (width <= 5 || height <= 2)
++    {
++      status = 1;
++      reason = "too-small";
++    }
++  else if (!initialized || !FRAMEP (selected_frame)
++           || !FRAME_TERMCAP_P (SELECTED_FRAME ()))
++    {
++      status = 2;
++      reason = "no-live-tty-frame";
++    }
++  else
++    {
++      change_frame_size (SELECTED_FRAME (), width, height,
++                         false, true, false);
++      do_pending_window_change (false);
++    }
++
++  char *state = xmalloc (512);
++  snprintf (state, 512,
++            "{\"service\":\"Terminal/Tty\",\"owner\":\"C/wasm facade\","
++            "\"status\":\"%s\",\"width\":%d,\"height\":%d,"
++            "\"pendingCommandState\":\"%s\"}",
++            reason, width, height, wasmacs_os_pending_command_state ());
++  xfree (wasmacs_last_os_terminal_resize_state);
++  wasmacs_last_os_terminal_resize_state = state;
++  wasmacs_store_c_string_result (wasmacs_last_os_terminal_resize_state);
++
++  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
++  return status;
++}
++
 +__attribute__ ((used, visibility ("default")))
 +int
 +wasmacs_os_pin_backtrace_args (void)
@@ -876,8 +1051,8 @@
 +      wasmacs_store_c_string_result ("unavailable:busy");
 +      WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
 +      return 3;
-+    }
-+
+     }
+ 
 +  if (garbage_collection_inhibited)
 +    {
 +      wasmacs_store_c_string_result ("unavailable:gc-inhibited");
@@ -888,12 +1063,12 @@
 +  specpdl_ref count = SPECPDL_INDEX ();
 +  specbind (Qsymbols_with_pos_enabled, Qnil);
 +  garbage_collect ();
-+  unbind_to (count, Qnil);
+   unbind_to (count, Qnil);
 +  wasmacs_store_c_string_result ("garbage-collected");
 +  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
 +  return 0;
-+}
-+
+ }
+ 
 +__attribute__ ((used, visibility ("default")))
 +int
 +wasmacs_eval_string (const char *utf8)
@@ -1188,13 +1363,34 @@
 +  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
 +  return wasmacs_last_os_filesystem_dired_state;
 +}
++
++__attribute__ ((used, visibility ("default")))
++const char *
++wasmacs_os_url_fetch_loader_state (void)
++{
++  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
++
++  char *state = xmalloc (1024);
++  snprintf (state, 1024,
++            "{\"service\":\"Network Fetch\",\"owner\":\"C/wasm facade\","
++            "\"status\":\"product-scaffold\",\"hostProcess\":false,"
++            "\"loader\":\"wasmacs-url-fetch\","
++            "\"primitive\":\"wasmacs-os-network-fetch-json\","
++            "\"scope\":[\"http\",\"https\",\"package.el\",\"url.el\"]}");
++
++  xfree (wasmacs_last_os_network_fetch_state);
++  wasmacs_last_os_network_fetch_state = state;
++  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
++  return wasmacs_last_os_network_fetch_state;
++}
  DEFUN ("invocation-name", Finvocation_name, Sinvocation_name, 0, 0, 0,
         doc: /* Return the program name that was used to run Emacs.
  Any directory names are omitted.  */)
-@@ -2237,6 +3419,17 @@
+@@ -2236,6 +3610,17 @@
+   init_callproc ();	/* Must follow init_cmdargs but not init_sys_modes.  */
    init_fileio ();
    init_lread ();
- 
++
 +#ifdef __EMSCRIPTEN__
 +  /* wasmacs pbootstrap: prepend virtual FS lisp path after init_lread so
 +     pbootstrap finds loadup.el when getenv(EMACSLOADPATH) is not picked up. */
@@ -1205,29 +1401,28 @@
 +      Vload_path = nconc2 (memfs_path, Vload_path);
 +  }
 +#endif
-+
+ 
    /* If "-version" was specified, produce version information and
       exit.  We do it here because the code below needs to call Lisp
-      primitives, which cannot be done safely before we call all the
+@@ -3594,6 +4979,7 @@
+ 
+   defsubr (&Skill_emacs);
+ 
++  defsubr (&Swasmacs_os_network_fetch_json);
+   defsubr (&Sinvocation_name);
+   defsubr (&Sinvocation_directory);
+   defsubr (&Sdaemonp);
 --- a/src/keyboard.c
 +++ b/src/keyboard.c
-@@ -2488,7 +2488,14 @@
+@@ -2488,7 +2488,6 @@
  	}
  #endif
      }
 -}
-+}extern void wasmacs_os_timing_checkpoint (int code);extern void wasmacs_os_timing_checkpoint (int code);extern void wasmacs_os_timing_checkpoint (int code);
-+
-+/* wasmacs os-compat terminal input injection spike. */
-+extern int wasmacs_host_wait_for_input (void);
-+extern int wasmacs_host_terminal_input_available (void);
-+extern int wasmacs_host_terminal_read_byte (void);
-+extern int wasmacs_host_scheduler_checkpoint (int code);
-+extern void wasmacs_os_timing_checkpoint (int code);
  
  /* Read a character from the keyboard; call the redisplay if needed.  */
  /* commandflag 0 means do not autosave, but do redisplay.
-@@ -3697,7 +3704,132 @@
+@@ -3697,7 +3696,140 @@
    return n + (n < 0 ? KBD_BUFFER_SIZE : 0);
  }
  #endif	/* Store an event obtained at interrupt level into kbd_buffer, fifo */
@@ -1305,7 +1500,15 @@
 +
 +
 +
- 
++
++
++
++
++
++
++
++
++
 +
 +
 +
@@ -1349,7 +1552,7 @@
 +
 +  return 0;
 +}
-+
+ 
 +__attribute__ ((used, visibility ("default")))
 +int
 +wasmacs_input_cancel (void)
@@ -1360,53 +1563,32 @@
  void
  kbd_buffer_store_event (register struct input_event *event)
  {
-@@ -4070,10 +4202,60 @@
+@@ -4070,10 +4202,38 @@
  	  else
  	    {
  	      struct timespec duration = timespec_sub (*end_time, now);
 +#ifdef __EMSCRIPTEN__
 +	      if (kbd_fetch_ptr == kbd_store_ptr)
 +		{
-+		  wasmacs_host_wait_for_input ();
-+		  wasmacs_os_timing_checkpoint (11);
 +		  gobble_input ();
-+		  wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 23 : 24);
 +		}
 +#else
 +#ifdef __EMSCRIPTEN__
 +	      if (kbd_fetch_ptr == kbd_store_ptr)
 +		{
-+		  wasmacs_host_wait_for_input ();
-+		  wasmacs_os_timing_checkpoint (11);
 +		  gobble_input ();
-+		  wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 23 : 24);
 +		}
 +#else
 +#ifdef __EMSCRIPTEN__
 +	      if (kbd_fetch_ptr == kbd_store_ptr)
 +		{
-+		  wasmacs_host_wait_for_input ();
-+		  wasmacs_os_timing_checkpoint (11);
 +		  gobble_input ();
-+		  wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 23 : 24);
 +		}
 +#else
 +#ifdef __EMSCRIPTEN__
 +	      if (kbd_fetch_ptr == kbd_store_ptr)
 +		{
-+		  wasmacs_host_wait_for_input ();
-+		  wasmacs_os_timing_checkpoint (11);
 +		  gobble_input ();
-+		  wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 23 : 24);
-+		}
-+#else
-+#ifdef __EMSCRIPTEN__
-+	      if (kbd_fetch_ptr == kbd_store_ptr)
-+		{
-+		  wasmacs_host_wait_for_input ();
-+		  wasmacs_os_timing_checkpoint (11);
-+		  gobble_input ();
-+		  wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 23 : 24);
 +		}
 +#else
  	      wait_reading_process_output (min (duration.tv_sec,
@@ -1417,26 +1599,13 @@
 +#endif
 +#endif
 +#endif
-+#endif
  	    }
  	}
        else
-@@ -4091,13 +4273,70 @@
- 		do_display = false;
+@@ -4092,12 +4252,57 @@
  	    }
  
-+#ifdef __EMSCRIPTEN__
-+	  if (kbd_fetch_ptr == kbd_store_ptr)
-+	    {
-+	      wasmacs_host_wait_for_input ();
-+	      wasmacs_os_timing_checkpoint (10);
-+	      gobble_input ();
-+	      wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 21 : 22);
-+	    }
-+	  wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 31 : 32);
-+#else
  	  wait_reading_process_output (0, 0, -1, do_display, Qnil, NULL, 0);
-+#endif
 +
 +
 +
@@ -1486,19 +1655,14 @@
      }
  
 +#ifdef __EMSCRIPTEN__
-+  wasmacs_os_timing_checkpoint (33);
 +#endif
 +
  #ifdef HAVE_X_WINDOWS
    /* Handle pending selection requests.  This can happen if Emacs
       enters a recursive edit inside a nested event loop (probably
-@@ -4140,13 +4379,31 @@
-      mouse movement enabled and available.  */
-   if (kbd_fetch_ptr != kbd_store_ptr)
+@@ -4142,11 +4347,25 @@
      {
-+      wasmacs_os_timing_checkpoint (40);
        union buffered_input_event *event = kbd_fetch_ptr;
-+      wasmacs_os_timing_checkpoint (1000 + event->kind);
  
 +      /* wasmacs os-compat: current_kboard for terminal keystrokes.
 +         Avoid event_to_kboard reading a pdmp-restored stale frame_or_window
@@ -1510,7 +1674,6 @@
 +        *kbp = current_kboard;
 +      else
 +        *kbp = event_to_kboard (&event->ie);
-+      wasmacs_os_timing_checkpoint (1100 + event->kind);
 +#else
        *kbp = event_to_kboard (&event->ie);
 +#endif
@@ -1519,23 +1682,15 @@
  
        obj = Qnil;
 +#ifdef __EMSCRIPTEN__
-+      wasmacs_os_timing_checkpoint (1120 + event->kind);
 +#endif
  
        /* These two kinds of events get special handling
  	 and don't actually appear to the command loop.
-@@ -4265,31 +4522,70 @@
-       case SELECT_WINDOW_EVENT:
-         {
-           obj = make_lispy_event (&event->ie);
-+		      wasmacs_os_timing_checkpoint (41);
-           kbd_fetch_ptr = next_kbd_event (event);
-         }
+@@ -4270,26 +4489,60 @@
          break;
        default:
  	{
 +#ifdef __EMSCRIPTEN__
-+		  wasmacs_os_timing_checkpoint (42);
 +#endif
  	  /* If this event is on a different frame, return a
  	     switch-frame this time, and leave the event in the queue
@@ -1547,13 +1702,11 @@
 +		     For terminal keystrokes the pdmp-restored frame_or_window can
 +		     refer to a stale frame object.  Use the active selected frame
 +		     before the normal focus lookup touches XFRAME (frame). */
-+		  wasmacs_os_timing_checkpoint (420);
 +		  if (event->kind == ASCII_KEYSTROKE_EVENT
 +		      || event->kind == MULTIBYTE_CHAR_KEYSTROKE_EVENT
 +		      || event->kind == NON_ASCII_KEYSTROKE_EVENT)
 +		    {
 +		      frame = selected_frame;
-+		      wasmacs_os_timing_checkpoint (421);
  
 -	  frame = event->ie.frame_or_window;
 -	  if (CONSP (frame))
@@ -1598,31 +1751,29 @@
 +#endif
  	  internal_last_event_frame = frame;
 +#ifdef __EMSCRIPTEN__
-+		  wasmacs_os_timing_checkpoint (45);
 +#endif
  
  	  if (EQ (event->ie.device, Qt))
  	    Vlast_event_device = ((event->ie.kind == ASCII_KEYSTROKE_EVENT
-@@ -4302,6 +4598,9 @@
+@@ -4302,6 +4555,8 @@
  
  	  /* If we didn't decide to make a switch-frame event, go ahead
  	     and build a real event from the queue entry.  */
 +#ifdef __EMSCRIPTEN__
-+		  wasmacs_os_timing_checkpoint (46);
 +#endif
  	  if (NILP (obj))
  	    {
  	      double pinch_dx, pinch_dy, pinch_angle;
-@@ -4389,6 +4688,8 @@
+@@ -4388,6 +4643,8 @@
+ 		     itself.  */
  		  event->ie.arg = Fcons (make_fixnum (0), str);
  		}
++
++
  
-+
-+
  	      if (event->kind == MULTIBYTE_CHAR_KEYSTROKE_EVENT
  		  && CONSP (event->ie.arg))
- 		{
-@@ -8124,10 +8425,17 @@
+@@ -8124,10 +8381,17 @@
          cbuf[i] &= ~0x80;
  
        buf.code = cbuf[i];

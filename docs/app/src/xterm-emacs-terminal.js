@@ -11,6 +11,7 @@
 const DEFAULT_TERMINAL_DIMENSIONS = Object.freeze({ cols: 80, rows: 24 });
 const MIN_TERMINAL_COLS = 20;
 const MIN_TERMINAL_ROWS = 3;
+export const DEFAULT_XTERM_FONT_SIZE = 20;
 
 function normalizeTerminalDimensions(dimensions = {}) {
   const cols = Number.isInteger(dimensions.cols) ? dimensions.cols : DEFAULT_TERMINAL_DIMENSIONS.cols;
@@ -24,7 +25,7 @@ function normalizeTerminalDimensions(dimensions = {}) {
 export function calculateFallbackTerminalDimensions({
   width,
   height,
-  fontSize = 14,
+  fontSize = DEFAULT_XTERM_FONT_SIZE,
   horizontalPadding = 0,
   verticalPadding = 0,
 } = {}) {
@@ -71,7 +72,7 @@ export function createXtermEmacsTerminal(container, options = {}) {
     convertEol: false,
     scrollback: 1000,
     fontFamily: "monospace",
-    fontSize: 14,
+    fontSize: options.fontSize ?? DEFAULT_XTERM_FONT_SIZE,
     cols: initialDimensions.cols,
     rows: initialDimensions.rows,
   });
@@ -120,6 +121,14 @@ export function createXtermEmacsTerminal(container, options = {}) {
   term.onData((data) => {
     if (dataHandler) dataHandler(data);
   });
+  const controlKeyFallback = (event) => {
+    const bytes = terminalKeyEventToBytes(event);
+    if (!bytes || !dataHandler) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dataHandler(String.fromCharCode(...bytes));
+  };
+  container.addEventListener("keydown", controlKeyFallback, { capture: true });
 
   let focusedOnFirstOutput = false;
   return {
@@ -141,6 +150,7 @@ export function createXtermEmacsTerminal(container, options = {}) {
       return currentDimensions;
     },
     dispose() {
+      container.removeEventListener("keydown", controlKeyFallback, { capture: true });
       if (resizeObserver) resizeObserver.disconnect();
       else window.removeEventListener("resize", fit);
       term.dispose();
@@ -153,4 +163,23 @@ export function createXtermEmacsTerminal(container, options = {}) {
 // TextEncoder produces UTF-8 bytes, which Emacs reads from its tty input.
 export function xtermDataToBytes(data) {
   return Array.from(new TextEncoder().encode(data));
+}
+
+export function controlKeyEventToBytes(event) {
+  if (!event?.ctrlKey || event.altKey || event.metaKey) return null;
+  if (typeof event.key !== "string" || event.key.length !== 1) return null;
+  const code = event.key.toLowerCase().charCodeAt(0);
+  if (code < 97 || code > 122) return null;
+  return [code - 96];
+}
+
+export function terminalKeyEventToBytes(event) {
+  const controlBytes = controlKeyEventToBytes(event);
+  if (controlBytes) return controlBytes;
+  if (event?.ctrlKey || event?.altKey || event?.metaKey) return null;
+  if (event?.key === "ArrowUp") return [27, 91, 65];
+  if (event?.key === "ArrowDown") return [27, 91, 66];
+  if (event?.key === "ArrowRight") return [27, 91, 67];
+  if (event?.key === "ArrowLeft") return [27, 91, 68];
+  return null;
 }

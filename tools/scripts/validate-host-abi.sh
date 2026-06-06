@@ -25,6 +25,9 @@ for pattern in \
   'random-bytes' \
   'getenv' \
   'stdout' \
+  'Network Fetch' \
+  'fetch\(request\) -> response' \
+  'package.el' \
   'GUI Protocol' \
   'Process Surface' \
   'Emscripten Compatibility' \
@@ -39,6 +42,7 @@ for pattern in \
   '^interface random' \
   '^interface environment' \
   '^interface stdio' \
+  '^interface network' \
   '^interface process' \
   '^interface gui' \
   '^world emacs-core-host' \
@@ -46,6 +50,7 @@ for pattern in \
   'readdir: func' \
   'random-bytes: func' \
   'process-unavailable: func' \
+  'fetch: func' \
   'flush-draw: func' \
   'read-clipboard: func' \
   'write-clipboard: func'

@@ -1,10 +1,14 @@
+import { createNetworkPolicy, fetchUrlWithPolicy } from "./network-fetch.js";
+
 export class BrowserWorkerHost {
-  constructor({ fs, env = {}, cwd = "/home/user", postMessage }) {
+  constructor({ fs, env = {}, cwd = "/home/user", postMessage, fetchImpl = globalThis.fetch, networkPolicy } = {}) {
     this.fs = fs;
     this.env = { ...env };
     this.currentDirectory = cwd;
     this.postMessage = postMessage;
     this.textDecoder = new TextDecoder();
+    this.fetchImpl = fetchImpl;
+    this.networkPolicy = networkPolicy ?? createNetworkPolicy();
   }
 
   wallNowMs() {
@@ -54,5 +58,12 @@ export class BrowserWorkerHost {
 
   processUnavailable() {
     return "host.process is unavailable in the browser MVP";
+  }
+
+  async fetchUrl(request) {
+    return fetchUrlWithPolicy(request, {
+      fetchImpl: this.fetchImpl,
+      policy: this.networkPolicy,
+    });
   }
 }

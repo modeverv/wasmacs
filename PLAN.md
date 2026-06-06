@@ -2043,6 +2043,80 @@ Each feature must have:
 - tests or a repeatable smoke path
 - an update to this plan if scope changes
 
+Package install / network Phase 1 slice:
+
+- [x] Define `host.network.fetch` as an HTTP(S) request/response service, not a
+  raw socket or `host.process` substitute.
+- [x] Add a repo-local `wasmacs-url-fetch` Lisp overlay that can register a
+  fetch-backed `url.el` loader for `http` and `https`.
+- [x] Keep `vendor/emacs` unchanged; copy the overlay into `/system/lisp`
+  during system image construction.
+- [x] Add runtime host `fetchUrl` helpers with scheme/origin policy checks.
+- [x] Add runtime tests for host fetch response shape, permission denial, and
+  the no-raw-network-process Lisp overlay boundary.
+- [x] Add the Emacs-side `wasmacs-os-network-fetch-json` primitive and checked-in
+  C patch wiring so the Lisp loader can call the browser host network backend.
+- [x] Add a pasteable `use-package` smoke sample at
+  `doc/use-package-fetch-sample.el`.
+
+Validation notes:
+
+- 2026-06-06: Phase 1 fetch-backed url.el support added. Source references:
+  `vendor/emacs/lisp/emacs-lisp/package.el` uses
+  `url-retrieve`/`url-retrieve-synchronously` for archive downloads;
+  `vendor/emacs/lisp/url/url.el` dispatches via scheme loaders; the normal
+  `vendor/emacs/lisp/url/url-http.el` path would otherwise reach
+  `open-network-stream` / `make-network-process`. The new wasmacs route keeps
+  `host.process` unavailable and targets package archive download + VFS write.
+- 2026-06-06: continued Phase 1 by wiring the checked-in Emacs C patch to
+  expose `wasmacs-os-network-fetch-json`, backed by browser-host synchronous XHR
+  in wasm and JSON/base64 response adaptation in `wasmacs-url-fetch.el`.
+- 2026-06-06: rebuilt the browser Atomics+pdump artifacts with Phase 1 network
+  fetch support. `make build` completed and refreshed `docs/`; `npm test`
+  passed 80 tests; `tools/scripts/validate-host-abi.sh` passed; `strings
+  build/artifacts/system-lisp-emacs-30.2.wasifs | rg
+  "wasmacs-url-fetch|wasmacs-os-network-fetch-json"` confirmed the Lisp overlay
+  in the system image; `rg` confirmed `wasmacs_host_network_fetch_json` and the
+  wasm export in both `build/artifacts/emacs-browser-atomics-pdump/temacs.js`
+  and `docs/artifacts/emacs-browser-atomics-pdump/temacs.js`. `npm run dev`
+  served `http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart`, and
+  the in-app browser showed the Emacs xterm screen.
+- 2026-06-06: fixed the browser xterm route after manual smoke found
+  `(require 'wasmacs-url-fetch)` failing with `file-missing`. The cause was
+  that the standalone `system-lisp.wasifs` image contained the overlay, but the
+  active Atomics+pdump route preloads `${pdump_src}/lisp` into
+  `/usr/local/share/emacs/30.2/lisp` via `temacs.data`. The Atomics+pdump
+  builder now copies `src/emacs-lisp/*.el` into that preload tree before
+  byte-compilation. Validation: `npm test` passed 81 tests;
+  `tools/scripts/validate-host-abi.sh` passed; `make build` completed; `strings
+  build/artifacts/emacs-browser-atomics-pdump/temacs.data | rg
+  "wasmacs-url-fetch|wasmacs-os-network-fetch-json"` and the same command
+  against `docs/artifacts/.../temacs.data` confirmed the overlay in the active
+  browser artifact. Reloaded the in-app browser route and evaluating a scratch
+  buffer containing `(require 'wasmacs-url-fetch)` no longer enters Debugger or
+  reports `file-missing`.
+- 2026-06-06: fixed the next fetch smoke failure where the browser worker ended
+  with `stringToNewUTF8 is not a function`. The host-network `EM_JS` bridge now
+  returns JSON strings via `lengthBytesUTF8` + `_malloc` + `stringToUTF8`, and
+  the C primitive frees the response after `build_string`. Because
+  `https://happy-lucky.work/` does not send `Access-Control-Allow-Origin` for
+  `http://127.0.0.1:5173`, local `npm run dev` now exposes
+  `/__wasmacs_network_fetch` as a same-origin development proxy, and the
+  browser host bridge falls back to it when direct XHR fails. Validation:
+  `npm test` passed 82 tests; `tools/scripts/validate-host-abi.sh` passed;
+  `make build` completed; curl POST to
+  `http://127.0.0.1:5173/__wasmacs_network_fetch` fetched
+  `https://happy-lucky.work/` with status 200 and 6026 body bytes; a Node VM
+  artifact smoke mocked a direct CORS failure and confirmed
+  `wasmacs_os_network_fetch_json` returns the proxied response; the in-app
+  browser route was reloaded and reached the Emacs xterm screen.
+- 2026-06-06: made the Atomics+pdump browser runtime enable fetch-backed
+  `url.el` by default. The worker now passes a default Lisp init through
+  `--eval` that requires `wasmacs-url-fetch`, calls
+  `wasmacs-url-fetch-enable`, and logs `WASMACS-URL-FETCH=t`, so package.el /
+  use-package archive fetches can use the browser host backend without manual
+  scratch-buffer setup.
+
 ## Milestone 15: High-Performance Renderer
 
 Goal: replace the MVP DOM/textarea-oriented rendering path with a measured

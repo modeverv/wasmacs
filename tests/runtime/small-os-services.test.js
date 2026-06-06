@@ -151,6 +151,7 @@ test("current product scaffold facades are pending command and terminal tty", ()
     "dired-without-ls-facade",
     "pending-command-guard-facade",
     "terminal-tty-facade",
+    "url-fetch-facade",
   ]);
 
   const pending = facadeContract("pending-command-guard-facade");
@@ -168,6 +169,12 @@ test("current product scaffold facades are pending command and terminal tty", ()
   assert.equal(dired.ownerServices.includes(SmallOsServices.hostCapability), true);
   assert.equal(dired.sourceSurfaces.includes("vendor/emacs/lisp/ls-lisp.el"), true);
   assert.equal(dired.cWasmEntrypoints.includes("wasmacs_os_dired_without_ls_probe"), true);
+
+  const urlFetch = facadeContract("url-fetch-facade");
+  assert.equal(urlFetch.jsRole, JsRoles.hostCapabilityProvider);
+  assert.equal(urlFetch.ownerServices.includes(SmallOsServices.networkFetch), true);
+  assert.equal(urlFetch.sourceSurfaces.includes("src/emacs-lisp/wasmacs-url-fetch.el"), true);
+  assert.equal(urlFetch.sourceSurfaces.includes("vendor/emacs/lisp/emacs-lisp/package.el"), true);
 });
 
 test("terminal tty startup is a product route with lifecycle and browser boundary checks", () => {
@@ -191,6 +198,19 @@ test("Dired without ls is a product route over filesystem primitives, not host.p
   assert.equal(dired.sourceSurfaces.includes("vendor/emacs/lisp/ls-lisp.el"), true);
   assert.match(dired.acceptance, /directory-files-and-attributes/);
   assert.match(dired.acceptance, /host\.process/);
+});
+
+test("fetch-backed url.el package install is product-scoped without raw network processes", () => {
+  const packageInstall = createSubstrateRecord(SmallOsOperations.urlFetchPackageInstall.id);
+  assert.equal(packageInstall.treatment, BehaviorTreatment.product);
+  assert.equal(packageInstall.ownerServices.includes(SmallOsServices.networkFetch), true);
+  assert.equal(packageInstall.ownerServices.includes(SmallOsServices.filesystemPersistence), true);
+  assert.equal(packageInstall.crossServiceChecks.includes(CrossServiceChecks.networkFilesystem), true);
+  assert.equal(packageInstall.crossServiceChecks.includes(CrossServiceChecks.networkCapabilityPolicy), true);
+  assert.equal(packageInstall.sourceSurfaces.includes("vendor/emacs/lisp/url/url.el"), true);
+  assert.equal(packageInstall.sourceSurfaces.includes("vendor/emacs/lisp/url/url-http.el"), true);
+  assert.match(packageInstall.acceptance, /package\.el/);
+  assert.match(packageInstall.acceptance, /raw network processes/);
 });
 
 test("OS compatibility boundary inventory covers every small OS service", () => {
