@@ -71,6 +71,43 @@ function createRunDependencyLogFilter() {
   };
 }
 
+async function fetchSplitPreloadedPackage(packageName, expectedSize) {
+  const packageUrl = new URL(packageName, self.location.href);
+  packageUrl.search = "";
+  const manifestUrl = new URL(`${packageUrl.pathname}.parts/manifest.json`, packageUrl);
+  manifestUrl.searchParams.set("v", ARTIFACT_CACHE_BUST);
+
+  const manifestResponse = await fetch(manifestUrl, { cache: "no-store" });
+  if (!manifestResponse.ok) {
+    throw new Error(`split preload manifest failed: ${manifestResponse.status} ${manifestUrl}`);
+  }
+  const manifest = await manifestResponse.json();
+  if (manifest.size !== expectedSize) {
+    throw new Error(`split preload size mismatch: manifest=${manifest.size} expected=${expectedSize}`);
+  }
+
+  const partBuffers = await Promise.all(manifest.parts.map(async (part) => {
+    const partUrl = new URL(`${packageUrl.pathname}.parts/${part.name}`, packageUrl);
+    partUrl.searchParams.set("v", ARTIFACT_CACHE_BUST);
+    const response = await fetch(partUrl, { cache: "no-store" });
+    if (!response.ok) throw new Error(`split preload part failed: ${response.status} ${partUrl}`);
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength !== part.size) {
+      throw new Error(`split preload part size mismatch: ${part.name}`);
+    }
+    return buffer;
+  }));
+
+  const bytes = new Uint8Array(manifest.size);
+  let offset = 0;
+  for (const buffer of partBuffers) {
+    bytes.set(new Uint8Array(buffer), offset);
+    offset += buffer.byteLength;
+  }
+  post("status", { text: `loaded split preload data (${manifest.parts.length} parts)` });
+  return bytes.buffer;
+}
+
 // ── SharedArrayBuffer ────────────────────────────────────────────
 const INPUT_SAB = new SharedArrayBuffer(264);
 const TERMINAL_SIZE_SAB = new SharedArrayBuffer(12);
@@ -446,6 +483,12 @@ async function startEmacs(pdmpBytes, debugOptions = {}) {
     // returns "/temacs" even if not found via realpath, so --dump-file is not nulled.
     thisProgram: "/temacs",
     locateFile(path) { return `${ARTIFACT_DIR}/${path}?v=${ARTIFACT_CACHE_BUST}`; },
+    getPreloadedPackage(packageName, packageSize) {
+      if (String(packageName).includes("temacs.data")) {
+        return fetchSplitPreloadedPackage(packageName, packageSize);
+      }
+      return null;
+    },
     print(text) { post("stdout", { text }); },
     printErr(text) {
       if (!shouldPostStderr(String(text))) return;

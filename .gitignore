@@ -36,6 +36,18 @@ artifacts/
 !src/build/
 !src/build/**
 docs/artifacts/
+!docs/artifacts/
+!docs/artifacts/host-abi.wit
+!docs/artifacts/user-filesystem-empty.wasifs
+!docs/artifacts/emacs-browser-atomics-pdump/
+!docs/artifacts/emacs-browser-atomics-pdump/package.json
+!docs/artifacts/emacs-browser-atomics-pdump/temacs
+!docs/artifacts/emacs-browser-atomics-pdump/temacs.js
+!docs/artifacts/emacs-browser-atomics-pdump/temacs.wasm
+!docs/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp
+!docs/artifacts/emacs-browser-atomics-pdump/temacs.data.parts/
+!docs/artifacts/emacs-browser-atomics-pdump/temacs.data.parts/**
+docs/artifacts/emacs-browser-atomics-pdump/temacs.data
 
 # wasmacs generated images and runtime outputs
 *.wasm
@@ -44,6 +56,11 @@ docs/artifacts/
 *.wasmpack
 *.manifest.json
 *.journal.jsonl
+
+!docs/artifacts/host-abi.wit
+!docs/artifacts/user-filesystem-empty.wasifs
+!docs/artifacts/emacs-browser-atomics-pdump/temacs.wasm
+!docs/artifacts/emacs-browser-atomics-pdump/temacs.data.parts/**
 
 # Keep interface/design sources trackable.
 !docs/**/*.md

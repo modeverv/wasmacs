@@ -77,6 +77,22 @@ test("Atomics pdump browser builder preloads the wasmacs Lisp overlay", async ()
   assert.match(source, /--preload-file \$\{pdump_src\}\/lisp@\/usr\/local\/share\/emacs\/30\.2\/lisp/);
 });
 
+test("Atomics pdump preloads fetch-backed url.el dependencies before dump", async () => {
+  const source = await readFile(
+    join(repoRoot, "src/build/build-emacs-browser-atomics-pdump-profile.sh"),
+    "utf8",
+  );
+
+  assert.match(source, /wasmacs pbootstrap: preload url fetch lisp/);
+  assert.match(source, /\(equal dump-mode "pbootstrap"\)/);
+  assert.match(source, /lisp\\\/url/);
+  assert.match(source, /\(require \(quote json\)\)/);
+  assert.match(source, /\(require \(quote url-methods\)\)/);
+  assert.match(source, /\(require \(quote url-parse\)\)/);
+  assert.match(source, /\(require \(quote url-vars\)\)/);
+  assert.match(source, /\(require \(quote wasmacs-url-fetch\)\)/);
+});
+
 test("Atomics pdump browser runtime enables fetch-backed url.el by default", async () => {
   const source = await readFile(
     join(repoRoot, "src/wasm/src/emacs-atomics-pdump-worker.js"),
@@ -105,6 +121,31 @@ test("Atomics pdump worker suppresses Emscripten run dependency stderr spam", as
   assert.match(source, /if \(!shouldPostStderr\(String\(text\)\)\) return/);
 });
 
+test("Atomics pdump worker loads split preload data parts", async () => {
+  const source = await readFile(
+    join(repoRoot, "src/wasm/src/emacs-atomics-pdump-worker.js"),
+    "utf8",
+  );
+
+  assert.match(source, /async function fetchSplitPreloadedPackage/);
+  assert.match(source, /\$\{packageUrl\.pathname\}\.parts\/manifest\.json/);
+  assert.match(source, /Promise\.all\(manifest\.parts\.map/);
+  assert.match(source, /getPreloadedPackage\(packageName, packageSize\)/);
+  assert.match(source, /return fetchSplitPreloadedPackage\(packageName, packageSize\)/);
+});
+
+test("Pages builder splits temacs.data and patches async preload hook", async () => {
+  const source = await readFile(join(repoRoot, "src/build/build-site.mjs"), "utf8");
+
+  assert.match(source, /async function splitLargeDataFile/);
+  assert.match(source, /\$\{filePath\}\.parts/);
+  assert.match(source, /String\(index\)\.padStart\(3, "0"\)/);
+  assert.match(source, /patchTemacsJsForAsyncPreload/);
+  assert.match(source, /await fetched/);
+  assert.match(source, /await processPackageData\(fetched\)/);
+  assert.match(source, /await rm\(filePath, \{ force: true \}\)/);
+});
+
 test("dev server exposes the local host network fetch proxy", async () => {
   const source = await readFile(join(repoRoot, "tools/scripts/serve-app.mjs"), "utf8");
 
@@ -113,12 +154,19 @@ test("dev server exposes the local host network fetch proxy", async () => {
   assert.match(source, /normalizeProxyHeaders/);
   assert.match(source, /bodyBase64/);
   assert.match(source, /unsupported URL scheme/);
+  assert.match(source, /docs", "artifacts"/);
+  assert.match(source, /existsSync\(docsArtifact\)/);
 });
 
-test("Pages CI pins the Emscripten version used for browser artifacts", async () => {
+test("Pages CI deploys checked-in docs without rebuilding wasm artifacts", async () => {
   const source = await readFile(join(repoRoot, ".github/workflows/ci.yml"), "utf8");
+  const policy = await readFile(join(repoRoot, "tools/scripts/validate-git-artifact-policy.sh"), "utf8");
 
-  assert.match(source, /mymindstorm\/setup-emsdk@v14/);
-  assert.match(source, /version: "5\.0\.7"/);
-  assert.doesNotMatch(source, /version: "latest"/);
+  assert.match(source, /Test runtime contracts/);
+  assert.match(source, /path: docs/);
+  assert.match(source, /git ls-files -z docs\/artifacts/);
+  assert.doesNotMatch(source, /mymindstorm\/setup-emsdk/);
+  assert.doesNotMatch(source, /make build/);
+  assert.match(policy, /temacs\.data\.parts/);
+  assert.match(policy, /unsplit temacs\.data must not be tracked/);
 });

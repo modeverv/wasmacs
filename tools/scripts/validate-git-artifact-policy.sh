@@ -3,9 +3,8 @@ set -euo pipefail
 
 max_bytes="${WASMACS_MAX_TRACKED_FILE_BYTES:-95000000}"
 
-if git ls-files --error-unmatch docs/artifacts >/dev/null 2>&1; then
-  echo "docs/artifacts contains tracked generated files" >&2
-  git ls-files docs/artifacts >&2
+if git ls-files --error-unmatch docs/artifacts/emacs-browser-atomics-pdump/temacs.data >/dev/null 2>&1; then
+  echo "unsplit temacs.data must not be tracked; use temacs.data.parts instead" >&2
   exit 1
 fi
 

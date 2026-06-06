@@ -1,0 +1,33 @@
+{
+  "file": "temacs.data",
+  "size": 145917955,
+  "chunkSize": 33554432,
+  "sha256": "a861f223ebb63cb31597d46785c7c31d96982e8326d6167b115448bc505eebfc",
+  "parts": [
+    {
+      "name": "part-000",
+      "size": 33554432,
+      "sha256": "ec574b6a1c43437420cd193c7a2495a2412a88cb0581d173aee94d6b8caa99f8"
+    },
+    {
+      "name": "part-001",
+      "size": 33554432,
+      "sha256": "7b4778dc61d08c4062bf7ecd8977575650797d3d548b5e5499b93831d7bc9dfc"
+    },
+    {
+      "name": "part-002",
+      "size": 33554432,
+      "sha256": "1744a25726e9caadda482f63cf61661c973a9d5f1eee0c6e56b18afededdaa18"
+    },
+    {
+      "name": "part-003",
+      "size": 33554432,
+      "sha256": "b30465f88c775048169d9657f34b175b8451b8c622972aded1182648413a2975"
+    },
+    {
+      "name": "part-004",
+      "size": 11700227,
+      "sha256": "4c93fe7c4d7f00006671074f4288fa97f9bc83a64f9a7b7365767cec60d07ef0"
+    }
+  ]
+}

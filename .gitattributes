@@ -1,0 +1,4 @@
+docs/artifacts/**/*.pdmp binary
+docs/artifacts/**/*.wasifs binary
+docs/artifacts/**/*.wasm binary
+docs/artifacts/**/*.data.parts/part-* binary

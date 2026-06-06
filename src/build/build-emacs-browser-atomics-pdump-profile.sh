@@ -71,6 +71,22 @@ if [ -d "${repo_root}/src/emacs-lisp" ]; then
     "${repo_root}/src/emacs-lisp/" "${pdump_src}/lisp/"
 fi
 
+loadup_el="${pdump_src}/lisp/loadup.el"
+if ! grep -q "wasmacs pbootstrap: preload url fetch lisp" "${loadup_el}"; then
+  echo "=== Patching loadup.el to preload url fetch Lisp into pbootstrap pdmp ==="
+  perl -0pi -e '
+    s/(\n        \(message "Dumping under the name %s" output\))/
+        (when (equal dump-mode "pbootstrap")\n          ;; wasmacs pbootstrap: preload url fetch lisp before the portable dump.\n          ;; Browser\/CI pdmp startup can otherwise overflow the wasm JS call\n          ;; stack while loading these bytecode-heavy Lisp libraries after\n          ;; restore.  Keeping them in the dump makes runtime require shallow.\n          (add-to-list (quote load-path) \"\/usr\/local\/share\/emacs\/30.2\/lisp\/url\")\n          (require (quote json))\n          (require (quote url-methods))\n          (require (quote url-parse))\n          (require (quote url-vars))\n          (require (quote wasmacs-url-fetch)))$1/s
+  ' "${loadup_el}"
+fi
+if ! grep -q '/usr/local/share/emacs/30.2/lisp/url' "${loadup_el}"; then
+  echo "=== Patching loadup.el to add URL Lisp directory before pbootstrap preload ==="
+  perl -0pi -e '
+    s/(\n          \(require \(quote json\)\))/
+          (add-to-list (quote load-path) "\/usr\/local\/share\/emacs\/30.2\/lisp\/url")$1/s
+  ' "${loadup_el}"
+fi
+
 echo "=== Byte-compiling lisp files for temacs.data preload ==="
 "${native_baseline}/src/emacs" --batch \
   --eval "(byte-recompile-directory \"${pdump_src}/lisp\" 0 t)" 2>&1 \

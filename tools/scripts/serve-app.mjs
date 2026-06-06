@@ -1,4 +1,4 @@
-import { createReadStream } from "node:fs";
+import { createReadStream, existsSync } from "node:fs";
 import { stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { basename, extname, join, normalize } from "node:path";
@@ -20,7 +20,12 @@ function resolvePath(urlPath) {
   const decodedPath = urlPath === "/" ? "/src/wasm/index.html" : decodeURIComponent(urlPath);
   let sourcePath = decodedPath;
   if (decodedPath.startsWith("/artifacts/")) {
-    sourcePath = `/build/artifacts/${decodedPath.slice("/artifacts/".length)}`;
+    const artifactPath = decodedPath.slice("/artifacts/".length);
+    const docsArtifact = join(repoRoot, "docs", "artifacts", artifactPath);
+    if (docsArtifact.startsWith(repoRoot) && existsSync(docsArtifact)) {
+      return docsArtifact;
+    }
+    sourcePath = `/build/artifacts/${artifactPath}`;
   } else if (decodedPath === "/coi-serviceworker.js") {
     sourcePath = "/src/wasm/coi-serviceworker.js";
   } else if (decodedPath.startsWith("/app/")) {

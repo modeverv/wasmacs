@@ -2151,6 +2151,15 @@ Validation notes:
   `extra-eval=...` parameters append explicit Lisp forms. Normal boot remains
   unchanged. Validation: `npm test` passed 85 tests;
   `tools/scripts/validate-host-abi.sh` passed.
+- 2026-06-06: live diagnostic boot on `91a0ceb` showed
+  `?no-default-init=1` reaches `interactive wait ✓` on GitHub Pages with the
+  same 140MB preload data and thousands of embedded Lisp files, so the remaining
+  failure is not simply "too many built-in el files". Adding only
+  `(require 'wasmacs-url-fetch)` still failed, and probing `(require 'json)`
+  also reproduced the wasm `Maximum call stack size exceeded`. The pdump build
+  now patches the generated `loadup.el` copy to preload `json`, `url-methods`,
+  `url-parse`, `url-vars`, and `wasmacs-url-fetch` into the `pbootstrap` pdmp
+  before dump, leaving runtime `require` shallow after restore.
 
 ## Milestone 15: High-Performance Renderer
 
@@ -3279,6 +3288,53 @@ X2/X3 確認後、org-mode 最小確認:
 - `(require 'org)` が通るか
 - `.org` ファイル open/見出し入力/保存
 - 不足なら emacs.pdmp 生成 (full dump) を検討
+
+**vendor/emacs unchanged.**
+
+### Pages artifact LFS-avoidance route (2026-06-06)
+
+- Changed the publish route so GitHub Actions no longer rebuilds wasm artifacts
+  for Pages.  CI now runs `npm test`, checks tracked `docs/artifacts` sizes,
+  and uploads the checked-in `docs/` tree.  This keeps the deployed artifact on
+  the locally verified route instead of depending on GitHub CI's Emscripten /
+  LFS behavior.
+- `src/build/build-site.mjs` now splits the generated
+  `emacs-browser-atomics-pdump/temacs.data` into
+  `temacs.data.parts/manifest.json` plus 32 MiB part files, removes the
+  unsplit `temacs.data` from `docs/`, and patches Emscripten's preload hook so
+  Promise-backed split data is awaited before `processPackageData`.
+- `src/wasm/src/emacs-atomics-pdump-worker.js` now implements
+  `Module.getPreloadedPackage` for `temacs.data`, fetches all manifest parts in
+  parallel, validates sizes, concatenates them, and hands the resulting
+  `ArrayBuffer` to Emscripten.  `tools/scripts/serve-app.mjs` now prefers
+  `docs/artifacts` for `/artifacts/...`, so `npm run dev` tests the same split
+  Pages bundle instead of the unsplit `build/artifacts` tree.
+- To avoid the live post-pdump `Maximum call stack size exceeded` path,
+  `build-emacs-browser-atomics-pdump-profile.sh` preloads `json`, `url`,
+  `url-methods`, `url-parse`, `url-vars`, and `wasmacs-url-fetch` before
+  writing `bootstrap-emacs.pdmp`.  The copied `loadup.el` patch explicitly adds
+  `/usr/local/share/emacs/30.2/lisp/url` to `load-path` first, because
+  `url-methods.el` lives under the `url/` subdirectory during pbootstrap.
+- Rebuilt artifacts:
+  - `docs/artifacts/emacs-browser-atomics-pdump/temacs.wasm` sha256:
+    `0c7c763029942e1d28869b20bd02f30a5573d381416e141b914644fec7117d18`.
+  - `docs/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp` sha256:
+    `e28daf1122f16cf4f42d25d3742678d9be252f5b1b3e91f85b7ce9c6a1bdb253`.
+  - `temacs.data.parts`: 5 parts (`32M`, `32M`, `32M`, `32M`, `11M`).
+- Validation:
+  - `bash -n src/build/build-emacs-browser-atomics-pdump-profile.sh`: PASS.
+  - `make build`: PASS, including pbootstrap pdmp generation.
+  - `npm run build`: PASS.
+  - `npm test`: PASS (`88` tests).
+  - `npm run dev` restarted and left running at
+    `http://127.0.0.1:5173/`.
+  - In-app Browser opened
+    `http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart&verify=docs-split-devserver`
+    and reached `interactive wait ✓` with `pdmp 12.1 MB materialized`.
+  - In-app Browser opened the same local route with
+    `extra-eval=(progn (require 'json) (require 'url) (message "REQ-json-url-ok"))`;
+    it reached `interactive wait ✓`, printed `REQ-json-url-ok`, and did not
+    show `Maximum call stack`.
 
 **vendor/emacs unchanged.**
 

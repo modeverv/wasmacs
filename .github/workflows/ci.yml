@@ -24,21 +24,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
-      - uses: mymindstorm/setup-emsdk@v14
-        with:
-          version: "5.0.7"
-      - name: Install native build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y autoconf automake build-essential libncurses-dev ripgrep rsync texinfo
-      - name: Build generated Pages bundle
-        env:
-          JOBS: "2"
-        run: make build
-      - name: Test generated bundle and runtime contracts
+      - name: Test runtime contracts
         run: npm test
-      - name: Check generated artifact sizes
-        run: find docs/artifacts -type f -maxdepth 3 -printf '%s %p\n' | sort -nr | head -20
+      - name: Check checked-in Pages artifact sizes
+        run: |
+          git ls-files -z docs/artifacts | xargs -0 -I{} sh -c 'test -f "$1" && printf "%s %s\n" "$(wc -c <"$1")" "$1"' sh {} | sort -nr | head -20
+          tools/scripts/validate-git-artifact-policy.sh
       - uses: actions/configure-pages@v5
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       - uses: actions/upload-pages-artifact@v3
