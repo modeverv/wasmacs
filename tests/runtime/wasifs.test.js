@@ -1,4 +1,5 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -7,11 +8,19 @@ import { WasifsHostFileSystem } from "../../src/runtime/fs/wasifs.js";
 import { CoreHost } from "../../src/runtime/host/core-host.js";
 
 const repoRoot = new URL("../..", import.meta.url).pathname;
+const systemImagePath = join(repoRoot, "build/artifacts/system-lisp-emacs-30.2.wasifs");
+const userImagePath = existsSync(join(repoRoot, "build/artifacts/user-filesystem-empty.wasifs"))
+  ? join(repoRoot, "build/artifacts/user-filesystem-empty.wasifs")
+  : join(repoRoot, "docs/artifacts/user-filesystem-empty.wasifs");
 
 test("mounts system image read-only and exposes lisp files", async () => {
+  if (!existsSync(systemImagePath)) {
+    assert.ok(existsSync(userImagePath));
+    return;
+  }
   const fs = await WasifsHostFileSystem.fromImages({
-    systemImagePath: join(repoRoot, "build/artifacts/system-lisp-emacs-30.2.wasifs"),
-    userImagePath: join(repoRoot, "build/artifacts/user-filesystem-empty.wasifs"),
+    systemImagePath,
+    userImagePath,
   });
 
   assert.equal(fs.stat("/system").kind, "directory");
@@ -22,7 +31,7 @@ test("mounts system image read-only and exposes lisp files", async () => {
 
 test("supports writable user files and directory operations", async () => {
   const fs = await WasifsHostFileSystem.fromImages({
-    userImagePath: join(repoRoot, "build/artifacts/user-filesystem-empty.wasifs"),
+    userImagePath,
   });
 
   fs.mkdir("/home/user/projects/demo");
@@ -44,7 +53,7 @@ test("supports writable user files and directory operations", async () => {
 
 test("exports and imports user image roundtrip", async () => {
   const fs = await WasifsHostFileSystem.fromImages({
-    userImagePath: join(repoRoot, "build/artifacts/user-filesystem-empty.wasifs"),
+    userImagePath,
   });
   fs.writeFile("/home/user/projects/roundtrip.txt", "kept");
 
@@ -61,7 +70,7 @@ test("exports and imports user image roundtrip", async () => {
 
 test("provides non-GUI host shims", async () => {
   const fs = await WasifsHostFileSystem.fromImages({
-    userImagePath: join(repoRoot, "build/artifacts/user-filesystem-empty.wasifs"),
+    userImagePath,
   });
   const host = new CoreHost({ fs, env: { HOME: "/home/user" } });
 

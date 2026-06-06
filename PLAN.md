@@ -3335,6 +3335,11 @@ X2/X3 確認後、org-mode 最小確認:
     `extra-eval=(progn (require 'json) (require 'url) (message "REQ-json-url-ok"))`;
     it reached `interactive wait ✓`, printed `REQ-json-url-ok`, and did not
     show `Maximum call stack`.
+  - Follow-up CI evidence: run `27054875543` showed that `npm test` on a fresh
+    checkout no longer has `build/artifacts/*.wasifs`.  The runtime tests now
+    fall back to checked-in `docs/artifacts/user-filesystem-empty.wasifs`, and
+    the system-lisp image mount test treats missing local build artifacts as a
+    CI/no-build condition.
 
 **vendor/emacs unchanged.**
 
