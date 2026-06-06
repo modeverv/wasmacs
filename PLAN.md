@@ -2125,6 +2125,14 @@ Validation notes:
   that dependency dump to the DOM. The Atomics+pdump worker now suppresses only
   that generated dependency spam and replaces it with one progress status line,
   while preserving normal stderr and Emacs boot diagnostics.
+- 2026-06-06: isolated the remaining `Maximum call stack size exceeded` to
+  `wasmacs-url-fetch-enable`, not to `xt-mouse-mode` or merely requiring the
+  overlay. The url.el registry entries now match `url-methods.el` by storing
+  function symbols such as `wasmacs-url-fetch` instead of function objects.
+  Validation: `npm test` passed 84 tests; `tools/scripts/validate-host-abi.sh`
+  passed; `make build` regenerated `temacs.data`; the local in-app browser route
+  reached `interactive wait ✓` with the default url-fetch init and
+  `WASMACS-XTERM-MOUSE=t` still enabled.
 
 ## Milestone 15: High-Performance Renderer
 

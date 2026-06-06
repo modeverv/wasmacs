@@ -144,19 +144,19 @@ CALLBACK and CBARGS follow `url-retrieve' loader conventions."
   "Route url.el HTTP(S) retrieval through `wasmacs-url-fetch'."
   (puthash "http"
            (list 'name "http"
-                 'loader #'wasmacs-url-fetch
+                 'loader 'wasmacs-url-fetch
                  'asynchronous-p wasmacs-url-http-asynchronous-p
                  'default-port wasmacs-url-http-default-port
-                 'expand-file-name #'wasmacs-url-http-expand-file-name
-                 'parse-url #'url-generic-parse-url)
+                 'expand-file-name 'wasmacs-url-http-expand-file-name
+                 'parse-url 'url-generic-parse-url)
            url-scheme-registry)
   (puthash "https"
            (list 'name "https"
-                 'loader #'wasmacs-url-fetch
+                 'loader 'wasmacs-url-fetch
                  'asynchronous-p wasmacs-url-http-asynchronous-p
                  'default-port wasmacs-url-https-default-port
-                 'expand-file-name #'wasmacs-url-https-expand-file-name
-                 'parse-url #'url-generic-parse-url)
+                 'expand-file-name 'wasmacs-url-https-expand-file-name
+                 'parse-url 'url-generic-parse-url)
            url-scheme-registry))
 
 (provide 'wasmacs-url-fetch)

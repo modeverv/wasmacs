@@ -588,6 +588,9 @@ async function startEmacs(pdmpBytes) {
     if (err?.name !== "ExitStatus") {
       console.error("[pdump worker] callMain threw:", err);
     }
-    post("session-ended", { status: err?.status ?? 1, error: err?.message });
+    if (err?.stack) {
+      post("stderr", { text: `callMain stack: ${err.stack}` });
+    }
+    post("session-ended", { status: err?.status ?? 1, error: err?.message, stack: err?.stack });
   }
 }
