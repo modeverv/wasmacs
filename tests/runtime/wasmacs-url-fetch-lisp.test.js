@@ -88,6 +88,19 @@ test("Atomics pdump browser runtime enables fetch-backed url.el by default", asy
   assert.match(source, /"--eval", WASMACS_DEFAULT_LISP_INIT/);
 });
 
+test("Atomics pdump worker suppresses Emscripten run dependency stderr spam", async () => {
+  const source = await readFile(
+    join(repoRoot, "src/wasm/src/emacs-atomics-pdump-worker.js"),
+    "utf8",
+  );
+
+  assert.match(source, /function createRunDependencyLogFilter/);
+  assert.match(source, /still waiting on run dependencies:/);
+  assert.match(source, /text\.startsWith\("dependency: "\)/);
+  assert.match(source, /loading Emacs preload data\.\.\. \(\$\{pendingCount\} pending files\)/);
+  assert.match(source, /if \(!shouldPostStderr\(String\(text\)\)\) return/);
+});
+
 test("dev server exposes the local host network fetch proxy", async () => {
   const source = await readFile(join(repoRoot, "tools/scripts/serve-app.mjs"), "utf8");
 

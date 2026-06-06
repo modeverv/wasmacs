@@ -45,6 +45,32 @@ function postTerminalTail(reason) {
   } catch (_) {}
 }
 
+function createRunDependencyLogFilter() {
+  let pendingCount = 0;
+  let suppressing = false;
+
+  return function shouldPostStderr(text) {
+    if (text === "still waiting on run dependencies:") {
+      suppressing = true;
+      pendingCount = 0;
+      return false;
+    }
+    if (suppressing && text.startsWith("dependency: ")) {
+      pendingCount += 1;
+      return false;
+    }
+    if (suppressing && text === "(end of list)") {
+      post("status", { text: `loading Emacs preload data... (${pendingCount} pending files)` });
+      suppressing = false;
+      pendingCount = 0;
+      return false;
+    }
+    suppressing = false;
+    pendingCount = 0;
+    return true;
+  };
+}
+
 // ── SharedArrayBuffer ────────────────────────────────────────────
 const INPUT_SAB = new SharedArrayBuffer(264);
 const TERMINAL_SIZE_SAB = new SharedArrayBuffer(12);
@@ -412,6 +438,7 @@ async function startEmacs(pdmpBytes) {
 
   let resolveReady;
   const ready = new Promise(r => { resolveReady = r; });
+  const shouldPostStderr = createRunDependencyLogFilter();
 
   const Module = {
     noInitialRun: true,
@@ -421,6 +448,7 @@ async function startEmacs(pdmpBytes) {
     locateFile(path) { return `${ARTIFACT_DIR}/${path}?v=${ARTIFACT_CACHE_BUST}`; },
     print(text) { post("stdout", { text }); },
     printErr(text) {
+      if (!shouldPostStderr(String(text))) return;
       console.warn("[pdump worker]", text);
       post("stderr", { text });
     },

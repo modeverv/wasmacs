@@ -2116,6 +2116,15 @@ Validation notes:
   `wasmacs-url-fetch-enable`, and logs `WASMACS-URL-FETCH=t`, so package.el /
   use-package archive fetches can use the browser host backend without manual
   scratch-buffer setup.
+- 2026-06-06: diagnosed the live GitHub Pages
+  `https://modeverv.github.io/wasmacs/app/xterm-atomics-pdump.html` failure
+  reported as `Maximum call stack size exceeded`. The published worker and
+  artifacts were current, but the slower Pages fetch of `temacs.data` let
+  Emscripten's run-dependency watcher print one stderr line for each of the
+  4211 preloaded files. The xterm page auto-opened the log panel and appended
+  that dependency dump to the DOM. The Atomics+pdump worker now suppresses only
+  that generated dependency spam and replaces it with one progress status line,
+  while preserving normal stderr and Emacs boot diagnostics.
 
 ## Milestone 15: High-Performance Renderer
 
