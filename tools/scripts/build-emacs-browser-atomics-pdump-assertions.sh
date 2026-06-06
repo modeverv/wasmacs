@@ -10,8 +10,10 @@ build_dir="${repo_root}/build/emacs-pdump-configure-probe/build-gnu-host-interna
 out_dir="${repo_root}/build/artifacts/emacs-browser-atomics-pdump-assertions"
 atomics_host_library="${repo_root}/tools/scripts/wasmacs-atomics-host-library.js"
 emmake_bin="${EMMAKE:-emmake}"
-emacs_wasm_cflags="${EMACS_WASM_CFLAGS:--O2}"
+emacs_wasm_cflags="${EMACS_WASM_CFLAGS:--g3 -O0}"
+emacs_wasm_linkflags="${EMACS_WASM_LINKFLAGS:-${emacs_wasm_cflags}}"
 initial_memory="${WASMACS_ATOMICS_PDUMP_INITIAL_MEMORY:-536870912}"
+wasmacs_wasm_stack_size="${WASMACS_ATOMICS_PDUMP_STACK_SIZE:-67108864}"
 
 if ! command -v "${emmake_bin}" >/dev/null 2>&1; then
   echo "error: ${emmake_bin} not found" >&2; exit 127
@@ -39,11 +41,12 @@ base_exports="${base_exports},_wasmacs_os_begin_command,_wasmacs_os_finish_comma
 base_exports="${base_exports},_wasmacs_input_text,_wasmacs_input_cancel,_wasmacs_os_timing_checkpoint"
 
 # Key difference: -sASSERTIONS=1 for detailed abort info
-assertions_ldflags="-sEXIT_RUNTIME=0 \
+assertions_ldflags="${emacs_wasm_linkflags} \
+  -sEXIT_RUNTIME=0 \
   -sASSERTIONS=1 \
   -sEXPORTED_FUNCTIONS=${base_exports} \
   -sEXPORTED_RUNTIME_METHODS=callMain,ccall,FS,FS_createPath,FS_createDataFile,FS_readFile \
-  -sSTACK_SIZE=16777216 \
+  -sSTACK_SIZE=${wasmacs_wasm_stack_size} \
   -sSTACK_OVERFLOW_CHECK=2 \
   -sINITIAL_MEMORY=${initial_memory} \
   -sALLOW_MEMORY_GROWTH=1 \

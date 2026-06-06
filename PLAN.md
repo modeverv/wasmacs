@@ -3291,6 +3291,239 @@ X2/X3 確認後、org-mode 最小確認:
 
 **vendor/emacs unchanged.**
 
+### Atomics/pdump wasm stack headroom probe (2026-06-07)
+
+- Symptom: after the DevTools resize/log guards, Chrome DevTools sessions can
+  still end the Atomics/pdump xterm route with `Maximum call stack size
+  exceeded` when Enter is pressed.
+- Probe: `src/build/build-emacs-browser-atomics-pdump-profile.sh` and the
+  sibling assertions script now default
+  `WASMACS_ATOMICS_PDUMP_STACK_SIZE` to `67108864` (64 MiB), replacing the
+  previous hard-coded 16 MiB Emscripten `-sSTACK_SIZE`.
+- Build-script fix: the pdump profile builder now replaces its generated
+  `src/Makefile` `temacs$(EXEEXT): LDFLAGS += ...` stanza on every run, so
+  changed stack flags are actually reflected in the final linked artifact.
+- Evidence:
+  - Rebuilt `build/artifacts/emacs-browser-atomics-pdump`; generated
+    `temacs.js` reports `-sSTACK_SIZE (currently set to 67108864)`.
+  - Local Chrome with a real DevTools target open, loading
+    `http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart&no-live-resize=1&verify=stack64-devtools-...`,
+    still reached `Maximum call stack size exceeded` after `kk` + Enter.
+  - The failing stack still ends in V8/wasm glue around
+    `exec_byte_code`, `funcall_lambda`, `run_hook_with_args`, and
+    `invoke_jiii`.
+- Conclusion: increasing the wasm linear stack adds product headroom, but it
+  does not resolve this DevTools crash.  The current failure is more likely the
+  browser/V8 JavaScript call stack after DevTools instrumentation/tiering, not
+  Emscripten's linear-memory stack.
+- Validation:
+  - `bash -n src/build/build-emacs-browser-atomics-pdump-profile.sh`: PASS.
+  - `bash -n tools/scripts/build-emacs-browser-atomics-pdump-assertions.sh`:
+    PASS.
+  - `node --test tests/runtime/wasmacs-url-fetch-lisp.test.js`: PASS
+    (`14` tests).
+  - `src/build/build-emacs-browser-atomics-pdump-profile.sh`: PASS; generated
+    `temacs.wasm` sha256:
+    `f05ed4c56576f7d39561a41dfc4d94bbdd0b9198d33f48b41a2a81b6c2fb7d98`.
+  - Generated `bootstrap-emacs.pdmp` sha256:
+    `2eeddf0c3f51edc96e0be8c7ae9c7950f3abe7dc1345d496afdce9cdd86f60a0`.
+
+**vendor/emacs unchanged.**
+
+### Atomics/pdump `-O0 -g0` DevTools repro (2026-06-07)
+
+- Question: because the live user-facing blocker is the DevTools + Enter crash,
+  does stripping debug info while keeping no optimization (`-O0 -g0 + pdmp`)
+  improve the Chrome DevTools failure?
+- Build:
+  - Ran
+    `EMACS_WASM_CFLAGS='-O0 -g0' EMACS_WASM_LINKFLAGS='-O0 -g0' src/build/build-emacs-browser-atomics-pdump-profile.sh`.
+  - Ran `npm run build` to publish the rebuilt artifact into `docs/` for the
+    local dev server.
+  - Local artifact:
+    - `docs/artifacts/emacs-browser-atomics-pdump/temacs.wasm`: `7.7M`,
+      sha256 `6fb43c6850d9adbd58dd6588bf606b9fcbcf8f0c76ffca80a0c5684c274cfa67`.
+    - `docs/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp`: `12M`,
+      sha256 `bd72a2a1d5453a921acf52cb32e77a48bd9909065d3454ce59ea64b5e29fbe39`.
+- Browser evidence:
+  - `npm run dev` was already serving `http://127.0.0.1:5173`.
+  - Chrome Beta on CDP port `9000` was available, with a DevTools target open
+    for the same wasmacs tab.
+  - Cleared `wasmacs-pdump-cache` IndexedDB, navigated to
+    `http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart&no-live-resize=1&debug-log=1&verify=o0g0-pdump-devtools-1780764869937`.
+  - Boot reached `interactive wait ✓` with `pdmp 12.2 MB materialized`.
+  - Sending `kkkk` + Enter through Chrome CDP key events ended the session with
+    `ended (1 — Maximum call stack size exceeded)`.
+  - Worker log recorded
+    `[pdump worker] callMain threw: RangeError: Maximum call stack size exceeded`;
+    the stack still ended through wasm frames and Emscripten `invoke_jiii`.
+- Conclusion: `-O0 -g0 + pdmp` does not improve the DevTools + Enter crash.
+  The problem is not DWARF/debug-info size alone.  The remaining failure still
+  looks like browser/V8 JS call-stack pressure in the interactive command loop
+  path after input, with DevTools instrumentation active.
+- Follow-up Enter-only probe:
+  - With the same local `-O0 -g0 + pdmp` artifact and Chrome DevTools still
+    open, reloaded
+    `http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart&no-live-resize=1&debug-log=1&verify=enter-hypothesis-1780765134694`.
+  - Injected `2000` plain `k` bytes through
+    `window.__wasmacsDebugSendInputBytes(Array(2000).fill(107))`.
+    The input queue drained (`queue=0`) and the runtime stayed at
+    `interactive wait ✓`.
+  - Injected one CR byte through `window.__wasmacsDebugSendInputBytes([13])`.
+    The session immediately ended with
+    `ended (1 — Maximum call stack size exceeded)`.
+  - This rules out raw input volume and CDP keydown/keyup translation as the
+    primary trigger.  The narrow trigger is the Emacs `RET`/CR command path
+    under DevTools instrumentation, likely entering newline/self-insert
+    redisplay or post-command hook work rather than ordinary character input.
+- Follow-up arrow-key probe:
+  - Direct byte injection of right arrow (`ESC [ C`) and up arrow (`ESC [ A`)
+    stayed `interactive wait ✓`.
+  - Real Chrome key events for right/up/left/down arrows also stayed
+    `interactive wait ✓`.
+  - A repeat test with `100` real ArrowDown key events stayed
+    `interactive wait ✓`.
+  - Current evidence therefore narrows the confirmed crash trigger to CR/RET,
+    not generic non-printing key input or xterm.js arrow handling.
+- Follow-up newline-byte probe:
+  - Direct byte injection of LF / `C-j` (`[10]`) ended the session with
+    `ended (1 — Maximum call stack size exceeded)`.
+  - This expands the confirmed trigger from physical Enter / CR to newline
+    class input.  The likely target is now Emacs newline/evaluation command
+    processing and its redisplay/post-command aftermath, rather than xterm.js
+    Enter handling.
+- Follow-up command/minibuffer probe:
+  - Direct byte injection of `ESC x` (`[27, 120]`) also ended the session with
+    `ended (1 — Maximum call stack size exceeded)`.
+  - User-side manual testing also reports `C-x C-f` failure.
+  - This weakens the "newline implementation only" hypothesis and points to a
+    broader DevTools-sensitive path: command execution that opens or updates
+    minibuffer/echo-area state, runs heavier Lisp, and triggers redisplay under
+    Chrome DevTools wasm tier-down/instrumentation.
+- Validation:
+  - `src/build/build-emacs-browser-atomics-pdump-profile.sh` with
+    `EMACS_WASM_CFLAGS='-O0 -g0' EMACS_WASM_LINKFLAGS='-O0 -g0'`: PASS.
+  - `npm run build`: PASS.
+  - `node --test tests/runtime/wasmacs-url-fetch-lisp.test.js`: PASS
+    (`15` tests).
+
+**vendor/emacs unchanged.**
+
+### Optimized no-pdump Atomics probe (2026-06-07)
+
+- Question: if optimized pdmp builds fail, can an optimized non-pdump browser
+  core still boot by cold-loading Lisp from `temacs.data`?
+- Probe:
+  - Ran `tools/scripts/build-emacs-browser-atomics.sh`, which builds
+    `build/artifacts/emacs-browser-atomics` with dumping disabled
+    (`--with-dumping=none`, no `--dump-file`) and `EMACS_WASM_CFLAGS` defaulting
+    to `-O2`.
+  - Artifact generated successfully:
+    - `temacs.wasm`: `2.1M`
+    - `temacs.data`: `85M`
+  - Local browser route:
+    `http://127.0.0.1:5173/app/xterm-atomics.html?autostart&verify=no-pdmp-o2-...`
+    reached `calling callMain...` but did not produce terminal output or reach
+    an interactive wait after ~80 seconds.
+  - Node VM probe with `node --stack-size=65500` and the same artifact:
+    `Module.callMain(["--quick", "--batch", "--eval", "(princ emacs-version)"])`
+    returned `-1` with no stdout/stderr.
+- Conclusion: removing pdmp does not make the optimized `-O2` core viable.
+  The current optimized failure is not primarily pdmp restore; it is more likely
+  in the optimized wasm Emacs core plus the current OS compatibility patch
+  surface, startup environment, or Emscripten glue contract.
+- Clarification: the current `bootstrap-emacs.pdmp` is not a full production
+  `emacs.pdmp`, but it does preload core `loadup.el` state and selected URL
+  Lisp dependencies.  It therefore benefits Lisp startup partially, not zero.
+- Validation:
+  - `tools/scripts/build-emacs-browser-atomics.sh`: PASS artifact generation.
+  - In-app browser local route: FAIL/hang at `calling callMain...`.
+  - Node VM batch probe: FAIL, `status: -1`.
+
+**vendor/emacs unchanged.**
+
+### Native fake-OS optimized counterprobe (2026-06-07)
+
+- Question: is the optimized failure caused by the common wasmacs OS facade
+  patch itself, or only by the wasm/Emscripten/browser-specific runtime path?
+- Probe:
+  - Added `tools/scripts/probe-native-fake-os-optimized.sh`.
+  - The script copies `vendor/emacs` to
+    `build/native-fake-os-optimized/src`, applies the wasmacs host entrypoint
+    spike patch with `WASMACS_ENABLE_ASYNCIFY_WAITPOINT=0`, configures a native
+    macOS build with `CFLAGS=-O2 -g0`, disables dumping/pdump, then runs batch
+    checks through the resulting `src/src/emacs`.
+- Evidence:
+  - `tools/scripts/probe-native-fake-os-optimized.sh`: PASS.
+  - Batch `(princ emacs-version)`: printed `30.2`.
+  - Batch `(require 'json)`: printed `json-ok`.
+  - Batch `(fboundp 'wasmacs-os-network-fetch-json)`: printed
+    `wasmacs-primitive-ok`.
+  - Optional `(wasmacs-os-stack-bounds-probe)` check printed `missing` on the
+    native build, which is expected for this narrow probe.
+  - Log: `logs/native-fake-os-optimized.txt`.
+- Conclusion: the common `emacs.c` host/primitive facade is not inherently
+  broken by native `-O2 -g0`.  The optimized wasm/no-pdump failure should now be
+  narrowed to Emscripten/browser-specific code paths, especially
+  `__EMSCRIPTEN__`-guarded terminal/input waitpoints, generated JS glue,
+  worker/Atomics startup, or wasm-specific memory/stack semantics.
+- Limitation: this does not prove the full browser fake-OS layer is correct,
+  because the native probe deliberately disables the Asyncify/TTY waitpoint
+  path and does not exercise xterm input.
+- Validation:
+  - `bash -n tools/scripts/probe-native-fake-os-optimized.sh`: PASS.
+  - `tools/scripts/probe-native-fake-os-optimized.sh`: PASS.
+
+**vendor/emacs unchanged.**
+
+### Wasm optimized batch no-TTY probe (2026-06-07)
+
+- Question: if the Atomics/xterm/TTY compatibility layer is removed, can an
+  optimized wasm build still boot Emacs in plain `--batch` mode?
+- Probe:
+  - Added `tools/scripts/probe-wasm-optimized-batch-no-tty.sh`.
+  - The script builds from a clean `vendor/emacs` archive under
+    `build/wasm-optimized-batch-no-tty`, applies the wasmacs host/facade patch
+    with `WASMACS_ENABLE_ASYNCIFY_WAITPOINT=0`, links a browser/Node preload
+    artifact without the Atomics host library, and runs:
+    - `node --stack-size=65500 ./temacs --quick --batch --eval '(princ emacs-version)'`
+    - `node --stack-size=65500 ./temacs --quick --batch --eval '(require (quote json))' --eval '(princ "json-ok")'`
+- Evidence:
+  - `WASMACS_WASM_BATCH_NO_TTY_CFLAGS='-O2 -g0'` built successfully, but the
+    first batch load failed shortly after `Loading subr (source)...` with:
+    `Error: invalid-function ("")` and `Wrong type argument: listp, 27861040`.
+    Log: `logs/wasm-batch-no-tty-O2-g0.txt`.
+  - The same clean no-TTY probe with
+    `WASMACS_WASM_BATCH_NO_TTY_CFLAGS='-g3 -O0'` passed both batch checks,
+    including `(require 'json)`.  Log: `logs/wasm-batch-no-tty-g3-O0.txt`.
+  - Optimization matrix, high to low:
+    - `-O3 -g0`: FAIL, same early `Loading subr` error.
+    - `-Os -g0`: FAIL, same early `Loading subr` error.
+    - `-Oz -g0`: FAIL, same early `Loading subr` error.
+    - `-O2 -g0`: FAIL, same early `Loading subr` error.
+    - `-O1 -g0`: FAIL, same early `Loading subr` error.
+    - `-Og -g0`: FAIL, same early `Loading subr` error.
+    - `-O0 -g0`: PASS, both batch checks completed.
+    - `-g3 -O0`: PASS, both batch checks completed.
+    - Summary log: `logs/wasm-batch-no-tty-optimization-matrix.txt`.
+- Conclusion: TTY/Atomics/xterm is not required to reproduce the optimized wasm
+  failure.  The breakage is now narrower: any tested nonzero Emscripten/clang
+  optimization level corrupts or misinterprets Lisp state during early source
+  loadup even in plain batch mode, while `-O0` works with or without DWARF debug
+  info.  This points below the TTY layer, toward wasm optimization interaction
+  with Emacs Lisp object/tagging, setjmp/longjmp/nonlocal exit, stack scanning,
+  or Emscripten code generation.
+- Validation:
+  - `bash -n tools/scripts/probe-wasm-optimized-batch-no-tty.sh`: PASS.
+  - `tools/scripts/probe-wasm-optimized-batch-no-tty.sh` with default
+    `-O2 -g0`: FAIL as expected; records the early loadup error above.
+  - `WASMACS_WASM_BATCH_NO_TTY_CFLAGS='-g3 -O0' tools/scripts/probe-wasm-optimized-batch-no-tty.sh`:
+    PASS.
+  - Matrix reruns for `-O3`, `-Os`, `-Oz`, `-O2`, `-O1`, `-Og`, and `-O0`:
+    completed; see the summary log above.
+
+**vendor/emacs unchanged.**
+
 ### Pages artifact LFS-avoidance route (2026-06-06)
 
 - Changed the publish route so GitHub Actions no longer rebuilds wasm artifacts

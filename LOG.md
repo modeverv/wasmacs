@@ -1784,6 +1784,132 @@ Inventory the old command bridge, mark it as legacy, designate the xterm.js path
 
 **vendor/emacs unchanged.**
 
+## Task M260607c: `-O0 -g0 + pdmp` DevTools crash check
+
+### Summary
+
+- Rebuilt Atomics/pdump artifact with
+  `EMACS_WASM_CFLAGS='-O0 -g0' EMACS_WASM_LINKFLAGS='-O0 -g0'`.
+- Ran `npm run build` so local `npm run dev` served the rebuilt `docs/`
+  artifact.
+- Artifact hashes:
+  - `temacs.wasm`:
+    `6fb43c6850d9adbd58dd6588bf606b9fcbcf8f0c76ffca80a0c5684c274cfa67`
+    (`7.7M`).
+  - `bootstrap-emacs.pdmp`:
+    `bd72a2a1d5453a921acf52cb32e77a48bd9909065d3454ce59ea64b5e29fbe39`
+    (`12M`).
+- Chrome Beta on CDP port `9000` had a DevTools target open for the wasmacs
+  tab.  After clearing the page pdmp IndexedDB cache and navigating to
+  `http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart&no-live-resize=1&debug-log=1&verify=o0g0-pdump-devtools-1780764869937`,
+  the page reached `interactive wait ✓`.
+- Sending `kkkk` + Enter through Chrome key events reproduced
+  `ended (1 — Maximum call stack size exceeded)`.
+- Interpretation: `-O0 -g0 + pdmp` does not fix the DevTools + Enter failure.
+  The crash is not caused merely by DWARF/debug-info volume; it remains in the
+  interactive command-loop/input path under DevTools instrumentation.
+- Follow-up Enter-only probe:
+  - Reloaded the same local dev route with verify marker
+    `enter-hypothesis-1780765134694` while Chrome DevTools remained open.
+  - Injected `2000` plain `k` bytes via
+    `window.__wasmacsDebugSendInputBytes(Array(2000).fill(107))`; the page
+    stayed `interactive wait ✓` and the input queue drained to `0`.
+  - Injected a single CR byte via
+    `window.__wasmacsDebugSendInputBytes([13])`; the page ended with
+    `ended (1 — Maximum call stack size exceeded)`.
+  - Interpretation: the reproduced trigger is not input volume and not the
+    CDP key event conversion layer.  It is the Emacs-side `RET`/CR command path
+    under DevTools instrumentation.
+- Follow-up arrow-key probe:
+  - Direct byte injection of `ESC [ C` and `ESC [ A` stayed
+    `interactive wait ✓`.
+  - Real Chrome key events for all four arrow keys stayed `interactive wait ✓`.
+  - A `100` event ArrowDown repeat test stayed `interactive wait ✓`.
+  - Interpretation: current evidence points to CR/RET specifically, not
+    generic non-printing key input.
+- Follow-up newline-byte probe:
+  - Direct LF / `C-j` byte injection (`[10]`) reproduced
+    `ended (1 — Maximum call stack size exceeded)`.
+  - Interpretation: the confirmed trigger is newline-class input, not just the
+    physical Enter key or xterm.js Enter conversion.
+- Follow-up command/minibuffer probe:
+  - Direct `ESC x` byte injection (`[27, 120]`) reproduced
+    `ended (1 — Maximum call stack size exceeded)`.
+  - User-side manual testing reports `C-x C-f` failure too.
+  - Interpretation: the current blocker is broader than newline alone.  It
+    likely involves DevTools-sensitive command/minibuffer/redisplay paths.
+- Validation:
+  - `src/build/build-emacs-browser-atomics-pdump-profile.sh` with
+    `-O0 -g0`: PASS.
+  - `npm run build`: PASS.
+  - `node --test tests/runtime/wasmacs-url-fetch-lisp.test.js`: PASS
+    (`15` tests).
+
+**vendor/emacs unchanged.**
+
+## Task M260607b: optimized wasm batch without TTY waitpoint
+
+### Summary
+
+- Added `tools/scripts/probe-wasm-optimized-batch-no-tty.sh`.
+- The probe uses a clean `vendor/emacs` archive under
+  `build/wasm-optimized-batch-no-tty`, applies the wasmacs facade patch with
+  `WASMACS_ENABLE_ASYNCIFY_WAITPOINT=0`, links without the Atomics host library,
+  and runs Node wasm `--quick --batch` checks.
+- Result:
+  - `-O2 -g0`: build succeeded, but batch loadup failed shortly after
+    `Loading subr (source)...` with `invalid-function ("")` and
+    `Wrong type argument: listp, 27861040`.
+    Log: `logs/wasm-batch-no-tty-O2-g0.txt`.
+  - `-g3 -O0`: same no-TTY path passed `emacs-version` and `(require 'json)`.
+    Log: `logs/wasm-batch-no-tty-g3-O0.txt`.
+  - Matrix from high optimization downward:
+    `-O3`, `-Os`, `-Oz`, `-O2`, `-O1`, and `-Og` all failed at the same
+    early `Loading subr (source)...` boundary.
+  - `-O0 -g0` passed, proving the pass condition is no optimization, not DWARF
+    debug info.
+  - Summary log: `logs/wasm-batch-no-tty-optimization-matrix.txt`.
+- Interpretation: the optimized wasm failure does not require xterm, Atomics, or
+  the TTY waitpoint layer.  The likely fault line is lower than TTY and appears
+  as soon as any tested Emscripten/clang optimization is enabled, around
+  optimized wasm codegen interacting with Emacs Lisp object/tagging,
+  nonlocal-exit/setjmp, stack scanning, or early loadup semantics.
+- Validation:
+  - `bash -n tools/scripts/probe-wasm-optimized-batch-no-tty.sh`: PASS.
+  - `tools/scripts/probe-wasm-optimized-batch-no-tty.sh`: FAIL as expected for
+    `-O2 -g0`, with the recorded early loadup error.
+  - `WASMACS_WASM_BATCH_NO_TTY_CFLAGS='-g3 -O0' tools/scripts/probe-wasm-optimized-batch-no-tty.sh`:
+    PASS.
+  - `WASMACS_WASM_BATCH_NO_TTY_CFLAGS='-O0 -g0' tools/scripts/probe-wasm-optimized-batch-no-tty.sh`:
+    PASS.
+
+**vendor/emacs unchanged.**
+
+## Task M260607a: optimized wasm failure vs native fake-OS counterprobe
+
+### Summary
+
+- Added `tools/scripts/probe-native-fake-os-optimized.sh` to copy
+  `vendor/emacs`, apply the wasmacs host entrypoint/facade spike patch, build a
+  native macOS `-O2 -g0` pdump-free Emacs, and run batch smoke checks.
+- Probe result: PASS.
+  - `(princ emacs-version)` printed `30.2`.
+  - `(require 'json)` printed `json-ok`.
+  - `(fboundp 'wasmacs-os-network-fetch-json)` printed
+    `wasmacs-primitive-ok`.
+- Interpretation: the common C-side wasmacs OS facade is not inherently broken
+  by native optimization.  The optimized browser/no-pdump failure should be
+  narrowed toward Emscripten/browser-specific paths such as
+  `__EMSCRIPTEN__`-guarded waitpoints, generated JS glue, worker startup, or
+  wasm memory/stack semantics.
+- Validation:
+  - `bash -n tools/scripts/probe-native-fake-os-optimized.sh`: PASS.
+  - `tools/scripts/probe-native-fake-os-optimized.sh`: PASS.
+  - `node --test tests/runtime/wasmacs-url-fetch-lisp.test.js`: PASS
+    (`15` tests).
+
+**vendor/emacs unchanged.**
+
 ## 2026-06-05: Dired without external ls
 
 - Source check: `find-file` / `find-file-noselect` does not require external

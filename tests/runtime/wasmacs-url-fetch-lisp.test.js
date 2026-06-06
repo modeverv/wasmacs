@@ -79,6 +79,27 @@ test("Atomics pdump browser builder preloads the wasmacs Lisp overlay", async ()
   assert.match(source, /--preload-file \$\{pdump_src\}\/lisp@\/usr\/local\/share\/emacs\/30\.2\/lisp/);
 });
 
+test("Atomics pdump browser builder leaves wasm stack headroom for DevTools", async () => {
+  const source = await readFile(
+    join(repoRoot, "src/build/build-emacs-browser-atomics-pdump-profile.sh"),
+    "utf8",
+  );
+
+  assert.match(source, /WASMACS_ATOMICS_PDUMP_STACK_SIZE:-67108864/);
+  assert.match(source, /-sSTACK_SIZE=\$\{wasmacs_wasm_stack_size\}/);
+});
+
+test("Atomics pdump browser builder can strip link debug info separately", async () => {
+  const source = await readFile(
+    join(repoRoot, "src/build/build-emacs-browser-atomics-pdump-profile.sh"),
+    "utf8",
+  );
+
+  assert.match(source, /EMACS_WASM_CFLAGS:--g3 -O0/);
+  assert.match(source, /EMACS_WASM_LINKFLAGS:-\$\{emacs_wasm_cflags\}/);
+  assert.match(source, /emacs_atomics_pdump_ldflags="\$\{emacs_wasm_linkflags\}/);
+});
+
 test("Atomics pdump preloads fetch-backed url.el dependencies before dump", async () => {
   const source = await readFile(
     join(repoRoot, "src/build/build-emacs-browser-atomics-pdump-profile.sh"),

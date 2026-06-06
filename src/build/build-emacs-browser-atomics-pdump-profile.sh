@@ -19,8 +19,10 @@ out_dir="${repo_root}/build/artifacts/emacs-browser-atomics-pdump"
 atomics_host_library="${repo_root}/tools/scripts/wasmacs-atomics-host-library.js"
 emmake_bin="${EMMAKE:-emmake}"
 emacs_wasm_cflags="${EMACS_WASM_CFLAGS:--g3 -O0}"
+emacs_wasm_linkflags="${EMACS_WASM_LINKFLAGS:-${emacs_wasm_cflags}}"
 initial_memory="${WASMACS_ATOMICS_PDUMP_INITIAL_MEMORY:-1073741824}"
 allow_memory_growth="${WASMACS_ATOMICS_PDUMP_ALLOW_MEMORY_GROWTH:-1}"
+wasmacs_wasm_stack_size="${WASMACS_ATOMICS_PDUMP_STACK_SIZE:-67108864}"
 native_baseline="${repo_root}/build/native-emacs-30.2/src"
 
 if ! command -v "${emmake_bin}" >/dev/null 2>&1; then
@@ -139,10 +141,11 @@ base_exports="${base_exports},_wasmacs_os_begin_command,_wasmacs_os_finish_comma
 base_exports="${base_exports},_wasmacs_input_text,_wasmacs_input_cancel,_wasmacs_os_timing_checkpoint"
 
 # Atomics (no Asyncify)
-emacs_atomics_pdump_ldflags="-sEXIT_RUNTIME=0 \
+emacs_atomics_pdump_ldflags="${emacs_wasm_linkflags} \
+  -sEXIT_RUNTIME=0 \
   -sEXPORTED_FUNCTIONS=${base_exports} \
   -sEXPORTED_RUNTIME_METHODS=callMain,ccall,FS,FS_createPath,FS_createDataFile,FS_readFile \
-  -sSTACK_SIZE=16777216 \
+  -sSTACK_SIZE=${wasmacs_wasm_stack_size} \
   -sSTACK_OVERFLOW_CHECK=2 \
   -sINITIAL_MEMORY=${initial_memory} \
   -sALLOW_MEMORY_GROWTH=${allow_memory_growth} \
@@ -192,12 +195,11 @@ echo "=== Building pdumper+Atomics profile (${initial_memory} bytes) ==="
   perl -0pi -e 's/^LIBS_TERMCAP=.*$/LIBS_TERMCAP=/m;
                 s/^TERMCAP_OBJ=.*$/TERMCAP_OBJ=termcap.o tparam.o/m' \
     src/Makefile
-  if ! grep -q "wasmacs: Atomics pdump browser link flags" src/Makefile; then
-    {
-      printf '\n# wasmacs: Atomics pdump browser link flags.\n'
-      printf 'temacs$(EXEEXT): LDFLAGS += %s\n' "${emacs_atomics_pdump_ldflags}"
-    } >> src/Makefile
-  fi
+  perl -0pi -e 's/\n# wasmacs: Atomics pdump browser link flags\.\ntemacs\Q$(EXEEXT)\E: LDFLAGS \+= .*\n/\n/s' src/Makefile
+  {
+    printf '\n# wasmacs: Atomics pdump browser link flags.\n'
+    printf 'temacs$(EXEEXT): LDFLAGS += %s\n' "${emacs_atomics_pdump_ldflags}"
+  } >> src/Makefile
   rm -f src/temacs src/temacs.wasm src/temacs.data
 
   "${emmake_bin}" make -j"${JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || printf '4')}" \
