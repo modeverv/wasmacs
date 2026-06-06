@@ -162,7 +162,12 @@ export function createXtermEmacsTerminal(container, options = {}) {
 // xterm sends typed characters and escape sequences as a raw string.
 // TextEncoder produces UTF-8 bytes, which Emacs reads from its tty input.
 export function xtermDataToBytes(data) {
-  return Array.from(new TextEncoder().encode(data));
+  return Array.from(new TextEncoder().encode(stripBracketedPasteMarkers(data)));
+}
+
+export function stripBracketedPasteMarkers(data) {
+  if (typeof data !== "string" || data === "") return data;
+  return data.replaceAll("\x1b[200~", "").replaceAll("\x1b[201~", "");
 }
 
 export function controlKeyEventToBytes(event) {

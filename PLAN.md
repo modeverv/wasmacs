@@ -4176,3 +4176,35 @@ X2/X3 確認後、org-mode 最小確認:
     produced `resize: 197x54` and `winsize: 197x54 v13`.
 
 **vendor/emacs unchanged.**
+
+### xterm bracketed paste input normalization (2026-06-06)
+
+- Symptom: in a real Chrome tab, entering `kkkk` followed by Enter could end
+  the Atomics/pdump session with `Maximum call stack size exceeded`, while the
+  earlier in-app Browser verification only covered boot/`require` and did not
+  exercise the same input path.
+- Evidence: the failing Chrome log reported `wait#2 bytes=11` for the
+  `kkkk`+Enter action.  That byte count matches the xterm bracketed-paste start
+  marker `ESC [ 200 ~` plus `kkkk\r`, not ordinary five-byte terminal input.
+  The tail stack overflow then occurred after Emacs had inserted `kkkk`, inside
+  post-command hook execution.
+- Fix: `src/wasm/src/xterm-emacs-terminal.js` now strips xterm bracketed paste
+  wrappers before UTF-8 tty injection, so paste-like Chrome input reaches Emacs
+  as plain terminal text for this MVP route.
+- Fix: `src/wasm/xterm-atomics-pdump.html` now stages input in a browser-side
+  queue and flushes only when the single SAB input slot is empty, avoiding
+  overwrite/coalescing when browser input arrives in bursts or is split across
+  multiple xterm `onData` callbacks.
+- Validation:
+  - `node --test tests/runtime/xterm-emacs-terminal.test.js`: PASS.
+  - `npm test`: PASS (`89` tests).
+  - `npm run build`: PASS; `docs/app` includes the same normalization and
+    queued input flushing.
+  - In-app Browser dev-server check at
+    `http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart&verify=input-normalize-local`:
+    boot reached `interactive wait ✓`.
+  - In-app Browser paste check with clipboard text `kkkk\n`: runtime reported
+    `wait#5 bytes=5`, stayed at `interactive wait ✓`, and did not reproduce
+    `Maximum call stack size exceeded`.
+
+**vendor/emacs unchanged.**

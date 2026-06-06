@@ -220,21 +220,29 @@ let terminalSizeSAB = null;
 let emacsWorker = null;
 let lastTerminalSize = { cols: 80, rows: 24 };
 let emacsInteractive = false;
+const pendingInputBytes = [];
 const pageParams = new URLSearchParams(location.search);
 const debugBootOptions = {
   noDefaultInit: pageParams.get("no-default-init") === "1",
   extraEvals: pageParams.getAll("extra-eval"),
 };
 
-function sendInputToEmacs(bytes) {
-  if (!inputSAB || !bytes.length) return;
+function flushInputToEmacs() {
+  if (!inputSAB || pendingInputBytes.length === 0) return;
   const signal = new Int32Array(inputSAB, 0, 2);
+  if (Atomics.load(signal, 1) !== 0) return;
   const data   = new Uint8Array(inputSAB, 8);
-  const count  = Math.min(bytes.length, 256);
-  for (let i = 0; i < count; i++) data[i] = bytes[i];
+  const count  = Math.min(pendingInputBytes.length, 256);
+  for (let i = 0; i < count; i++) data[i] = pendingInputBytes.shift();
   Atomics.store(signal, 1, count);
   Atomics.add(signal, 0, 1);
   Atomics.notify(signal, 0, 1);
+}
+
+function sendInputToEmacs(bytes) {
+  if (!bytes.length) return;
+  pendingInputBytes.push(...bytes);
+  flushInputToEmacs();
 }
 window.__wasmacsDebugSendInputBytes = sendInputToEmacs;
 
@@ -353,6 +361,7 @@ function startEmacsWithPdmp(pdmpBytes) {
 
     if (msg.type === "terminal-output-bytes" && terminal) {
       terminal.writeBytes(msg.bytes);
+      flushInputToEmacs();
       if (!statusEl.classList.contains("interactive")) {
         emacsInteractive = true;
         setStatus("interactive ✓", "interactive");
@@ -361,6 +370,7 @@ function startEmacsWithPdmp(pdmpBytes) {
 
     if (msg.type === "timing") {
       addLog("cp", `wait#${msg.waitNum} bytes=${msg.byteCount} queue=${msg.queueLen} fio=${msg.fioCalls}`);
+      flushInputToEmacs();
       emacsInteractive = true;
       setStatus("interactive wait ✓", "interactive");
     }
@@ -412,6 +422,7 @@ function startEmacsWithPdmp(pdmpBytes) {
       inputSAB = null;
       terminalSizeSAB = null;
       emacsInteractive = false;
+      pendingInputBytes.length = 0;
       refreshExportBtn();
     }
   };
@@ -424,6 +435,7 @@ function startEmacsWithPdmp(pdmpBytes) {
     inputSAB = null;
     terminalSizeSAB = null;
     emacsInteractive = false;
+    pendingInputBytes.length = 0;
   };
 
   // Send "start" immediately — worker calls startEmacs(pdmpBytes) which posts "ready".

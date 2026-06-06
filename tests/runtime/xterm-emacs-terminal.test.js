@@ -5,7 +5,9 @@ import {
   controlKeyEventToBytes,
   DEFAULT_XTERM_FONT_SIZE,
   createXtermEmacsTerminal,
+  stripBracketedPasteMarkers,
   terminalKeyEventToBytes,
+  xtermDataToBytes,
 } from "../../src/wasm/src/xterm-emacs-terminal.js";
 
 test("xterm default font size is comfortable for the primary terminal surface", () => {
@@ -111,4 +113,9 @@ test("terminal key fallback leaves modified arrows to xterm or browser", () => {
   assert.equal(terminalKeyEventToBytes({ ctrlKey: true, key: "ArrowLeft" }), null);
   assert.equal(terminalKeyEventToBytes({ altKey: true, key: "ArrowLeft" }), null);
   assert.equal(terminalKeyEventToBytes({ metaKey: true, key: "ArrowLeft" }), null);
+});
+
+test("xterm input strips bracketed paste wrappers before Emacs tty injection", () => {
+  assert.equal(stripBracketedPasteMarkers("\x1b[200~kkkk\r\x1b[201~"), "kkkk\r");
+  assert.deepEqual(xtermDataToBytes("\x1b[200~kkkk\r"), [107, 107, 107, 107, 13]);
 });
