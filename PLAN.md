@@ -3313,13 +3313,15 @@ X2/X3 確認後、org-mode 最小確認:
   `build-emacs-browser-atomics-pdump-profile.sh` preloads `json`, `url`,
   `url-methods`, `url-parse`, `url-vars`, and `wasmacs-url-fetch` before
   writing `bootstrap-emacs.pdmp`.  The copied `loadup.el` patch explicitly adds
-  `/usr/local/share/emacs/30.2/lisp/url` to `load-path` first, because
-  `url-methods.el` lives under the `url/` subdirectory during pbootstrap.
+  `/usr/local/share/emacs/30.2/lisp/url` and
+  `/usr/local/share/emacs/30.2/lisp/net` to `load-path` first, because
+  `url-methods.el` lives under `url/` and `mailcap.el` lives under `net/`
+  during pbootstrap.
 - Rebuilt artifacts:
   - `docs/artifacts/emacs-browser-atomics-pdump/temacs.wasm` sha256:
     `0c7c763029942e1d28869b20bd02f30a5573d381416e141b914644fec7117d18`.
   - `docs/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp` sha256:
-    `e28daf1122f16cf4f42d25d3742678d9be252f5b1b3e91f85b7ce9c6a1bdb253`.
+    `2394a0600bb0b8e75a3ca82c677a236b5dd40b16a474050da2ebfa7cd24a5a45`.
   - `temacs.data.parts`: 5 parts (`32M`, `32M`, `32M`, `32M`, `11M`).
 - Validation:
   - `bash -n src/build/build-emacs-browser-atomics-pdump-profile.sh`: PASS.
@@ -3344,6 +3346,13 @@ X2/X3 確認後、org-mode 最小確認:
     failed because validation shell scripts require `rg`.  CI keeps the
     no-emsdk/no-`make build` route and installs only `ripgrep` as a lightweight
     test helper.
+  - Follow-up live/local evidence: the checked-in artifacts for commit
+    `3966212` matched live Pages by sha256, but
+    `extra-eval=(progn (require 'json) (require 'url) ...)` still overflowed
+    after the message.  Rebuilt the pdmp with `url` itself preloaded; adding
+    `net/` to `load-path` was required because `url.el` requires `mailcap`.
+    Local in-app Browser then reached `interactive wait ✓`, printed
+    `REQ-url-preload-local-ok`, and did not show `Maximum call stack`.
 
 **vendor/emacs unchanged.**
 

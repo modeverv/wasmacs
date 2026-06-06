@@ -219,6 +219,7 @@ let inputSAB  = null;
 let terminalSizeSAB = null;
 let emacsWorker = null;
 let lastTerminalSize = { cols: 80, rows: 24 };
+let emacsInteractive = false;
 const pageParams = new URLSearchParams(location.search);
 const debugBootOptions = {
   noDefaultInit: pageParams.get("no-default-init") === "1",
@@ -245,7 +246,7 @@ function publishTerminalSize(size) {
     Atomics.store(signal, 2, size.rows);
     Atomics.add(signal, 0, 1);
   }
-  if (inputSAB) {
+  if (inputSAB && emacsInteractive) {
     const inputSignal = new Int32Array(inputSAB, 0, 2);
     Atomics.add(inputSignal, 0, 1);
     Atomics.notify(inputSignal, 0, 1);
@@ -352,17 +353,21 @@ function startEmacsWithPdmp(pdmpBytes) {
 
     if (msg.type === "terminal-output-bytes" && terminal) {
       terminal.writeBytes(msg.bytes);
-      if (!statusEl.classList.contains("interactive"))
+      if (!statusEl.classList.contains("interactive")) {
+        emacsInteractive = true;
         setStatus("interactive ✓", "interactive");
+      }
     }
 
     if (msg.type === "timing") {
       addLog("cp", `wait#${msg.waitNum} bytes=${msg.byteCount} queue=${msg.queueLen} fio=${msg.fioCalls}`);
+      emacsInteractive = true;
       setStatus("interactive wait ✓", "interactive");
     }
 
     if (msg.type === "timing-wait-enter") {
       addLog("cp", `wait-enter#${msg.waitNum} queue=${msg.queueLen} out=${msg.outLen} fio=${msg.fioCalls}`);
+      emacsInteractive = true;
       setStatus("interactive wait ✓", "interactive");
     }
 
@@ -406,6 +411,7 @@ function startEmacsWithPdmp(pdmpBytes) {
       startBtn.disabled = false;
       inputSAB = null;
       terminalSizeSAB = null;
+      emacsInteractive = false;
       refreshExportBtn();
     }
   };
@@ -417,6 +423,7 @@ function startEmacsWithPdmp(pdmpBytes) {
     exportBtn.disabled = true;
     inputSAB = null;
     terminalSizeSAB = null;
+    emacsInteractive = false;
   };
 
   // Send "start" immediately — worker calls startEmacs(pdmpBytes) which posts "ready".

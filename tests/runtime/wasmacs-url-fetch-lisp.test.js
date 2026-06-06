@@ -90,6 +90,7 @@ test("Atomics pdump preloads fetch-backed url.el dependencies before dump", asyn
   assert.match(source, /\(require \(quote url-methods\)\)/);
   assert.match(source, /\(require \(quote url-parse\)\)/);
   assert.match(source, /\(require \(quote url-vars\)\)/);
+  assert.match(source, /\(require \(quote url\)\)/);
   assert.match(source, /\(require \(quote wasmacs-url-fetch\)\)/);
 });
 

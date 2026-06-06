@@ -76,7 +76,7 @@ if ! grep -q "wasmacs pbootstrap: preload url fetch lisp" "${loadup_el}"; then
   echo "=== Patching loadup.el to preload url fetch Lisp into pbootstrap pdmp ==="
   perl -0pi -e '
     s/(\n        \(message "Dumping under the name %s" output\))/
-        (when (equal dump-mode "pbootstrap")\n          ;; wasmacs pbootstrap: preload url fetch lisp before the portable dump.\n          ;; Browser\/CI pdmp startup can otherwise overflow the wasm JS call\n          ;; stack while loading these bytecode-heavy Lisp libraries after\n          ;; restore.  Keeping them in the dump makes runtime require shallow.\n          (add-to-list (quote load-path) \"\/usr\/local\/share\/emacs\/30.2\/lisp\/url\")\n          (require (quote json))\n          (require (quote url-methods))\n          (require (quote url-parse))\n          (require (quote url-vars))\n          (require (quote wasmacs-url-fetch)))$1/s
+        (when (equal dump-mode "pbootstrap")\n          ;; wasmacs pbootstrap: preload url fetch lisp before the portable dump.\n          ;; Browser\/CI pdmp startup can otherwise overflow the wasm JS call\n          ;; stack while loading these bytecode-heavy Lisp libraries after\n          ;; restore.  Keeping them in the dump makes runtime require shallow.\n          (add-to-list (quote load-path) \"\/usr\/local\/share\/emacs\/30.2\/lisp\/url\")\n          (add-to-list (quote load-path) \"\/usr\/local\/share\/emacs\/30.2\/lisp\/net\")\n          (require (quote json))\n          (require (quote url-methods))\n          (require (quote url-parse))\n          (require (quote url-vars))\n          (require (quote url))\n          (require (quote wasmacs-url-fetch)))$1/s
   ' "${loadup_el}"
 fi
 if ! grep -q '/usr/local/share/emacs/30.2/lisp/url' "${loadup_el}"; then
@@ -84,6 +84,20 @@ if ! grep -q '/usr/local/share/emacs/30.2/lisp/url' "${loadup_el}"; then
   perl -0pi -e '
     s/(\n          \(require \(quote json\)\))/
           (add-to-list (quote load-path) "\/usr\/local\/share\/emacs\/30.2\/lisp\/url")$1/s
+  ' "${loadup_el}"
+fi
+if ! grep -q '/usr/local/share/emacs/30.2/lisp/net' "${loadup_el}"; then
+  echo "=== Patching loadup.el to add net Lisp directory before pbootstrap preload ==="
+  perl -0pi -e '
+    s/(\n          \(require \(quote json\)\))/
+          (add-to-list (quote load-path) "\/usr\/local\/share\/emacs\/30.2\/lisp\/net")$1/s
+  ' "${loadup_el}"
+fi
+if ! grep -q '(require (quote url))' "${loadup_el}"; then
+  echo "=== Patching loadup.el to preload url.el before pbootstrap pdmp ==="
+  perl -0pi -e '
+    s/(\n          \(require \(quote wasmacs-url-fetch\)\))/
+          (require (quote url))$1/s
   ' "${loadup_el}"
 fi
 
