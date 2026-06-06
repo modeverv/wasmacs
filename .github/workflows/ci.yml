@@ -26,7 +26,7 @@ jobs:
           node-version: "24"
       - uses: mymindstorm/setup-emsdk@v14
         with:
-          version: "latest"
+          version: "5.0.7"
       - name: Install native build dependencies
         run: |
           sudo apt-get update

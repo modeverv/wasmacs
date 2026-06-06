@@ -112,3 +112,11 @@ test("dev server exposes the local host network fetch proxy", async () => {
   assert.match(source, /bodyBase64/);
   assert.match(source, /unsupported URL scheme/);
 });
+
+test("Pages CI pins the Emscripten version used for browser artifacts", async () => {
+  const source = await readFile(join(repoRoot, ".github/workflows/ci.yml"), "utf8");
+
+  assert.match(source, /mymindstorm\/setup-emsdk@v14/);
+  assert.match(source, /version: "5\.0\.7"/);
+  assert.doesNotMatch(source, /version: "latest"/);
+});

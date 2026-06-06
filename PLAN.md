@@ -2133,6 +2133,12 @@ Validation notes:
   passed; `make build` regenerated `temacs.data`; the local in-app browser route
   reached `interactive wait ✓` with the default url-fetch init and
   `WASMACS-XTERM-MOUSE=t` still enabled.
+- 2026-06-06: live Pages still failed after the registry fix, while the local
+  rebuilt route stayed stable. The live `temacs.data`, `temacs.wasm`, and pdmp
+  hashes differed from local because CI used `emsdk latest`; local validation
+  used Emscripten 5.0.7. CI now pins `mymindstorm/setup-emsdk@v14` to `5.0.7`
+  so published browser artifacts are built with the same toolchain family as
+  the verified local route.
 
 ## Milestone 15: High-Performance Renderer
 
