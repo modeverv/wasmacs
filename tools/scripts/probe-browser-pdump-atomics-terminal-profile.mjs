@@ -93,6 +93,9 @@ if (!isMainThread) {
   context.Module.FS.chmod("/temacs", 0o755);
   context.Module.FS.writeFile("/bootstrap-emacs.pdmp", new Uint8Array(pdmpBytes));
   installXtermTermShim(context.Module.FS);
+  context.ENV.TERM = "xterm-256color";
+  context.ENV.COLORTERM = "truecolor";
+  context.ENV.TERMCAP = "xterm-256color:co#80:li#24:Co#16777216:cl=\\E[H\\E[2J:cm=\\E[%i%d;%dH:up=\\E[A:do=\\E[B:nd=\\E[C:le=\\b:bs:ku=\\E[A:kd=\\E[B:kr=\\E[C:kl=\\E[D:kh=\\E[H:@7=\\E[F:kD=\\E[3~:ks=\\E[?1h\\E=:ke=\\E[?1l\\E>:ti=\\E[?1049h:te=\\E[?1049l:so=\\E[7m:se=\\E[27m:us=\\E[4m:ue=\\E[24m:md=\\E[1m:mr=\\E[7m:me=\\E[0m:AF=\\E[38;5;%dm:AB=\\E[48;5;%dm:op=\\E[39;49m:";
 
   post("ready");
   const bootArgs = [
@@ -100,10 +103,12 @@ if (!isMainThread) {
     "--quick",
     "--no-splash",
     "-nw",
-    "--eval", "(message \"WASMACS-TERM=%s\" (getenv \"TERM\"))",
-    "--eval", "(message \"WASMACS-COLOR-CELLS=%S\" (display-color-cells))",
-    "--eval", "(message \"WASMACS-TTY-COLORS=%S\" (length (tty-color-alist)))",
-    "--eval", "(message \"WASMACS-COLOR-196=%S\" (tty-color-by-index 196))",
+    "--eval", "(message \"T=%s\" (getenv \"TERM\"))",
+    "--eval", "(message \"CT=%s\" (getenv \"COLORTERM\"))",
+    "--eval", "(message \"CC=%S\" (display-color-cells))",
+    "--eval", "(message \"TC=%S\" (length (tty-color-alist)))",
+    "--eval", "(message \"PX=%S\" (tty-color-translate \"#123456\"))",
+    "--eval", "(insert (propertize \"WASMACS-TRUECOLOR-SAMPLE\" 'face '(:foreground \"#123456\" :background \"#654321\")))",
     "--eval", "(progn (require 'xt-mouse) (xterm-mouse-mode 1) (message \"WASMACS-XTERM-MOUSE=%S\" xterm-mouse-mode))",
   ];
   try {
@@ -145,12 +150,13 @@ if (!isMainThread) {
     finalText,
     ...messages.map((m) => m.text ?? ""),
   ].join("\n");
+  const plainProbeText = probeText.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "");
   const summary = {
-    hasXterm256Color: probeText.includes("WASMACS-TERM=xterm-256color"),
-    has256ColorCells: probeText.includes("COLOR-CELLS=256"),
-    has256TtyColors: probeText.includes("TTY-COLORS=256"),
-    hasColor196: probeText.includes("COLOR-196=(\"color-196\" 196"),
-    hasIndexedColorEscape: /\u001b\[(?:38|48);5;(?:1[6-9][0-9]|2[0-4][0-9]|25[0-5])m/.test(probeText),
+    hasXterm256Color: plainProbeText.includes("T=xterm-256color") || plainProbeText.includes("WASMACS-TERM=xterm-256color"),
+    hasColorTermTrueColor: plainProbeText.includes("CT=truecolor") || plainProbeText.includes("COLORTERM=truecolor"),
+    hasTrueColorCells: plainProbeText.includes("CC=16777216") || plainProbeText.includes("CELLS=16777216"),
+    hasTrueColorPixel: plainProbeText.includes("PX=1193046") || plainProbeText.includes("PIXEL=1193046"),
+    hasDirectColorEscape: /\u001b\[(?:38|48);2;[0-9]{1,3};[0-9]{1,3};[0-9]{1,3}m/.test(probeText),
     hasXtermMouseMode: probeText.includes("WASMACS-XTERM-MOUSE=t"),
     hasMouse1006Enable: finalText.includes("\u001b[?1006h"),
     hasArrowEditResult: finalText.includes("abc") && finalText.includes("\bZc\b"),
@@ -169,10 +175,7 @@ if (!isMainThread) {
   ].join("\n"));
 
   if (!summary.hasXterm256Color) throw new Error(`TERM readback did not report xterm-256color; see ${logPath}`);
-  if (!summary.has256ColorCells) throw new Error(`display-color-cells did not report 256; see ${logPath}`);
-  if (!summary.has256TtyColors) throw new Error(`tty-color-alist did not contain 256 entries; see ${logPath}`);
-  if (!summary.hasColor196) throw new Error(`tty color index 196 was not registered; see ${logPath}`);
-  if (!summary.hasIndexedColorEscape) throw new Error(`no 256-color indexed SGR escape was emitted; see ${logPath}`);
+  if (!summary.hasDirectColorEscape) throw new Error(`no true-color direct SGR escape was emitted; see ${logPath}`);
   if (!summary.hasXtermMouseMode) throw new Error(`xterm-mouse-mode was not enabled; see ${logPath}`);
   if (!summary.hasMouse1006Enable) throw new Error(`xterm mouse 1006 enable sequence was not emitted; see ${logPath}`);
   if (!summary.hasArrowEditResult) throw new Error(`cursor-left edit did not emit the expected backspace + Zc rewrite; see ${logPath}`);
@@ -219,9 +222,10 @@ function installXtermTermShim(FS) {
 (defun xterm-rgb-convert-to-16bit (prim)
   (logior prim (ash prim 8)))
 
-(defun wasmacs-xterm-register-256-colors ()
-  "Register xterm's 256-color palette without running full xterm probes."
-  (let ((ncolors (display-color-cells)))
+(defun wasmacs-xterm-register-colors ()
+  "Register xterm's palette without running full xterm probes."
+  (let* ((cells (display-color-cells))
+         (ncolors (if (= cells 16777216) 256 cells)))
     (when (> ncolors 0)
       (tty-color-clear))
     (dolist (color xterm-standard-colors)
@@ -254,7 +258,7 @@ function installXtermTermShim(FS) {
 
 (defun terminal-init-xterm ()
   "Initialize the wasmacs xterm tty without probing browser-hostile features."
-  (wasmacs-xterm-register-256-colors)
+  (wasmacs-xterm-register-colors)
   (when (fboundp 'tty-set-up-initial-frame-faces)
     (tty-set-up-initial-frame-faces))
   (run-hooks 'terminal-init-xterm-hook))

@@ -7,16 +7,80 @@ source_file="${spike_src}/src/emacs.c"
 keyboard_file="${spike_src}/src/keyboard.c"
 minibuf_file="${spike_src}/src/minibuf.c"
 sysdep_file="${spike_src}/src/sysdep.c"
+term_file="${spike_src}/src/term.c"
 loadup_file="${spike_src}/lisp/loadup.el"
 waitpoint_mode="${WASMACS_ASYNCIFY_WAITPOINT_MODE:-read-char}"
 terminal_tty_enabled="${WASMACS_ENABLE_ASYNCIFY_WAITPOINT:-0}"
 
-if [ ! -f "${source_file}" ] || [ ! -f "${keyboard_file}" ] || [ ! -f "${minibuf_file}" ] || [ ! -f "${sysdep_file}" ]; then
+if [ ! -f "${source_file}" ] || [ ! -f "${keyboard_file}" ] || [ ! -f "${minibuf_file}" ] || [ ! -f "${sysdep_file}" ] || [ ! -f "${term_file}" ]; then
   if [ "${spike_src}" = "${repo_root}/build/emacs-core-spike/src" ]; then
     "${repo_root}/tools/scripts/build-emacs-core-spike.sh"
   else
     echo "error: source files not found at ${spike_src}/src/" >&2; exit 1
   fi
+fi
+
+if ! rg 'wasmacs tty direct-color output' "${term_file}" >/dev/null; then
+  read -r -d '' WASMACS_TERM_DIRECT_COLOR_HELPER <<'EOF' || true
+/* wasmacs tty direct-color output: the browser build uses internal
+   termcap rather than terminfo, so Emacs' terminfo RGB/Tc fallback is not
+   available.  When the inline TERMCAP advertises 24-bit color cells, emit
+   xterm direct-color SGR from the already translated tty pixel. */
+#ifdef __EMSCRIPTEN__
+static void
+wasmacs_tty_output_direct_color (struct tty_display_info *tty,
+                                 bool background, unsigned long pixel)
+{
+  char sequence[32];
+  int red = (pixel >> 16) & 0xff;
+  int green = (pixel >> 8) & 0xff;
+  int blue = pixel & 0xff;
+  snprintf (sequence, sizeof sequence, "\033[%d;2;%d;%d;%dm",
+            background ? 48 : 38, red, green, blue);
+  OUTPUT1 (tty, sequence);
+}
+#endif
+
+static void
+turn_on_face (struct frame *f, int face_id)
+{
+EOF
+  WASMACS_TERM_DIRECT_COLOR_HELPER="${WASMACS_TERM_DIRECT_COLOR_HELPER}" \
+    perl -0pi -e 's~static void\nturn_on_face \(struct frame \*f, int face_id\)\n\{~$ENV{WASMACS_TERM_DIRECT_COLOR_HELPER}~' "${term_file}"
+
+  read -r -d '' WASMACS_TERM_DIRECT_COLOR_BRANCH <<'EOF' || true
+      ts = tty->standout_mode ? tty->TS_set_background : tty->TS_set_foreground;
+      if (face_tty_specified_color (fg) && ts)
+	{
+#ifdef __EMSCRIPTEN__
+          if (tty->TN_max_colors == 16777216)
+            wasmacs_tty_output_direct_color (tty, tty->standout_mode, fg);
+          else
+#endif
+            {
+              p = tparam (ts, NULL, 0, fg, 0, 0, 0);
+	      OUTPUT (tty, p);
+	      xfree (p);
+            }
+	}
+
+      ts = tty->standout_mode ? tty->TS_set_foreground : tty->TS_set_background;
+      if (face_tty_specified_color (bg) && ts)
+	{
+#ifdef __EMSCRIPTEN__
+          if (tty->TN_max_colors == 16777216)
+            wasmacs_tty_output_direct_color (tty, !tty->standout_mode, bg);
+          else
+#endif
+            {
+              p = tparam (ts, NULL, 0, bg, 0, 0, 0);
+	      OUTPUT (tty, p);
+	      xfree (p);
+            }
+	}
+EOF
+  WASMACS_TERM_DIRECT_COLOR_BRANCH="${WASMACS_TERM_DIRECT_COLOR_BRANCH}" \
+    perl -0pi -e 's~      ts = tty->standout_mode \? tty->TS_set_background : tty->TS_set_foreground;\n      if \(face_tty_specified_color \(fg\) && ts\)\n\t\{\n          p = tparam \(ts, NULL, 0, fg, 0, 0, 0\);\n\t  OUTPUT \(tty, p\);\n\t  xfree \(p\);\n\t\}\n\n      ts = tty->standout_mode \? tty->TS_set_foreground : tty->TS_set_background;\n      if \(face_tty_specified_color \(bg\) && ts\)\n\t\{\n          p = tparam \(ts, NULL, 0, bg, 0, 0, 0\);\n\t  OUTPUT \(tty, p\);\n\t  xfree \(p\);\n\t\}~$ENV{WASMACS_TERM_DIRECT_COLOR_BRANCH}~' "${term_file}"
 fi
 
 if rg 'wasmacs terminal tty service spike' "${sysdep_file}" >/dev/null; then

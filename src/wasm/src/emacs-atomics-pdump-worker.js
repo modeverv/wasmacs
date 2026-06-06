@@ -305,9 +305,10 @@ const WASMACS_XTERM_TERM_SHIM = `
 (defun xterm-rgb-convert-to-16bit (prim)
   (logior prim (ash prim 8)))
 
-(defun wasmacs-xterm-register-256-colors ()
-  "Register xterm's 256-color palette without running full xterm probes."
-  (let ((ncolors (display-color-cells)))
+(defun wasmacs-xterm-register-colors ()
+  "Register xterm's palette without running full xterm probes."
+  (let* ((cells (display-color-cells))
+         (ncolors (if (= cells 16777216) 256 cells)))
     (when (> ncolors 0)
       (tty-color-clear))
     (dolist (color xterm-standard-colors)
@@ -340,7 +341,7 @@ const WASMACS_XTERM_TERM_SHIM = `
 
 (defun terminal-init-xterm ()
   "Initialize the wasmacs xterm tty without probing browser-hostile features."
-  (wasmacs-xterm-register-256-colors)
+  (wasmacs-xterm-register-colors)
   (when (fboundp 'tty-set-up-initial-frame-faces)
     (tty-set-up-initial-frame-faces))
   (run-hooks 'terminal-init-xterm-hook))
@@ -504,6 +505,9 @@ async function startEmacs(pdmpBytes) {
     ENV.HOME = "/home/user";
     ENV.USER = "user";
     ENV.LOGNAME = "user";
+    ENV.TERM = "xterm-256color";
+    ENV.COLORTERM = "truecolor";
+    ENV.TERMCAP = "xterm-256color:co#80:li#24:Co#16777216:cl=\\E[H\\E[2J:cm=\\E[%i%d;%dH:up=\\E[A:do=\\E[B:nd=\\E[C:le=\\b:bs:ku=\\E[A:kd=\\E[B:kr=\\E[C:kl=\\E[D:kh=\\E[H:@7=\\E[F:kD=\\E[3~:ks=\\E[?1h\\E=:ke=\\E[?1l\\E>:ti=\\E[?1049h:te=\\E[?1049l:so=\\E[7m:se=\\E[27m:us=\\E[4m:ue=\\E[24m:md=\\E[1m:mr=\\E[7m:me=\\E[0m:AF=\\E[38;5;%dm:AB=\\E[48;5;%dm:op=\\E[39;49m:";
   } catch (_) {}
 
   installXtermTermShim(Module.FS);

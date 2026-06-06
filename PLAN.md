@@ -3173,6 +3173,46 @@ X2/X3 確認後、org-mode 最小確認:
 
 **vendor/emacs unchanged.**
 
+### xterm truecolor terminal profile (2026-06-06)
+
+- Extended the xterm terminal profile from indexed `xterm-256color` color
+  output to direct-color output while keeping `TERM=xterm-256color` for xterm
+  terminal initialization compatibility.
+- Source finding: this wasm build uses Emacs' internal termcap path with
+  `TERMINFO` disabled, so the GNU Emacs `term.c` truecolor fallback for
+  terminfo `RGB` / `Tc` / `COLORTERM=truecolor` does not run.  The browser
+  build therefore needs a wasmacs C-side direct-color bridge instead of only a
+  TERMCAP string change.
+- Added an Emscripten-only patch in
+  `tools/scripts/patch-emacs-host-entrypoint-spike.sh`: when
+  `TN_max_colors == 16777216`, tty face colors are emitted directly as
+  `ESC[38;2;r;g;bm` / `ESC[48;2;r;g;bm` from Emacs' translated tty pixel.
+  `vendor/emacs` remains read-only.
+- Updated Atomics and Asyncify host terminal environments to advertise
+  `Co#16777216` plus `COLORTERM=truecolor`.  The Atomics pdump worker also
+  sets the same environment immediately before `callMain`.
+- Kept the lightweight `term/xterm.el` shim browser-safe while making its
+  palette registration compatible with 24-bit color cells.
+- Rebuilt the Atomics pdump browser artifact:
+  - `build/artifacts/emacs-browser-atomics-pdump/temacs.wasm` sha256:
+    `351e7c71bd7cf706000bf677c8a2f43443c01ca82b796e57f7d1f253c2a2af97`.
+  - `build/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp`
+    sha256:
+    `065f276d40cf5bf9ce0f79c91bd0db8260b3ab9f69215d50ccaa75586aed285d`.
+- Validation:
+  - `node --check src/wasm/src/emacs-atomics-pdump-worker.js`: PASS.
+  - `node --check tools/scripts/probe-browser-pdump-atomics-terminal-profile.mjs`: PASS.
+  - `bash -n tools/scripts/patch-emacs-host-entrypoint-spike.sh`: PASS.
+  - `npm run test:xterm-terminal-profile`: PASS; log summary reports direct
+    truecolor SGR output, xterm mouse enablement, and cursor-left editing.
+  - `npm test`: PASS (`72` tests).
+  - `git diff --check`: PASS.
+  - In-app Browser verification was attempted after rebuild, but the Browser
+    tool rejected the localhost reload under its URL policy; no workaround was
+    used.
+
+**vendor/emacs unchanged.**
+
 ### xterm 256-color palette registration (2026-06-06)
 
 - Root cause: the browser route already advertised `TERM=xterm-256color` and
