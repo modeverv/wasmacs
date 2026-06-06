@@ -3340,6 +3340,10 @@ X2/X3 確認後、org-mode 最小確認:
     fall back to checked-in `docs/artifacts/user-filesystem-empty.wasifs`, and
     the system-lisp image mount test treats missing local build artifacts as a
     CI/no-build condition.
+  - Follow-up CI evidence: run `27054923482` passed all 88 Node tests, then
+    failed because validation shell scripts require `rg`.  CI keeps the
+    no-emsdk/no-`make build` route and installs only `ripgrep` as a lightweight
+    test helper.
 
 **vendor/emacs unchanged.**
 
