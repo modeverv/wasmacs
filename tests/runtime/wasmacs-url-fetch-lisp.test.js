@@ -18,6 +18,8 @@ test("wasmacs url.el loader is an overlay, not a vendor/emacs patch", async () =
   assert.match(source, /wasmacs-url-fetch-function/);
   assert.match(source, /wasmacs-os-network-fetch-json/);
   assert.match(source, /body-base64/);
+  assert.match(source, /bodyBase64/);
+  assert.match(source, /statusText/);
   assert.match(source, /url-scheme-registry/);
   assert.doesNotMatch(source, /\(make-network-process\b/);
   assert.doesNotMatch(source, /\(open-network-stream\b/);

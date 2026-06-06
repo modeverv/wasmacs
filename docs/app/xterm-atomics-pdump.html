@@ -222,6 +222,10 @@ let lastTerminalSize = { cols: 80, rows: 24 };
 let emacsInteractive = false;
 const pendingInputBytes = [];
 const pageParams = new URLSearchParams(location.search);
+const liveTerminalResize = pageParams.get("no-live-resize") !== "1";
+const TERMINAL_RESIZE_DEBOUNCE_MS = 250;
+let pendingTerminalResize = null;
+let terminalResizeTimer = null;
 const debugBootOptions = {
   noDefaultInit: pageParams.get("no-default-init") === "1",
   extraEvals: pageParams.getAll("extra-eval"),
@@ -262,11 +266,27 @@ function publishTerminalSize(size) {
   if (emacsWorker) emacsWorker.postMessage({ type: "terminal-resize", ...size });
 }
 
+function scheduleTerminalSizePublish(size) {
+  lastTerminalSize = size;
+  if (!liveTerminalResize && emacsInteractive) {
+    addLog("info", `resize suppressed: ${size.cols}x${size.rows}`);
+    return;
+  }
+  pendingTerminalResize = size;
+  if (terminalResizeTimer) clearTimeout(terminalResizeTimer);
+  terminalResizeTimer = setTimeout(() => {
+    terminalResizeTimer = null;
+    if (!pendingTerminalResize) return;
+    publishTerminalSize(pendingTerminalResize);
+    pendingTerminalResize = null;
+  }, TERMINAL_RESIZE_DEBOUNCE_MS);
+}
+
 function initTerminal() {
   if (terminal) return;
   terminal = createXtermEmacsTerminal(container, {
     onResize(size) {
-      publishTerminalSize(size);
+      scheduleTerminalSizePublish(size);
       addLog("info", `resize: ${size.cols}x${size.rows}`);
     },
   });
@@ -423,6 +443,9 @@ function startEmacsWithPdmp(pdmpBytes) {
       terminalSizeSAB = null;
       emacsInteractive = false;
       pendingInputBytes.length = 0;
+      if (terminalResizeTimer) clearTimeout(terminalResizeTimer);
+      terminalResizeTimer = null;
+      pendingTerminalResize = null;
       refreshExportBtn();
     }
   };
@@ -436,6 +459,9 @@ function startEmacsWithPdmp(pdmpBytes) {
     terminalSizeSAB = null;
     emacsInteractive = false;
     pendingInputBytes.length = 0;
+    if (terminalResizeTimer) clearTimeout(terminalResizeTimer);
+    terminalResizeTimer = null;
+    pendingTerminalResize = null;
   };
 
   // Send "start" immediately — worker calls startEmacs(pdmpBytes) which posts "ready".

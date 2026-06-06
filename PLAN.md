@@ -4208,3 +4208,32 @@ X2/X3 確認後、org-mode 最小確認:
     `Maximum call stack size exceeded`.
 
 **vendor/emacs unchanged.**
+
+### DevTools resize guard for Atomics/pdump xterm (2026-06-06)
+
+- Symptom: opening Chrome DevTools while the Atomics/pdump xterm route is
+  interactive can shrink the viewport, trigger xterm fit resize events, wake
+  Emacs through the terminal-size SAB, and then end the session with
+  `Maximum call stack size exceeded` during bytecode/hook redisplay paths.
+- Evidence: the reported Chrome screenshot showed DevTools docked below the
+  page, recent `resize: 192x18` / `winsize` events, and a terminal-tail stack
+  ending in `exec_byte_code`, `funcall_lambda`, and `run_hook_with_args`.
+- Fix: `src/wasm/xterm-atomics-pdump.html` now debounces live terminal resize
+  delivery to Emacs by 250ms, reducing resize storms from DevTools open/close
+  and viewport settling.
+- Fix: the same page now supports `?no-live-resize=1`, which keeps the initial
+  boot size but suppresses later Emacs-side TTY resize delivery after the
+  runtime is interactive.  This gives debugging sessions a stable mode even if
+  DevTools changes the browser viewport.
+- Validation:
+  - Extracted the page module script from
+    `src/wasm/xterm-atomics-pdump.html` and ran `node --check`: PASS.
+  - `npm test`: PASS (`89` tests).
+  - `npm run build`: PASS; `docs/app/xterm-atomics-pdump.html` includes the
+    same guard.
+  - In-app Browser dev-server check at
+    `http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart&no-live-resize=1&verify=devtools-resize-guard-local`:
+    boot reached `interactive wait ✓`; after interaction began, a later
+    `resize: 71x28` was logged as `resize suppressed: 71x28`.
+
+**vendor/emacs unchanged.**
