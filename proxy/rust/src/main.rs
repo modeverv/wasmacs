@@ -130,33 +130,39 @@ fn request_body(payload: &FetchRequest, method: &str) -> Result<Option<Vec<u8>>,
     Ok(payload.body.as_ref().map(|value| value.as_bytes().to_vec()))
 }
 
-fn json_response(status: u16, payload: serde_json::Value) -> Response {
-    Response::json(&payload)
-        .with_status_code(status)
+fn cors_response(request: &Request, response: Response) -> Response {
+    let origin = request
+        .header("Origin")
+        .map(str::to_string)
+        .unwrap_or_else(|| "*".to_string());
+    let response = response
         .with_additional_header("Access-Control-Allow-Headers", "content-type")
         .with_additional_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-        .with_additional_header("Access-Control-Allow-Origin", "*")
+        .with_additional_header("Access-Control-Allow-Origin", origin.clone())
         .with_additional_header("Access-Control-Allow-Private-Network", "true")
-        .with_additional_header("Cache-Control", "no-store")
+        .with_additional_header("Cache-Control", "no-store");
+    if origin == "*" {
+        response
+    } else {
+        response.with_additional_header("Vary", "Origin")
+    }
+}
+
+fn json_response(request: &Request, status: u16, payload: serde_json::Value) -> Response {
+    cors_response(request, Response::json(&payload).with_status_code(status))
 }
 
 fn handle_proxy(request: &Request) -> Response {
     if request.method() == "OPTIONS" {
-        return Response::empty_204()
-            .with_additional_header("Access-Control-Allow-Headers", "content-type")
-            .with_additional_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-            .with_additional_header("Access-Control-Allow-Origin", "*")
-            .with_additional_header("Access-Control-Allow-Private-Network", "true")
-            .with_additional_header("Cache-Control", "no-store");
+        return cors_response(request, Response::empty_204());
     }
     if request.method() != "POST" {
-        return Response::text("method not allowed")
-            .with_status_code(405)
-            .with_additional_header("Access-Control-Allow-Headers", "content-type")
-            .with_additional_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-            .with_additional_header("Access-Control-Allow-Origin", "*")
-            .with_additional_header("Access-Control-Allow-Private-Network", "true")
-            .with_additional_header("Allow", "POST");
+        return cors_response(
+            request,
+            Response::text("method not allowed")
+                .with_status_code(405)
+                .with_additional_header("Allow", "POST"),
+        );
     }
 
     let mut body = String::new();
@@ -166,15 +172,25 @@ fn handle_proxy(request: &Request) -> Response {
         .take(16 * 1024 * 1024)
         .read_to_string(&mut body)
     {
-        return json_response(400, serde_json::json!({ "error": error.to_string() }));
+        return json_response(
+            request,
+            400,
+            serde_json::json!({ "error": error.to_string() }),
+        );
     }
     let payload: FetchRequest = match serde_json::from_str(&body) {
         Ok(value) => value,
-        Err(error) => return json_response(400, serde_json::json!({ "error": error.to_string() })),
+        Err(error) => {
+            return json_response(
+                request,
+                400,
+                serde_json::json!({ "error": error.to_string() }),
+            )
+        }
     };
     let target = match assert_allowed_url(&payload.url) {
         Ok(value) => value,
-        Err(error) => return json_response(400, serde_json::json!({ "error": error })),
+        Err(error) => return json_response(request, 400, serde_json::json!({ "error": error })),
     };
     let method = payload
         .method
@@ -183,7 +199,7 @@ fn handle_proxy(request: &Request) -> Response {
         .to_uppercase();
     let body = match request_body(&payload, &method) {
         Ok(value) => value,
-        Err(error) => return json_response(400, serde_json::json!({ "error": error })),
+        Err(error) => return json_response(request, 400, serde_json::json!({ "error": error })),
     };
 
     let agent = ureq::AgentBuilder::new().build();
@@ -198,7 +214,13 @@ fn handle_proxy(request: &Request) -> Response {
     let upstream = match upstream {
         Ok(value) => value,
         Err(ureq::Error::Status(_, value)) => value,
-        Err(error) => return json_response(400, serde_json::json!({ "error": error.to_string() })),
+        Err(error) => {
+            return json_response(
+                request,
+                400,
+                serde_json::json!({ "error": error.to_string() }),
+            )
+        }
     };
     let status = upstream.status();
     let status_text = upstream.status_text().to_string();
@@ -215,7 +237,11 @@ fn handle_proxy(request: &Request) -> Response {
         .collect();
     let mut body = Vec::new();
     if let Err(error) = upstream.into_reader().read_to_end(&mut body) {
-        return json_response(400, serde_json::json!({ "error": error.to_string() }));
+        return json_response(
+            request,
+            400,
+            serde_json::json!({ "error": error.to_string() }),
+        );
     }
 
     let response = FetchResponse {
@@ -225,13 +251,7 @@ fn handle_proxy(request: &Request) -> Response {
         headers,
         body_base64: general_purpose::STANDARD.encode(body),
     };
-    Response::json(&response)
-        .with_status_code(200)
-        .with_additional_header("Access-Control-Allow-Headers", "content-type")
-        .with_additional_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-        .with_additional_header("Access-Control-Allow-Origin", "*")
-        .with_additional_header("Access-Control-Allow-Private-Network", "true")
-        .with_additional_header("Cache-Control", "no-store")
+    cors_response(request, Response::json(&response).with_status_code(200))
 }
 
 fn main() {

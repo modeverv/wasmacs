@@ -133,11 +133,21 @@ func requestBody(payload fetchRequest, method string) (io.Reader, error) {
 	return nil, nil
 }
 
-func writeJSON(w http.ResponseWriter, status int, payload any) {
+func writeCORS(w http.ResponseWriter, r *http.Request) {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		origin = "*"
+	} else {
+		w.Header().Set("Vary", "Origin")
+	}
 	w.Header().Set("Access-Control-Allow-Headers", "content-type")
 	w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Origin", origin)
 	w.Header().Set("Access-Control-Allow-Private-Network", "true")
+}
+
+func writeJSON(w http.ResponseWriter, r *http.Request, status int, payload any) {
+	writeCORS(w, r)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
@@ -146,19 +156,13 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 
 func handleProxy(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
-		w.Header().Set("Access-Control-Allow-Headers", "content-type")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Private-Network", "true")
+		writeCORS(w, r)
 		w.Header().Set("Cache-Control", "no-store")
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	if r.Method != http.MethodPost {
-		w.Header().Set("Access-Control-Allow-Headers", "content-type")
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Private-Network", "true")
+		writeCORS(w, r)
 		w.Header().Set("Allow", "POST")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -166,12 +170,12 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	var payload fetchRequest
 	if err := json.NewDecoder(io.LimitReader(r.Body, 16*1024*1024)).Decode(&payload); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	target, err := assertAllowedURL(payload.URL)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	method := strings.ToUpper(payload.Method)
@@ -180,17 +184,17 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	body, err := requestBody(payload, method)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	upstreamRequest, err := http.NewRequest(method, target.String(), body)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	headers, err := normalizeHeaders(payload.Headers)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	upstreamRequest.Header = headers
@@ -198,13 +202,13 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 	client := http.Client{Timeout: 30 * time.Second}
 	upstream, err := client.Do(upstreamRequest)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	defer upstream.Body.Close()
 	bodyBytes, err := io.ReadAll(upstream.Body)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		writeJSON(w, r, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 	responseHeaders := []headerPair{}
@@ -213,7 +217,7 @@ func handleProxy(w http.ResponseWriter, r *http.Request) {
 			responseHeaders = append(responseHeaders, headerPair{Name: strings.ToLower(name), Value: value})
 		}
 	}
-	writeJSON(w, http.StatusOK, fetchResponse{
+	writeJSON(w, r, http.StatusOK, fetchResponse{
 		URL:        upstream.Request.URL.String(),
 		Status:     upstream.StatusCode,
 		StatusText: http.StatusText(upstream.StatusCode),

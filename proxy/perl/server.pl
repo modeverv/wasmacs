@@ -76,36 +76,40 @@ sub payload_body {
   return undef;
 }
 
-sub json_response {
-  my ($status, $payload) = @_;
-  my $json = encode_json($payload);
-  return http_response($status, {
+sub cors_headers {
+  my ($headers) = @_;
+  my $origin = $headers->{origin} // '*';
+  my %cors = (
     'Access-Control-Allow-Headers' => 'content-type',
     'Access-Control-Allow-Methods' => 'POST, OPTIONS',
-    'Access-Control-Allow-Origin' => '*',
+    'Access-Control-Allow-Origin' => $origin,
     'Access-Control-Allow-Private-Network' => 'true',
+  );
+  $cors{Vary} = 'Origin' if $origin ne '*';
+  return %cors;
+}
+
+sub json_response {
+  my ($headers, $status, $payload) = @_;
+  my $json = encode_json($payload);
+  return http_response($status, {
+    cors_headers($headers),
     'Cache-Control' => 'no-store',
     'Content-Type' => 'application/json; charset=utf-8',
   }, $json);
 }
 
 sub handle_proxy {
-  my ($method, $content) = @_;
+  my ($method, $headers, $content) = @_;
   if ($method eq 'OPTIONS') {
     return http_response(204, {
-      'Access-Control-Allow-Headers' => 'content-type',
-      'Access-Control-Allow-Methods' => 'POST, OPTIONS',
-      'Access-Control-Allow-Origin' => '*',
-      'Access-Control-Allow-Private-Network' => 'true',
+      cors_headers($headers),
       'Cache-Control' => 'no-store',
     }, '');
   }
   if ($method ne 'POST') {
     return http_response(405, {
-      'Access-Control-Allow-Headers' => 'content-type',
-      'Access-Control-Allow-Methods' => 'POST, OPTIONS',
-      'Access-Control-Allow-Origin' => '*',
-      'Access-Control-Allow-Private-Network' => 'true',
+      cors_headers($headers),
       'Allow' => 'POST',
     }, 'method not allowed');
   }
@@ -123,14 +127,14 @@ sub handle_proxy {
       my $value = $upstream->{headers}{$name};
       push @headers, { name => lc($name), value => ref($value) eq 'ARRAY' ? join(', ', @{$value}) : "$value" };
     }
-    return json_response(200, {
+    return json_response($headers, 200, {
       url => $upstream->{url} || $target,
       status => 0 + ($upstream->{status} || 0),
       statusText => $upstream->{reason} || '',
       headers => \@headers,
       bodyBase64 => encode_base64($upstream->{content} // '', ''),
     });
-  } || json_response(400, { error => $@ || 'proxy request failed' });
+  } || json_response($headers, 400, { error => $@ || 'proxy request failed' });
 }
 
 sub http_response {
@@ -167,7 +171,7 @@ sub read_http_request {
   my $length = int($headers{'content-length'} // 0);
   my $content = '';
   read($connection, $content, $length) if $length > 0;
-  return ($method || 'GET', $content);
+  return ($method || 'GET', \%headers, $content);
 }
 
 my $port = $ENV{PORT} || 8787;
@@ -183,9 +187,9 @@ print "wasmacs fetch proxy listening at http://127.0.0.1:$port/\n";
 
 while (my $connection = $daemon->accept) {
   while (1) {
-    my ($method, $content) = read_http_request($connection);
+    my ($method, $headers, $content) = read_http_request($connection);
     last unless defined $method;
-    print {$connection} handle_proxy($method, $content);
+    print {$connection} handle_proxy($method, $headers, $content);
     last;
   }
   $connection->close;

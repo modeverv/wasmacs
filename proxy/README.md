@@ -28,9 +28,11 @@ It returns JSON:
 
 For browser-hosted wasmacs to call a localhost proxy from a different page
 origin, each sample answers CORS preflight requests with `OPTIONS` and includes
-`Access-Control-Allow-Origin: *` on JSON responses. The samples do not use
-cookies or credentials. When a public HTTPS page, such as GitHub Pages, calls
-`127.0.0.1`, modern browsers can also require a Private Network Access
+`Access-Control-Allow-Origin` on JSON responses. When the browser sends an
+`Origin` header, the samples echo that exact origin instead of `*`; this keeps
+Chrome's worker and Private/Local Network Access checks happy. The samples do
+not use cookies or credentials. When a public HTTPS page, such as GitHub Pages,
+calls `127.0.0.1`, modern browsers can also require a Private Network Access
 preflight; the samples answer it with
 `Access-Control-Allow-Private-Network: true`.
 
@@ -144,10 +146,23 @@ curl -i -X OPTIONS \
 ```
 
 The response should be `204` or `200` and include
-`Access-Control-Allow-Origin: *` plus
+`Access-Control-Allow-Origin: https://modeverv.github.io` plus
 `Access-Control-Allow-Private-Network: true`. Restart the proxy process after
 pulling wasmacs changes; an old process can keep the port open while still
 missing the required headers.
+
+The Ruby sample writes request diagnostics to stderr. During a browser smoke
+test, watch the terminal where the proxy is running:
+
+```text
+[2026-06-07T15:33:12Z] OPTIONS / origin=https://modeverv.github.io preflight
+[2026-06-07T15:33:12Z] POST / origin=https://modeverv.github.io fetch https://elpa.gnu.org/packages/archive-contents
+[2026-06-07T15:33:13Z] POST / origin=https://modeverv.github.io ok status=200 url=https://elpa.gnu.org/packages/archive-contents
+```
+
+No log line means the browser did not reach the proxy process. `OPTIONS` without
+`POST` means the browser stopped after preflight. `POST ... error ...` means the
+request reached the proxy and then failed at allowlist or upstream fetch time.
 
 Then open wasmacs with the proxy endpoint in the query string:
 

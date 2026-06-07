@@ -87,13 +87,19 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def log_message(self, _format, *_args):
         return
 
+    def write_cors_headers(self):
+        origin = self.headers.get("origin") or "*"
+        self.send_header("Access-Control-Allow-Headers", "content-type")
+        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Origin", origin)
+        self.send_header("Access-Control-Allow-Private-Network", "true")
+        if origin != "*":
+            self.send_header("Vary", "Origin")
+
     def write_json(self, status, payload):
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         self.send_response(status)
-        self.send_header("Access-Control-Allow-Headers", "content-type")
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Private-Network", "true")
+        self.write_cors_headers()
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
@@ -102,20 +108,14 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.send_response(405)
-        self.send_header("Access-Control-Allow-Headers", "content-type")
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Private-Network", "true")
+        self.write_cors_headers()
         self.send_header("Allow", "POST")
         self.end_headers()
         self.wfile.write(b"method not allowed")
 
     def do_OPTIONS(self):
         self.send_response(204)
-        self.send_header("Access-Control-Allow-Headers", "content-type")
-        self.send_header("Access-Control-Allow-Methods", "POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Private-Network", "true")
+        self.write_cors_headers()
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
 

@@ -95,16 +95,28 @@ function Get-RequestBody {
   return $null
 }
 
+function Set-CorsHeaders {
+  param($Context)
+
+  $Origin = $Context.Request.Headers.Get("Origin")
+  if ([string]::IsNullOrWhiteSpace($Origin)) {
+    $Origin = "*"
+  } else {
+    $Context.Response.Headers.Set("Vary", "Origin")
+  }
+  $Context.Response.Headers.Set("Access-Control-Allow-Headers", "content-type")
+  $Context.Response.Headers.Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+  $Context.Response.Headers.Set("Access-Control-Allow-Origin", $Origin)
+  $Context.Response.Headers.Set("Access-Control-Allow-Private-Network", "true")
+}
+
 function Write-JsonResponse {
   param($Context, [int]$Status, $Payload)
 
   $Json = $Payload | ConvertTo-Json -Depth 8 -Compress
   $Bytes = [System.Text.Encoding]::UTF8.GetBytes($Json)
   $Context.Response.StatusCode = $Status
-  $Context.Response.Headers.Set("Access-Control-Allow-Headers", "content-type")
-  $Context.Response.Headers.Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-  $Context.Response.Headers.Set("Access-Control-Allow-Origin", "*")
-  $Context.Response.Headers.Set("Access-Control-Allow-Private-Network", "true")
+  Set-CorsHeaders $Context
   $Context.Response.Headers.Set("Cache-Control", "no-store")
   $Context.Response.ContentType = "application/json; charset=utf-8"
   $Context.Response.ContentLength64 = $Bytes.Length
@@ -122,10 +134,7 @@ try {
     $Context = $Listener.GetContext()
     if ($Context.Request.HttpMethod -eq "OPTIONS") {
       $Context.Response.StatusCode = 204
-      $Context.Response.Headers.Set("Access-Control-Allow-Headers", "content-type")
-      $Context.Response.Headers.Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-      $Context.Response.Headers.Set("Access-Control-Allow-Origin", "*")
-      $Context.Response.Headers.Set("Access-Control-Allow-Private-Network", "true")
+      Set-CorsHeaders $Context
       $Context.Response.Headers.Set("Cache-Control", "no-store")
       $Context.Response.Close()
       continue
@@ -133,10 +142,7 @@ try {
     if ($Context.Request.HttpMethod -ne "POST") {
       $Bytes = [System.Text.Encoding]::UTF8.GetBytes("method not allowed")
       $Context.Response.StatusCode = 405
-      $Context.Response.Headers.Set("Access-Control-Allow-Headers", "content-type")
-      $Context.Response.Headers.Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-      $Context.Response.Headers.Set("Access-Control-Allow-Origin", "*")
-      $Context.Response.Headers.Set("Access-Control-Allow-Private-Network", "true")
+      Set-CorsHeaders $Context
       $Context.Response.Headers.Set("Allow", "POST")
       $Context.Response.ContentLength64 = $Bytes.Length
       $Context.Response.OutputStream.Write($Bytes, 0, $Bytes.Length)

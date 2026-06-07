@@ -75,13 +75,21 @@ function requestBody(payload, method) {
   return String(payload.body);
 }
 
-function writeJson(response, status, payload) {
-  const json = JSON.stringify(payload);
-  response.writeHead(status, {
+function corsHeaders(request) {
+  const origin = request.headers.origin || "*";
+  return {
     "Access-Control-Allow-Headers": "content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Private-Network": "true",
+    ...(origin === "*" ? {} : { Vary: "Origin" }),
+  };
+}
+
+function writeJson(request, response, status, payload) {
+  const json = JSON.stringify(payload);
+  response.writeHead(status, {
+    ...corsHeaders(request),
     "Cache-Control": "no-store",
     "Content-Length": Buffer.byteLength(json),
     "Content-Type": "application/json; charset=utf-8",
@@ -92,10 +100,7 @@ function writeJson(response, status, payload) {
 export async function handleProxyRequest(request, response) {
   if (request.method === "OPTIONS") {
     response.writeHead(204, {
-      "Access-Control-Allow-Headers": "content-type",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Private-Network": "true",
+      ...corsHeaders(request),
       "Cache-Control": "no-store",
     });
     response.end();
@@ -103,10 +108,7 @@ export async function handleProxyRequest(request, response) {
   }
   if (request.method !== "POST") {
     response.writeHead(405, {
-      "Access-Control-Allow-Headers": "content-type",
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Private-Network": "true",
+      ...corsHeaders(request),
       Allow: "POST",
     });
     response.end("method not allowed");
@@ -124,7 +126,7 @@ export async function handleProxyRequest(request, response) {
       redirect: "follow",
     });
     const body = Buffer.from(await upstream.arrayBuffer());
-    writeJson(response, 200, {
+    writeJson(request, response, 200, {
       url: upstream.url || target.href,
       status: upstream.status,
       statusText: upstream.statusText || "",
@@ -132,7 +134,7 @@ export async function handleProxyRequest(request, response) {
       bodyBase64: body.toString("base64"),
     });
   } catch (error) {
-    writeJson(response, 400, { error: error?.message || String(error) });
+    writeJson(request, response, 400, { error: error?.message || String(error) });
   }
 }
 

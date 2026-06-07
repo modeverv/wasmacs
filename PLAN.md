@@ -2194,8 +2194,8 @@ Validation notes:
   Direct browser fetch still runs first; on CORS/fetch failure the bridge tries
   the configured proxy endpoint before the same-origin development
   `/__wasmacs_network_fetch` route. All proxy samples now answer CORS
-  `OPTIONS` preflight and include `Access-Control-Allow-Origin: *` for
-  credential-free browser POSTs.
+  `OPTIONS` preflight and echo the requesting `Origin` for credential-free
+  browser POSTs.
 - 2026-06-07: added `wasmacs-url-fetch-proxy-url` to the Lisp overlay. Users can
   set `(setq wasmacs-url-fetch-proxy-url "http://127.0.0.1:8787/")` before
   `package-refresh-contents` / `package-install`; the Lisp loader includes it
@@ -2232,6 +2232,14 @@ Validation notes:
   `WASMACS_PROXY_ALLOWED_ORIGINS` includes that origin. Validation:
   `node --test tests/runtime/wasmacs-url-fetch-lisp.test.js
   tests/runtime/fetch-proxy-samples.test.js` passed 25 tests.
+- 2026-06-08: updated all proxy samples, including the Ruby WEBrick proxy, to
+  echo the browser `Origin` in `Access-Control-Allow-Origin` and set
+  `Vary: Origin` instead of using wildcard CORS when an origin is present. This
+  matches Chrome's stricter Private/Local Network Access behavior for worker
+  initiated requests from public HTTPS pages to localhost. Validation:
+  syntax/type checks passed for Node, PHP, Go, Rust, Perl, Ruby, Python, and
+  PowerShell; `node --test tests/runtime/fetch-proxy-samples.test.js` passed 9
+  tests and verified `https://modeverv.github.io` is echoed by every sample.
 
 ## Milestone 15: High-Performance Renderer
 

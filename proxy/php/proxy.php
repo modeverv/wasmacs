@@ -28,14 +28,23 @@ function allowed_origins(): array
     return array_values(array_filter(array_map('trim', explode(',', $raw))));
 }
 
+function write_cors_headers(): void
+{
+    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+    header('Access-Control-Allow-Headers: content-type');
+    header('Access-Control-Allow-Methods: POST, OPTIONS');
+    header('Access-Control-Allow-Origin: ' . ($origin === '' ? '*' : $origin));
+    header('Access-Control-Allow-Private-Network: true');
+    if ($origin !== '') {
+        header('Vary: Origin');
+    }
+}
+
 function write_json(int $status, array $payload): void
 {
     $json = json_encode($payload, JSON_UNESCAPED_SLASHES);
     http_response_code($status);
-    header('Access-Control-Allow-Headers: content-type');
-    header('Access-Control-Allow-Methods: POST, OPTIONS');
-    header('Access-Control-Allow-Origin: *');
-    header('Access-Control-Allow-Private-Network: true');
+    write_cors_headers();
     header('Cache-Control: no-store');
     header('Content-Type: application/json; charset=utf-8');
     header('Content-Length: ' . strlen($json));
@@ -99,19 +108,13 @@ function parse_response_headers(array $header_lines): array
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(204);
-    header('Access-Control-Allow-Headers: content-type');
-    header('Access-Control-Allow-Methods: POST, OPTIONS');
-    header('Access-Control-Allow-Origin: *');
-    header('Access-Control-Allow-Private-Network: true');
+    write_cors_headers();
     header('Cache-Control: no-store');
     return;
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Access-Control-Allow-Headers: content-type');
-    header('Access-Control-Allow-Methods: POST, OPTIONS');
-    header('Access-Control-Allow-Origin: *');
-    header('Access-Control-Allow-Private-Network: true');
+    write_cors_headers();
     header('Allow: POST');
     http_response_code(405);
     echo 'method not allowed';

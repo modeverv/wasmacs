@@ -4,6 +4,7 @@
 require 'base64'
 require 'json'
 require 'net/http'
+require 'time'
 require 'uri'
 require 'webrick'
 
@@ -67,12 +68,24 @@ def request_body(payload, method)
   nil
 end
 
-def json_response(response, status, payload)
-  response.status = status
+def log_proxy_event(request, message)
+  origin = request['Origin'].to_s
+  origin = '-' if origin.empty?
+  $stderr.puts "[#{Time.now.utc.iso8601}] #{request.request_method} #{request.path} origin=#{origin} #{message}"
+end
+
+def apply_cors(response, request)
+  origin = request['Origin']
   response['Access-Control-Allow-Headers'] = 'content-type'
   response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-  response['Access-Control-Allow-Origin'] = '*'
+  response['Access-Control-Allow-Origin'] = origin.to_s.empty? ? '*' : origin
   response['Access-Control-Allow-Private-Network'] = 'true'
+  response['Vary'] = 'Origin' unless origin.to_s.empty?
+end
+
+def json_response(request, response, status, payload)
+  response.status = status
+  apply_cors(response, request)
   response['Cache-Control'] = 'no-store'
   response['Content-Type'] = 'application/json; charset=utf-8'
   response.body = JSON.generate(payload)
@@ -107,29 +120,30 @@ server = WEBrick::HTTPServer.new(
 )
 
 class ProxyServlet < WEBrick::HTTPServlet::AbstractServlet
-  def do_OPTIONS(_request, response)
+  def do_OPTIONS(request, response)
+    log_proxy_event(request, 'preflight')
     response.status = 204
-    response['Access-Control-Allow-Headers'] = 'content-type'
-    response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-    response['Access-Control-Allow-Origin'] = '*'
-    response['Access-Control-Allow-Private-Network'] = 'true'
+    apply_cors(response, request)
     response['Cache-Control'] = 'no-store'
   end
 
-  def do_GET(_request, response)
+  def do_GET(request, response)
+    log_proxy_event(request, 'method-not-allowed')
     response.status = 405
-    response['Access-Control-Allow-Headers'] = 'content-type'
-    response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
-    response['Access-Control-Allow-Origin'] = '*'
-    response['Access-Control-Allow-Private-Network'] = 'true'
+    apply_cors(response, request)
     response['Allow'] = 'POST'
     response.body = 'method not allowed'
   end
 
   def do_POST(request, response)
-    json_response(response, 200, fetch_upstream(JSON.parse(request.body)))
+    payload = JSON.parse(request.body)
+    log_proxy_event(request, "fetch #{payload['url']}")
+    result = fetch_upstream(payload)
+    log_proxy_event(request, "ok status=#{result[:status]} url=#{result[:url]}")
+    json_response(request, response, 200, result)
   rescue StandardError => e
-    json_response(response, 400, { error: e.message })
+    log_proxy_event(request, "error #{e.message}")
+    json_response(request, response, 400, { error: e.message })
   end
 end
 

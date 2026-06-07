@@ -664,7 +664,8 @@ same-origin development proxy. Localhost proxy samples must answer CORS
 preflight because they are usually a different origin from the wasmacs page.
 When a public HTTPS origin calls `127.0.0.1`, modern browsers can also require a
 Private Network Access preflight, so local proxy samples answer
-`Access-Control-Allow-Private-Network: true`.
+`Access-Control-Allow-Private-Network: true` and echo the requesting `Origin`
+instead of wildcard CORS.
 - workspace image は信頼境界として扱う
 
 ## 採用候補

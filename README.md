@@ -147,7 +147,8 @@ can also use the same-origin `__wasmacs_network_fetch` route exposed by
 `make dev`; static hosts such as GitHub Pages do not provide that route.
 Modern browsers may send a Private Network Access preflight when a public
 HTTPS page calls a localhost proxy, so the bundled proxy samples answer
-`Access-Control-Allow-Private-Network: true`.
+`Access-Control-Allow-Private-Network: true` and echo the requesting `Origin`
+instead of using wildcard CORS.
 
 You can also set the proxy from Emacs Lisp for a specific user image or init
 flow:

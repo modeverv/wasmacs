@@ -110,6 +110,7 @@ async function assertProxyWorks(sample) {
   const upstreamPort = upstream.address().port;
   const proxyPort = await getFreePort();
   const allowedOrigin = `http://127.0.0.1:${upstreamPort}`;
+  const pageOrigin = "https://modeverv.github.io";
   const targetUrl = `${allowedOrigin}/packages/archive-contents`;
   const child = await startProxy(sample.start(proxyPort, allowedOrigin));
   try {
@@ -117,15 +118,16 @@ async function assertProxyWorks(sample) {
     const preflight = await fetch(`http://127.0.0.1:${proxyPort}/`, {
       method: "OPTIONS",
       headers: {
-        Origin: "http://127.0.0.1:5173",
+        Origin: pageOrigin,
         "Access-Control-Request-Method": "POST",
         "Access-Control-Request-Headers": "content-type",
         "Access-Control-Request-Private-Network": "true",
       },
     });
     assert.equal([200, 204].includes(preflight.status), true);
-    assert.equal(preflight.headers.get("access-control-allow-origin"), "*");
+    assert.equal(preflight.headers.get("access-control-allow-origin"), pageOrigin);
     assert.equal(preflight.headers.get("access-control-allow-private-network"), "true");
+    assert.match(preflight.headers.get("vary") || "", /Origin/);
     assert.match(preflight.headers.get("access-control-allow-methods") || "", /POST/);
     assert.match(preflight.headers.get("access-control-allow-headers") || "", /content-type/i);
 
@@ -133,7 +135,7 @@ async function assertProxyWorks(sample) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Origin: "http://127.0.0.1:5173",
+        Origin: pageOrigin,
       },
       body: JSON.stringify({
         url: targetUrl,
@@ -143,8 +145,9 @@ async function assertProxyWorks(sample) {
     });
     const payload = await response.json();
     assert.equal(response.status, 200, JSON.stringify(payload));
-    assert.equal(response.headers.get("access-control-allow-origin"), "*");
+    assert.equal(response.headers.get("access-control-allow-origin"), pageOrigin);
     assert.equal(response.headers.get("access-control-allow-private-network"), "true");
+    assert.match(response.headers.get("vary") || "", /Origin/);
     assert.equal(payload.status, 200);
     assert.equal(Buffer.from(payload.bodyBase64, "base64").toString("utf8"), "archive-data");
     assert.equal(
