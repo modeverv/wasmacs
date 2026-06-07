@@ -124,6 +124,9 @@ The samples are intentionally allowlist-based. Set
 WASMACS_PROXY_ALLOWED_ORIGINS=https://elpa.gnu.org,https://melpa.org
 ```
 
+For ad-hoc smoke tests against another origin, include that origin explicitly;
+for example `https://happy-lucky.work` is not allowed by the default samples.
+
 This is a user-operated network gateway, not a hidden project service. The
 operator is responsible for hosting policy, access control, logging, and the
 set of allowed archive origins. See `proxy/README.md` for the runnable examples.

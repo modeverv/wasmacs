@@ -132,6 +132,23 @@ PORT=8787 \
 python3 proxy/python/server.py
 ```
 
+If a browser reports `Failed to load 'http://127.0.0.1:8787/'`, first confirm
+that the running proxy is the current version and answers preflight requests:
+
+```sh
+curl -i -X OPTIONS \
+  -H 'Origin: https://modeverv.github.io' \
+  -H 'Access-Control-Request-Method: POST' \
+  -H 'Access-Control-Request-Private-Network: true' \
+  http://127.0.0.1:8787/
+```
+
+The response should be `204` or `200` and include
+`Access-Control-Allow-Origin: *` plus
+`Access-Control-Allow-Private-Network: true`. Restart the proxy process after
+pulling wasmacs changes; an old process can keep the port open while still
+missing the required headers.
+
 Then open wasmacs with the proxy endpoint in the query string:
 
 ```text

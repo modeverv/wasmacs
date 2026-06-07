@@ -202,7 +202,6 @@ EM_JS (const char *, wasmacs_host_network_fetch_json,
              try {
                var proxy = new XMLHttpRequest();
                proxy.open("POST", proxyUrl, false);
-               proxy.setRequestHeader("content-type", "application/json");
                proxy.send(JSON.stringify(request));
                if (proxy.responseText) {
                  try {

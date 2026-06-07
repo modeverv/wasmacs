@@ -46,6 +46,7 @@ test("Emacs patch script registers the host network fetch primitive", async () =
   assert.match(source, /__wasmacs_network_fetch/);
   assert.match(source, /returned invalid JSON/);
   assert.match(source, /continue;/);
+  assert.doesNotMatch(source, /proxy\.setRequestHeader\("content-type"/);
   assert.match(source, /xfree \(\(void \*\) response\)/);
   assert.doesNotMatch(source, /stringToNewUTF8/);
 });
@@ -71,6 +72,7 @@ test("checked-in Emacs C patch carries the host network fetch primitive", async 
   assert.match(source, /__wasmacs_network_fetch/);
   assert.match(source, /returned invalid JSON/);
   assert.match(source, /continue;/);
+  assert.doesNotMatch(source, /proxy\.setRequestHeader\("content-type"/);
   assert.match(source, /xfree \(\(void \*\) response\)/);
   assert.doesNotMatch(source, /stringToNewUTF8/);
 });

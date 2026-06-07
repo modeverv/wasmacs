@@ -17,10 +17,10 @@ index 7141363..8205327 100644
  ;; We are now capable of resizing the mini-windows, so give the
  ;; variable its advertised default value (it starts as nil, see
 diff --git a/src/emacs.c b/src/emacs.c
-index 1beb295..f1a662f 100644
+index 1beb295..9602eaa 100644
 --- a/src/emacs.c
 +++ b/src/emacs.c
-@@ -658,6 +658,1421 @@ init_cmdargs (int argc, char **argv, int skip_args, char const *original_pwd)
+@@ -658,6 +658,1420 @@ init_cmdargs (int argc, char **argv, int skip_args, char const *original_pwd)
    unbind_to (count, Qnil);
  }
  
@@ -131,7 +131,6 @@ index 1beb295..f1a662f 100644
 +             try {
 +               var proxy = new XMLHttpRequest();
 +               proxy.open("POST", proxyUrl, false);
-+               proxy.setRequestHeader("content-type", "application/json");
 +               proxy.send(JSON.stringify(request));
 +               if (proxy.responseText) {
 +                 try {
@@ -1442,7 +1441,7 @@ index 1beb295..f1a662f 100644
  DEFUN ("invocation-name", Finvocation_name, Sinvocation_name, 0, 0, 0,
         doc: /* Return the program name that was used to run Emacs.
  Any directory names are omitted.  */)
-@@ -3594,6 +5009,7 @@ syms_of_emacs (void)
+@@ -3594,6 +5008,7 @@ syms_of_emacs (void)
  
    defsubr (&Skill_emacs);
  

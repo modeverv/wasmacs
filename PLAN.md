@@ -2216,6 +2216,22 @@ Validation notes:
   docs/artifacts/emacs-browser-atomics-pdump/temacs.js | rg
   "isLocalHostName|returned invalid JSON|__wasmacs_network_fetch|wasmacsNetworkProxyUrl"`
   confirmed the generated Pages artifact contains the corrected host bridge.
+- 2026-06-08: diagnosed the next live Pages proxy error reported as
+  `Failed to execute 'send' on 'XMLHttpRequest': Failed to load
+  'http://127.0.0.1:8787/'`. The configured localhost proxy endpoint was being
+  selected correctly, but public HTTPS pages to localhost are subject to browser
+  Private Network Access / CORS checks, and the bridge's explicit
+  `content-type: application/json` header forced an extra CORS preflight. The
+  bridge now sends the proxy POST body without that custom request header; the
+  proxy samples still accept the same JSON payload and keep their PNA `OPTIONS`
+  support for browsers that require it. Local curl checks showed the currently
+  running Perl proxy answered PNA `OPTIONS` with
+  `Access-Control-Allow-Private-Network: true`, `https://elpa.gnu.org` fetched
+  through the proxy with status 200, and the ad-hoc smoke target
+  `https://happy-lucky.work` was rejected by the intentional allowlist until
+  `WASMACS_PROXY_ALLOWED_ORIGINS` includes that origin. Validation:
+  `node --test tests/runtime/wasmacs-url-fetch-lisp.test.js
+  tests/runtime/fetch-proxy-samples.test.js` passed 25 tests.
 
 ## Milestone 15: High-Performance Renderer
 
