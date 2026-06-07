@@ -1,14 +1,29 @@
+diff --git a/lisp/loadup.el b/lisp/loadup.el
+index 7141363..8205327 100644
+--- a/lisp/loadup.el
++++ b/lisp/loadup.el
+@@ -143,6 +143,13 @@
+ (load "env")
+ (load "format")
+ (load "bindings")
++
++;; wasmacs os-compat: Dired without external ls.
++;; Browser MVP keeps host.process unavailable, so directory listing must use
++;; Emacs filesystem primitives through ls-lisp instead of an ls subprocess.
++(load "ls-lisp" nil t)
++(setq ls-lisp-use-insert-directory-program nil)
++(setq insert-directory-program nil)
+ (load "window")  ; Needed here for `replace-buffer-in-windows'.
+ ;; We are now capable of resizing the mini-windows, so give the
+ ;; variable its advertised default value (it starts as nil, see
+diff --git a/src/emacs.c b/src/emacs.c
+index 1beb295..66b571e 100644
 --- a/src/emacs.c
 +++ b/src/emacs.c
-@@ -653,11 +653,1385 @@
- 	   locale-coding-system.  */
- 	Vcommand_line_args
- 	  = Fcons (build_unibyte_string (argv[i]), Vcommand_line_args);
-+    }
-+
-+  unbind_to (count, Qnil);
-+}
-+
+@@ -658,6 +658,1409 @@ init_cmdargs (int argc, char **argv, int skip_args, char const *original_pwd)
+   unbind_to (count, Qnil);
+ }
+
 +static char *wasmacs_last_eval_result;
 +static char *wasmacs_last_minibuffer_state;
 +static char *wasmacs_last_interactive_state;
@@ -77,23 +92,52 @@
 +         function fail(message) {
 +           return returnJson({ error: String(message) });
 +         }
-+         function proxyFetch(request, directError) {
-+           var proxyUrl = new URL("/__wasmacs_network_fetch",
-+                                  typeof location !== "undefined" ? location.href : "http://127.0.0.1:5173/").href;
-+           var proxy = new XMLHttpRequest();
-+           proxy.open("POST", proxyUrl, false);
-+           proxy.setRequestHeader("content-type", "application/json");
-+           proxy.send(JSON.stringify(request));
-+           if (proxy.responseText) {
++         function configuredProxyUrls(request) {
++           var urls = [];
++           var configured = "";
++           if (request && request.proxyUrl)
++             configured = String(request.proxyUrl || "");
++           if (typeof Module !== "undefined" && Module && Module.wasmacsNetworkProxyUrl)
++             configured = configured || String(Module.wasmacsNetworkProxyUrl || "");
++           if (!configured && typeof globalThis !== "undefined" && globalThis.__wasmacsNetworkProxyUrl)
++             configured = String(globalThis.__wasmacsNetworkProxyUrl || "");
++           if (configured) {
 +             try {
-+               return returnJson(JSON.parse(proxy.responseText));
-+             } catch (parseError) {
-+               return fail("host.network.fetch proxy returned invalid JSON: " + parseError.message);
++               var parsed = new URL(configured, typeof location !== "undefined" ? location.href : "http://127.0.0.1:5173/");
++               if (parsed.protocol === "http:" || parsed.protocol === "https:")
++                 urls.push(parsed.href);
++             } catch (_) {}
++           }
++           urls.push(new URL("/__wasmacs_network_fetch",
++                             typeof location !== "undefined" ? location.href : "http://127.0.0.1:5173/").href);
++           return urls;
++         }
++         function proxyFetch(request, directError) {
++           var urls = configuredProxyUrls(request);
++           var errors = [];
++           for (var i = 0; i < urls.length; i++) {
++             var proxyUrl = urls[i];
++             try {
++               var proxy = new XMLHttpRequest();
++               proxy.open("POST", proxyUrl, false);
++               proxy.setRequestHeader("content-type", "application/json");
++               proxy.send(JSON.stringify(request));
++               if (proxy.responseText) {
++                 try {
++                   return returnJson(JSON.parse(proxy.responseText));
++                 } catch (parseError) {
++                   return fail("host.network.fetch proxy returned invalid JSON from " + proxyUrl + ": " + parseError.message);
++                 }
++               }
++               errors.push(proxyUrl + " status " + proxy.status);
++             } catch (proxyError) {
++               errors.push(proxyUrl + " failed"
++                           + (proxyError && proxyError.message ? ": " + proxyError.message : ""));
 +             }
 +           }
 +           return fail("host.network.fetch direct request failed"
 +                       + (directError && directError.message ? ": " + directError.message : "")
-+                       + "; proxy status " + proxy.status);
++                       + "; proxy attempts: " + errors.join("; "));
 +         }
 +         function bytesToBase64(bytes) {
 +           var chunkSize = 0x8000;
@@ -1051,8 +1095,8 @@
 +      wasmacs_store_c_string_result ("unavailable:busy");
 +      WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
 +      return 3;
-     }
- 
++    }
++
 +  if (garbage_collection_inhibited)
 +    {
 +      wasmacs_store_c_string_result ("unavailable:gc-inhibited");
@@ -1063,12 +1107,12 @@
 +  specpdl_ref count = SPECPDL_INDEX ();
 +  specbind (Qsymbols_with_pos_enabled, Qnil);
 +  garbage_collect ();
-   unbind_to (count, Qnil);
++  unbind_to (count, Qnil);
 +  wasmacs_store_c_string_result ("garbage-collected");
 +  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
 +  return 0;
- }
- 
++}
++
 +__attribute__ ((used, visibility ("default")))
 +int
 +wasmacs_eval_string (const char *utf8)
@@ -1386,143 +1430,63 @@
  DEFUN ("invocation-name", Finvocation_name, Sinvocation_name, 0, 0, 0,
         doc: /* Return the program name that was used to run Emacs.
  Any directory names are omitted.  */)
-@@ -2236,6 +3610,17 @@
-   init_callproc ();	/* Must follow init_cmdargs but not init_sys_modes.  */
-   init_fileio ();
-   init_lread ();
-+
-+#ifdef __EMSCRIPTEN__
-+  /* wasmacs pbootstrap: prepend virtual FS lisp path after init_lread so
-+     pbootstrap finds loadup.el when getenv(EMACSLOADPATH) is not picked up. */
-+  {
-+    const char *memfs_lisp = "/usr/local/share/emacs/30.2/lisp";
-+    Lisp_Object memfs_path = decode_env_path (0, memfs_lisp, 0);
-+    if (!NILP (memfs_path))
-+      Vload_path = nconc2 (memfs_path, Vload_path);
-+  }
-+#endif
- 
-   /* If "-version" was specified, produce version information and
-      exit.  We do it here because the code below needs to call Lisp
-@@ -3594,6 +4979,7 @@
- 
+@@ -3594,6 +4997,7 @@ syms_of_emacs (void)
+
    defsubr (&Skill_emacs);
- 
+
 +  defsubr (&Swasmacs_os_network_fetch_json);
    defsubr (&Sinvocation_name);
    defsubr (&Sinvocation_directory);
    defsubr (&Sdaemonp);
+diff --git a/src/keyboard.c b/src/keyboard.c
+index a954801..faf74f5 100644
 --- a/src/keyboard.c
 +++ b/src/keyboard.c
-@@ -2488,7 +2488,6 @@
- 	}
- #endif
+@@ -2490,6 +2490,11 @@ read_decoded_event_from_main_queue (struct timespec *end_time,
      }
--}
- 
+ }
+
++/* wasmacs asyncify input waitpoint spike. */
++extern int wasmacs_host_wait_for_input (void);
++extern int wasmacs_host_scheduler_checkpoint (int code);
++extern void wasmacs_os_timing_checkpoint (int code);
++
  /* Read a character from the keyboard; call the redisplay if needed.  */
  /* commandflag 0 means do not autosave, but do redisplay.
-@@ -3697,7 +3696,140 @@
-   return n + (n < 0 ? KBD_BUFFER_SIZE : 0);
+    -1 means do not redisplay, but do autosave.
+@@ -2522,6 +2527,10 @@ read_char (int commandflag, Lisp_Object map,
+ 	   Lisp_Object prev_event,
+ 	   bool *used_mouse_menu, struct timespec *end_time)
+ {
++#ifdef __EMSCRIPTEN__
++  wasmacs_host_scheduler_checkpoint (200);
++#endif
++
+   volatile Lisp_Object c;
+   sys_jmp_buf local_getcjmp;
+   sys_jmp_buf save_jump;
+@@ -3012,6 +3021,17 @@ read_char (int commandflag, Lisp_Object map,
+
+   if (NILP (c))
+     {
++      /* wasmacs asyncify input waitpoint spike: yield when an interactive
++         command loop would otherwise block for real browser input.  In the
++         browser host, stdin readiness can look like input_pending without a
++         real Emacs key event, so JS owns the actual wait/resume boundary. */
++      if (!noninteractive && !end_time)
++        {
++          wasmacs_host_scheduler_checkpoint (201);
++          wasmacs_host_wait_for_input ();
++          wasmacs_host_scheduler_checkpoint (202);
++        }
++
+       c = read_decoded_event_from_main_queue (end_time, local_getcjmp,
+                                               prev_event, used_mouse_menu);
+       if (NILP (c) && end_time
+@@ -3698,6 +3718,43 @@ kbd_buffer_nr_stored (void)
  }
  #endif	/* Store an event obtained at interrupt level into kbd_buffer, fifo */
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
+
 +
 +
 +/* wasmacs browser input injection spike. */
@@ -1552,7 +1516,7 @@
 +
 +  return 0;
 +}
- 
++
 +__attribute__ ((used, visibility ("default")))
 +int
 +wasmacs_input_cancel (void)
@@ -1563,231 +1527,143 @@
  void
  kbd_buffer_store_event (register struct input_event *event)
  {
-@@ -4070,10 +4202,38 @@
- 	  else
- 	    {
- 	      struct timespec duration = timespec_sub (*end_time, now);
-+#ifdef __EMSCRIPTEN__
-+	      if (kbd_fetch_ptr == kbd_store_ptr)
-+		{
-+		  gobble_input ();
-+		}
-+#else
-+#ifdef __EMSCRIPTEN__
-+	      if (kbd_fetch_ptr == kbd_store_ptr)
-+		{
-+		  gobble_input ();
-+		}
-+#else
-+#ifdef __EMSCRIPTEN__
-+	      if (kbd_fetch_ptr == kbd_store_ptr)
-+		{
-+		  gobble_input ();
-+		}
-+#else
-+#ifdef __EMSCRIPTEN__
-+	      if (kbd_fetch_ptr == kbd_store_ptr)
-+		{
-+		  gobble_input ();
-+		}
-+#else
- 	      wait_reading_process_output (min (duration.tv_sec,
- 						WAIT_READING_MAX),
- 					   duration.tv_nsec,
- 					   -1, 1, Qnil, NULL, 0);
-+#endif
-+#endif
-+#endif
-+#endif
+@@ -4091,7 +4148,12 @@ kbd_buffer_get_event (KBOARD **kbp,
+ 		do_display = false;
  	    }
- 	}
-       else
-@@ -4092,12 +4252,57 @@
- 	    }
- 
+
++#ifdef __EMSCRIPTEN__
++	  if (kbd_fetch_ptr == kbd_store_ptr)
++	    wasmacs_host_wait_for_input ();
++#else
  	  wait_reading_process_output (0, 0, -1, do_display, Qnil, NULL, 0);
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
-+
++#endif
  	}
- 
+
        if (!interrupt_input && kbd_fetch_ptr == kbd_store_ptr)
- 	gobble_input ();
-     }
- 
+diff --git a/src/sysdep.c b/src/sysdep.c
+index 92f6f73..d00add1 100644
+--- a/src/sysdep.c
++++ b/src/sysdep.c
+@@ -2754,6 +2754,14 @@ verify (MAX_RW_COUNT <= INT_MAX);
+ verify (MAX_RW_COUNT <= UINT_MAX);
+ #endif
+
++/* wasmacs terminal tty service spike. */
++extern int wasmacs_host_wait_for_input (void);
++extern int wasmacs_host_terminal_input_available (void);
++extern int wasmacs_host_terminal_read_byte (void);
++extern int wasmacs_host_is_tty_fd (int fd);
++extern int wasmacs_host_scheduler_checkpoint (int code);
++extern void wasmacs_os_timing_checkpoint (int code);
++
+ /* Read from FD to a buffer BUF with size NBYTE.
+    If interrupted, process any quits and pending signals immediately
+    if INTERRUPTIBLE, and then retry the read unless quitting.
+@@ -2767,6 +2775,35 @@ emacs_intr_read (int fd, void *buf, ptrdiff_t nbyte, bool interruptible)
+
+   ssize_t result;
+
 +#ifdef __EMSCRIPTEN__
++  if (wasmacs_host_is_tty_fd (fd))
++    {
++      unsigned char *tty_buf = buf;
++      ptrdiff_t bytes_read = 0;
++
++      while (bytes_read == 0)
++        {
++          while (bytes_read < nbyte)
++            {
++              int byte = wasmacs_host_terminal_read_byte ();
++              if (byte < 0)
++                break;
++              wasmacs_host_scheduler_checkpoint (102);
++              tty_buf[bytes_read++] = (unsigned char) byte;
++            }
++
++          if (bytes_read > 0)
++            return bytes_read;
++
++          if (interruptible)
++            maybe_quit ();
++          wasmacs_host_scheduler_checkpoint (100);
++          wasmacs_host_wait_for_input ();
++          wasmacs_host_scheduler_checkpoint (101);
++        }
++    }
 +#endif
 +
- #ifdef HAVE_X_WINDOWS
-   /* Handle pending selection requests.  This can happen if Emacs
-      enters a recursive edit inside a nested event loop (probably
-@@ -4142,11 +4347,25 @@
+   do
      {
-       union buffered_input_event *event = kbd_fetch_ptr;
- 
-+      /* wasmacs os-compat: current_kboard for terminal keystrokes.
-+         Avoid event_to_kboard reading a pdmp-restored stale frame_or_window
-+         before the real keystroke is converted into a Lisp event. */
+       if (interruptible)
+diff --git a/src/term.c b/src/term.c
+index 8ce68f0..c181fbe 100644
+--- a/src/term.c
++++ b/src/term.c
+@@ -1980,6 +1980,25 @@ produce_glyphless_glyph (struct it *it, Lisp_Object acronym)
+ /* Turn appearances of face FACE_ID on tty frame F on.
+    FACE_ID is a realized face ID number, in the face cache.  */
+
++/* wasmacs tty direct-color output: the browser build uses internal
++   termcap rather than terminfo, so Emacs' terminfo RGB/Tc fallback is not
++   available.  When the inline TERMCAP advertises 24-bit color cells, emit
++   xterm direct-color SGR from the already translated tty pixel. */
 +#ifdef __EMSCRIPTEN__
-+      if (event->kind == ASCII_KEYSTROKE_EVENT
-+          || event->kind == MULTIBYTE_CHAR_KEYSTROKE_EVENT
-+          || event->kind == NON_ASCII_KEYSTROKE_EVENT)
-+        *kbp = current_kboard;
-+      else
-+        *kbp = event_to_kboard (&event->ie);
-+#else
-       *kbp = event_to_kboard (&event->ie);
++static void
++wasmacs_tty_output_direct_color (struct tty_display_info *tty,
++                                 bool background, unsigned long pixel)
++{
++  char sequence[32];
++  int red = (pixel >> 16) & 0xff;
++  int green = (pixel >> 8) & 0xff;
++  int blue = pixel & 0xff;
++  snprintf (sequence, sizeof sequence, "\033[%d;2;%d;%d;%dm",
++            background ? 48 : 38, red, green, blue);
++  OUTPUT1 (tty, sequence);
++}
 +#endif
-       if (*kbp == 0)
- 	*kbp = current_kboard;  /* Better than returning null ptr?  */
- 
-       obj = Qnil;
-+#ifdef __EMSCRIPTEN__
-+#endif
- 
-       /* These two kinds of events get special handling
- 	 and don't actually appear to the command loop.
-@@ -4270,26 +4489,60 @@
-         break;
-       default:
++
+ static void
+ turn_on_face (struct frame *f, int face_id)
+ {
+@@ -2034,20 +2053,34 @@ turn_on_face (struct frame *f, int face_id)
+       const char *ts;
+       char *p;
+
+-      ts = tty->standout_mode ? tty->TS_set_background : tty->TS_set_foreground;
++ts = tty->standout_mode ? tty->TS_set_background : tty->TS_set_foreground;
+       if (face_tty_specified_color (fg) && ts)
  	{
+-          p = tparam (ts, NULL, 0, fg, 0, 0, 0);
+-	  OUTPUT (tty, p);
+-	  xfree (p);
 +#ifdef __EMSCRIPTEN__
++          if (tty->TN_max_colors == 16777216)
++            wasmacs_tty_output_direct_color (tty, tty->standout_mode, fg);
++          else
 +#endif
- 	  /* If this event is on a different frame, return a
- 	     switch-frame this time, and leave the event in the queue
- 	     for next time.  */
- 	  Lisp_Object frame;
- 	  Lisp_Object focus;
++            {
++              p = tparam (ts, NULL, 0, fg, 0, 0, 0);
++	      OUTPUT (tty, p);
++	      xfree (p);
++            }
+ 	}
+
+       ts = tty->standout_mode ? tty->TS_set_foreground : tty->TS_set_background;
+       if (face_tty_specified_color (bg) && ts)
+ 	{
+-          p = tparam (ts, NULL, 0, bg, 0, 0, 0);
+-	  OUTPUT (tty, p);
+-	  xfree (p);
 +#ifdef __EMSCRIPTEN__
-+		  /* wasmacs os-compat: selected_frame for lispy tty keystrokes.
-+		     For terminal keystrokes the pdmp-restored frame_or_window can
-+		     refer to a stale frame object.  Use the active selected frame
-+		     before the normal focus lookup touches XFRAME (frame). */
-+		  if (event->kind == ASCII_KEYSTROKE_EVENT
-+		      || event->kind == MULTIBYTE_CHAR_KEYSTROKE_EVENT
-+		      || event->kind == NON_ASCII_KEYSTROKE_EVENT)
-+		    {
-+		      frame = selected_frame;
- 
--	  frame = event->ie.frame_or_window;
--	  if (CONSP (frame))
--	    frame = XCAR (frame);
--	  else if (WINDOWP (frame))
--	    frame = WINDOW_FRAME (XWINDOW (frame));
-+		    }
-+		  else
-+		    {
++          if (tty->TN_max_colors == 16777216)
++            wasmacs_tty_output_direct_color (tty, !tty->standout_mode, bg);
++          else
 +#endif
-+		  frame = event->ie.frame_or_window;
-+		  if (CONSP (frame))
-+		    frame = XCAR (frame);
-+		  else if (WINDOWP (frame))
-+		    frame = WINDOW_FRAME (XWINDOW (frame));
- 
--	  focus = FRAME_FOCUS_FRAME (XFRAME (frame));
--	  if (! NILP (focus))
--	    frame = focus;
-+		  focus = FRAME_FOCUS_FRAME (XFRAME (frame));
-+		  if (! NILP (focus))
-+		    frame = focus;
-+#ifdef __EMSCRIPTEN__
-+		    }
-+#endif
-+		  /* wasmacs os-compat: do not synthesize switch-frame for tty keystrokes.
-+		     The pdmp-restored terminal frame can compare unequal here even though
-+		     the key belongs to the active terminal; returning switch-frame first
-+		     leaves the real key queued and the browser page never redisplays it. */
-+#ifdef __EMSCRIPTEN__
-+		  if (!(event->ie.kind == ASCII_KEYSTROKE_EVENT
-+		        || event->ie.kind == MULTIBYTE_CHAR_KEYSTROKE_EVENT
-+		        || event->ie.kind == NON_ASCII_KEYSTROKE_EVENT)
-+		      && !EQ (frame, internal_last_event_frame)
-+		      && !EQ (frame, selected_frame))
-+		    obj = make_lispy_switch_frame (frame);
-+#else
- 
- 	  if (!EQ (frame, internal_last_event_frame)
- 	      && !EQ (frame, selected_frame))
- 	    obj = make_lispy_switch_frame (frame);
-+#endif
- 	  internal_last_event_frame = frame;
-+#ifdef __EMSCRIPTEN__
-+#endif
- 
- 	  if (EQ (event->ie.device, Qt))
- 	    Vlast_event_device = ((event->ie.kind == ASCII_KEYSTROKE_EVENT
-@@ -4302,6 +4555,8 @@
- 
- 	  /* If we didn't decide to make a switch-frame event, go ahead
- 	     and build a real event from the queue entry.  */
-+#ifdef __EMSCRIPTEN__
-+#endif
- 	  if (NILP (obj))
- 	    {
- 	      double pinch_dx, pinch_dy, pinch_angle;
-@@ -4388,6 +4643,8 @@
- 		     itself.  */
- 		  event->ie.arg = Fcons (make_fixnum (0), str);
- 		}
-+
-+
- 
- 	      if (event->kind == MULTIBYTE_CHAR_KEYSTROKE_EVENT
- 		  && CONSP (event->ie.arg))
-@@ -8124,10 +8381,17 @@
-         cbuf[i] &= ~0x80;
- 
-       buf.code = cbuf[i];
-+      /* wasmacs os-compat: selected_frame for terminal ASCII input.
-+         pdmp-restored termcap frames can otherwise synthesize a switch-frame
-+         event before the actual key and fail to return to redisplay. */
-+#ifdef __EMSCRIPTEN__
-+      buf.frame_or_window = selected_frame;
-+#else
-       /* Set the frame corresponding to the active tty.  Note that the
-          value of selected_frame is not reliable here, redisplay tends
-          to temporarily change it.  */
-       buf.frame_or_window = tty->top_frame;
-+#endif
-       buf.arg = Qnil;
- 
-       kbd_buffer_store_event (&buf);
++            {
++              p = tparam (ts, NULL, 0, bg, 0, 0, 0);
++	      OUTPUT (tty, p);
++	      xfree (p);
++            }
+ 	}
+
+ 	ts = tty->TF_set_underline_color;

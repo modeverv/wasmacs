@@ -34,6 +34,14 @@ unibyte string or a byte vector.")
 (defvar wasmacs-url-fetch-allowed-schemes '("http" "https")
   "URL schemes handled by the wasmacs fetch-backed loader.")
 
+(defvar wasmacs-url-fetch-proxy-url nil
+  "Optional self-hosted fetch proxy endpoint for wasmacs HTTP(S) requests.
+
+When non-nil, `wasmacs-url-fetch' includes this URL in the host request as
+`proxyUrl'.  The wasm host still tries direct browser fetch first, then this
+proxy when CORS or browser fetch policy blocks the direct request.  A typical
+local value is \"http://127.0.0.1:8787/\".")
+
 (defconst wasmacs-url-http-asynchronous-p nil
   "wasmacs fetch-backed HTTP(S) retrievals complete before returning.")
 
@@ -103,6 +111,17 @@ unibyte string or a byte vector.")
               headers)))
     (nreverse headers)))
 
+(defun wasmacs-url-fetch--request (url)
+  "Return a host fetch request plist for URL."
+  (let ((request (list :url (url-recreate-url url)
+                       :method (or url-request-method "GET")
+                       :headers (wasmacs-url-fetch--request-headers)
+                       :body url-request-data)))
+    (if (and (stringp wasmacs-url-fetch-proxy-url)
+             (not (string-empty-p wasmacs-url-fetch-proxy-url)))
+        (plist-put request :proxyUrl wasmacs-url-fetch-proxy-url)
+      request)))
+
 (defun wasmacs-url-fetch--response-buffer (url response)
   "Create a url.el response buffer for URL from RESPONSE plist."
   (let* ((status (or (plist-get response :status) 200))
@@ -132,10 +151,7 @@ CALLBACK and CBARGS follow `url-retrieve' loader conventions."
     (error "wasmacs fetch loader does not handle scheme: %s" (url-type url)))
   (unless (functionp wasmacs-url-fetch-function)
     (setq wasmacs-url-fetch-function #'wasmacs-url-fetch--host-fetch))
-  (let* ((request (list :url (url-recreate-url url)
-                        :method (or url-request-method "GET")
-                        :headers (wasmacs-url-fetch--request-headers)
-                        :body url-request-data))
+  (let* ((request (wasmacs-url-fetch--request url))
          (response (funcall wasmacs-url-fetch-function request))
          (buffer (wasmacs-url-fetch--response-buffer url response)))
     (when callback

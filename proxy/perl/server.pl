@@ -83,6 +83,9 @@ sub json_response {
   my ($status, $payload) = @_;
   my $json = encode_json($payload);
   my $response = HTTP::Response->new($status);
+  $response->header('Access-Control-Allow-Headers' => 'content-type');
+  $response->header('Access-Control-Allow-Methods' => 'POST, OPTIONS');
+  $response->header('Access-Control-Allow-Origin' => '*');
   $response->header('Cache-Control' => 'no-store');
   $response->header('Content-Type' => 'application/json; charset=utf-8');
   $response->content($json);
@@ -91,8 +94,19 @@ sub json_response {
 
 sub handle_proxy {
   my ($request) = @_;
+  if ($request->method eq 'OPTIONS') {
+    my $response = HTTP::Response->new(204);
+    $response->header('Access-Control-Allow-Headers' => 'content-type');
+    $response->header('Access-Control-Allow-Methods' => 'POST, OPTIONS');
+    $response->header('Access-Control-Allow-Origin' => '*');
+    $response->header('Cache-Control' => 'no-store');
+    return $response;
+  }
   if ($request->method ne 'POST') {
     my $response = HTTP::Response->new(405);
+    $response->header('Access-Control-Allow-Headers' => 'content-type');
+    $response->header('Access-Control-Allow-Methods' => 'POST, OPTIONS');
+    $response->header('Access-Control-Allow-Origin' => '*');
     $response->header('Allow' => 'POST');
     $response->content('method not allowed');
     return $response;

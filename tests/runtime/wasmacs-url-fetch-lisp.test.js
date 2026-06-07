@@ -16,6 +16,8 @@ test("wasmacs url.el loader is an overlay, not a vendor/emacs patch", async () =
   assert.match(source, /'loader 'wasmacs-url-fetch/);
   assert.doesNotMatch(source, /'loader #'wasmacs-url-fetch/);
   assert.match(source, /wasmacs-url-fetch-function/);
+  assert.match(source, /wasmacs-url-fetch-proxy-url/);
+  assert.match(source, /:proxyUrl wasmacs-url-fetch-proxy-url/);
   assert.match(source, /wasmacs-os-network-fetch-json/);
   assert.match(source, /body-base64/);
   assert.match(source, /bodyBase64/);
@@ -36,6 +38,10 @@ test("Emacs patch script registers the host network fetch primitive", async () =
   assert.match(source, /_malloc\(size\)/);
   assert.match(source, /stringToUTF8\(json, ptr, size\)/);
   assert.match(source, /function proxyFetch/);
+  assert.match(source, /function configuredProxyUrls\(request\)/);
+  assert.match(source, /request && request\.proxyUrl/);
+  assert.match(source, /wasmacsNetworkProxyUrl/);
+  assert.match(source, /__wasmacsNetworkProxyUrl/);
   assert.match(source, /__wasmacs_network_fetch/);
   assert.match(source, /xfree \(\(void \*\) response\)/);
   assert.doesNotMatch(source, /stringToNewUTF8/);
@@ -54,6 +60,10 @@ test("checked-in Emacs C patch carries the host network fetch primitive", async 
   assert.match(source, /_malloc\(size\)/);
   assert.match(source, /stringToUTF8\(json, ptr, size\)/);
   assert.match(source, /function proxyFetch/);
+  assert.match(source, /function configuredProxyUrls\(request\)/);
+  assert.match(source, /request && request\.proxyUrl/);
+  assert.match(source, /wasmacsNetworkProxyUrl/);
+  assert.match(source, /__wasmacsNetworkProxyUrl/);
   assert.match(source, /__wasmacs_network_fetch/);
   assert.match(source, /xfree \(\(void \*\) response\)/);
   assert.doesNotMatch(source, /stringToNewUTF8/);
@@ -130,6 +140,21 @@ test("Atomics pdump browser runtime enables fetch-backed url.el by default", asy
   assert.match(source, /if \(!debugOptions\.noDefaultInit\)/);
   assert.match(source, /COMMON_EVALS\.splice\(8, 0, "--eval", WASMACS_DEFAULT_LISP_INIT\)/);
   assert.match(source, /debugOptions\.extraEvals/);
+});
+
+test("Atomics pdump browser runtime forwards configured local network proxy to wasm host fetch", async () => {
+  const page = await readFile(join(repoRoot, "src/wasm/xterm-atomics-pdump.html"), "utf8");
+  const worker = await readFile(
+    join(repoRoot, "src/wasm/src/emacs-atomics-pdump-worker.js"),
+    "utf8",
+  );
+
+  assert.match(page, /pageParams\.get\("network-proxy"\)/);
+  assert.match(page, /pageParams\.get\("wasmacs-network-proxy"\)/);
+  assert.match(page, /wasmacs\.networkProxyUrl/);
+  assert.match(page, /debugBootOptions\.networkProxyUrl/);
+  assert.match(worker, /__wasmacsNetworkProxyUrl = typeof debugOptions\.networkProxyUrl/);
+  assert.match(worker, /wasmacsNetworkProxyUrl: globalThis\.__wasmacsNetworkProxyUrl/);
 });
 
 test("Atomics pdump worker suppresses Emscripten run dependency stderr spam", async () => {

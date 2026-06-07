@@ -114,9 +114,25 @@ async function assertProxyWorks(sample) {
   const child = await startProxy(sample.start(proxyPort, allowedOrigin));
   try {
     await waitForProxy(proxyPort, child);
+    const preflight = await fetch(`http://127.0.0.1:${proxyPort}/`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://127.0.0.1:5173",
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type",
+      },
+    });
+    assert.equal([200, 204].includes(preflight.status), true);
+    assert.equal(preflight.headers.get("access-control-allow-origin"), "*");
+    assert.match(preflight.headers.get("access-control-allow-methods") || "", /POST/);
+    assert.match(preflight.headers.get("access-control-allow-headers") || "", /content-type/i);
+
     const response = await fetch(`http://127.0.0.1:${proxyPort}/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://127.0.0.1:5173",
+      },
       body: JSON.stringify({
         url: targetUrl,
         method: "GET",
@@ -125,6 +141,7 @@ async function assertProxyWorks(sample) {
     });
     const payload = await response.json();
     assert.equal(response.status, 200, JSON.stringify(payload));
+    assert.equal(response.headers.get("access-control-allow-origin"), "*");
     assert.equal(payload.status, 200);
     assert.equal(Buffer.from(payload.bodyBase64, "base64").toString("utf8"), "archive-data");
     assert.equal(
@@ -160,6 +177,7 @@ test("fetch proxy samples document the shared wasmacs host.network.fetch contrac
   assert.match(readme, /Ruby/);
   assert.match(readme, /Python/);
   assert.match(readme, /PowerShell/);
+  assert.match(readme, /Access-Control-Allow-Origin/);
   assert.match(rootReadme, /Network Access/);
   assert.match(rootReadme, /self-hosted fetch proxy/);
   assert.match(architecture, /self-hosted fetch proxy/);

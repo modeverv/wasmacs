@@ -131,6 +131,30 @@ The Python and PowerShell samples are the most likely cross-platform local
 fallbacks: Python 3 is common on macOS/Linux developer machines, while
 PowerShell is the native Windows path.
 
+When a local proxy is running, pass it to the browser runtime with
+`network-proxy`:
+
+```text
+http://127.0.0.1:5173/app/xterm-atomics-pdump.html?network-proxy=http%3A%2F%2F127.0.0.1%3A8787%2F
+```
+
+The runtime first tries direct browser fetch. If CORS blocks the archive, it
+falls back to the configured proxy endpoint and then to the development
+same-origin `__wasmacs_network_fetch` route when available.
+
+You can also set the proxy from Emacs Lisp for a specific user image or init
+flow:
+
+```elisp
+(require 'wasmacs-url-fetch)
+(setq wasmacs-url-fetch-proxy-url "http://127.0.0.1:8787/")
+(wasmacs-url-fetch-enable)
+```
+
+The Emacs-side `wasmacs-url-fetch-proxy-url` value is sent with each
+`url.el`/`package.el` request and takes precedence over the page-level
+`network-proxy` default.
+
 ## Common Commands
 
 ```sh

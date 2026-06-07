@@ -655,7 +655,11 @@ Network access is a host capability, not an Emacs raw socket in the MVP.
 archive does not expose readable cross-origin responses, users may configure a
 self-hosted fetch proxy under their own control. The project must not operate a
 central proxy by default; sample proxies are allowlist-based and preserve the
-same request/response contract as `host.network.fetch`.
+same request/response contract as `host.network.fetch`. Browser entrypoints pass
+an optional `network-proxy` endpoint into the worker; the wasm host bridge tries
+direct fetch first, then the configured proxy, then the same-origin development
+proxy when present. Localhost proxy samples must answer CORS preflight because
+they are usually a different origin from the wasmacs page.
 - workspace image は信頼境界として扱う
 
 ## 採用候補

@@ -490,6 +490,9 @@ function createUserTar(nodes) {
 
 async function startEmacs(pdmpBytes, debugOptions = {}) {
   globalThis.__wasmacsDiagnosticLog = debugOptions.debugLog === true;
+  globalThis.__wasmacsNetworkProxyUrl = typeof debugOptions.networkProxyUrl === "string"
+    ? debugOptions.networkProxyUrl
+    : "";
   post("ready", { sab: INPUT_SAB, terminalSizeSAB: TERMINAL_SIZE_SAB });
 
   const userNodes = await loadUserImage();
@@ -505,6 +508,7 @@ async function startEmacs(pdmpBytes, debugOptions = {}) {
     // "/temacs" (leading slash): find_emacs_executable takes the strchr branch,
     // returns "/temacs" even if not found via realpath, so --dump-file is not nulled.
     thisProgram: "/temacs",
+    wasmacsNetworkProxyUrl: globalThis.__wasmacsNetworkProxyUrl,
     locateFile(path) { return `${ARTIFACT_DIR}/${path}?v=${ARTIFACT_CACHE_BUST}`; },
     getPreloadedPackage(packageName, packageSize) {
       if (String(packageName).includes("temacs.data")) {

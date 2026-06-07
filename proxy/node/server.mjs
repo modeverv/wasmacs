@@ -78,6 +78,9 @@ function requestBody(payload, method) {
 function writeJson(response, status, payload) {
   const json = JSON.stringify(payload);
   response.writeHead(status, {
+    "Access-Control-Allow-Headers": "content-type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Origin": "*",
     "Cache-Control": "no-store",
     "Content-Length": Buffer.byteLength(json),
     "Content-Type": "application/json; charset=utf-8",
@@ -86,8 +89,23 @@ function writeJson(response, status, payload) {
 }
 
 export async function handleProxyRequest(request, response) {
+  if (request.method === "OPTIONS") {
+    response.writeHead(204, {
+      "Access-Control-Allow-Headers": "content-type",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "no-store",
+    });
+    response.end();
+    return;
+  }
   if (request.method !== "POST") {
-    response.writeHead(405, { Allow: "POST" });
+    response.writeHead(405, {
+      "Access-Control-Allow-Headers": "content-type",
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Origin": "*",
+      Allow: "POST",
+    });
     response.end("method not allowed");
     return;
   }
@@ -121,4 +139,3 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     console.log(`wasmacs fetch proxy listening at http://127.0.0.1:${port}/`);
   });
 }
-

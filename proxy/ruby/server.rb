@@ -69,6 +69,9 @@ end
 
 def json_response(response, status, payload)
   response.status = status
+  response['Access-Control-Allow-Headers'] = 'content-type'
+  response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+  response['Access-Control-Allow-Origin'] = '*'
   response['Cache-Control'] = 'no-store'
   response['Content-Type'] = 'application/json; charset=utf-8'
   response.body = JSON.generate(payload)
@@ -102,23 +105,34 @@ server = WEBrick::HTTPServer.new(
   Logger: WEBrick::Log.new($stderr, WEBrick::Log::WARN)
 )
 
-server.mount_proc('/') do |request, response|
-  if request.request_method != 'POST'
-    response.status = 405
-    response['Allow'] = 'POST'
-    response.body = 'method not allowed'
-    next
+class ProxyServlet < WEBrick::HTTPServlet::AbstractServlet
+  def do_OPTIONS(_request, response)
+    response.status = 204
+    response['Access-Control-Allow-Headers'] = 'content-type'
+    response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+    response['Access-Control-Allow-Origin'] = '*'
+    response['Cache-Control'] = 'no-store'
   end
 
-  begin
+  def do_GET(_request, response)
+    response.status = 405
+    response['Access-Control-Allow-Headers'] = 'content-type'
+    response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
+    response['Access-Control-Allow-Origin'] = '*'
+    response['Allow'] = 'POST'
+    response.body = 'method not allowed'
+  end
+
+  def do_POST(request, response)
     json_response(response, 200, fetch_upstream(JSON.parse(request.body)))
   rescue StandardError => e
     json_response(response, 400, { error: e.message })
   end
 end
 
+server.mount('/', ProxyServlet)
+
 trap('TERM') { server.shutdown }
 trap('INT') { server.shutdown }
 puts "wasmacs fetch proxy listening at http://127.0.0.1:#{port}/"
 server.start
-

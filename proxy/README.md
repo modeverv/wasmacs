@@ -26,6 +26,11 @@ It returns JSON:
 }
 ```
 
+For browser-hosted wasmacs to call a localhost proxy from a different page
+origin, each sample answers CORS preflight requests with `OPTIONS` and includes
+`Access-Control-Allow-Origin: *` on JSON responses. The samples do not use
+cookies or credentials.
+
 All samples require an allowlist. By default they allow GNU ELPA and MELPA:
 
 ```text
@@ -113,3 +118,34 @@ server:
   or `python`/`python3` is installed.
 
 For repeatable development, `mise` can install missing runtimes.
+
+## Using a local proxy from wasmacs
+
+Start one proxy locally:
+
+```sh
+WASMACS_PROXY_ALLOWED_ORIGINS=https://elpa.gnu.org,https://melpa.org \
+PORT=8787 \
+python3 proxy/python/server.py
+```
+
+Then open wasmacs with the proxy endpoint in the query string:
+
+```text
+http://127.0.0.1:5173/app/xterm-atomics-pdump.html?network-proxy=http%3A%2F%2F127.0.0.1%3A8787%2F
+```
+
+`network-proxy` is stored in `localStorage` as `wasmacs.networkProxyUrl`, so the
+same browser profile can keep using that endpoint until it is changed. The
+alias `wasmacs-network-proxy` is accepted too.
+
+The proxy can also be selected from Emacs Lisp:
+
+```elisp
+(require 'wasmacs-url-fetch)
+(setq wasmacs-url-fetch-proxy-url "http://127.0.0.1:8787/")
+(wasmacs-url-fetch-enable)
+```
+
+That variable is included in each `url.el` request and overrides the page-level
+proxy default for that request.

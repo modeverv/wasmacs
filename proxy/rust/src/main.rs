@@ -133,13 +133,26 @@ fn request_body(payload: &FetchRequest, method: &str) -> Result<Option<Vec<u8>>,
 fn json_response(status: u16, payload: serde_json::Value) -> Response {
     Response::json(&payload)
         .with_status_code(status)
+        .with_additional_header("Access-Control-Allow-Headers", "content-type")
+        .with_additional_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        .with_additional_header("Access-Control-Allow-Origin", "*")
         .with_additional_header("Cache-Control", "no-store")
 }
 
 fn handle_proxy(request: &Request) -> Response {
+    if request.method() == "OPTIONS" {
+        return Response::empty_204()
+            .with_additional_header("Access-Control-Allow-Headers", "content-type")
+            .with_additional_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+            .with_additional_header("Access-Control-Allow-Origin", "*")
+            .with_additional_header("Cache-Control", "no-store");
+    }
     if request.method() != "POST" {
         return Response::text("method not allowed")
             .with_status_code(405)
+            .with_additional_header("Access-Control-Allow-Headers", "content-type")
+            .with_additional_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+            .with_additional_header("Access-Control-Allow-Origin", "*")
             .with_additional_header("Allow", "POST");
     }
 
@@ -211,6 +224,9 @@ fn handle_proxy(request: &Request) -> Response {
     };
     Response::json(&response)
         .with_status_code(200)
+        .with_additional_header("Access-Control-Allow-Headers", "content-type")
+        .with_additional_header("Access-Control-Allow-Methods", "POST, OPTIONS")
+        .with_additional_header("Access-Control-Allow-Origin", "*")
         .with_additional_header("Cache-Control", "no-store")
 }
 

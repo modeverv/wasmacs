@@ -32,6 +32,9 @@ function write_json(int $status, array $payload): void
 {
     $json = json_encode($payload, JSON_UNESCAPED_SLASHES);
     http_response_code($status);
+    header('Access-Control-Allow-Headers: content-type');
+    header('Access-Control-Allow-Methods: POST, OPTIONS');
+    header('Access-Control-Allow-Origin: *');
     header('Cache-Control: no-store');
     header('Content-Type: application/json; charset=utf-8');
     header('Content-Length: ' . strlen($json));
@@ -93,7 +96,19 @@ function parse_response_headers(array $header_lines): array
     return $headers;
 }
 
+if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
+    http_response_code(204);
+    header('Access-Control-Allow-Headers: content-type');
+    header('Access-Control-Allow-Methods: POST, OPTIONS');
+    header('Access-Control-Allow-Origin: *');
+    header('Cache-Control: no-store');
+    return;
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Access-Control-Allow-Headers: content-type');
+    header('Access-Control-Allow-Methods: POST, OPTIONS');
+    header('Access-Control-Allow-Origin: *');
     header('Allow: POST');
     http_response_code(405);
     echo 'method not allowed';
@@ -142,4 +157,3 @@ try {
 } catch (Throwable $error) {
     write_json(400, ['error' => $error->getMessage()]);
 }
-

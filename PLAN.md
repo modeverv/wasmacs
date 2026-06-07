@@ -2068,6 +2068,10 @@ Package install / network Phase 1 slice:
 - [x] Document network access in `README.md` and add optional self-hosted fetch
   proxy samples for Node, PHP, Go, Rust, Perl, Ruby, Python, and PowerShell under
   `proxy/`.
+- [x] Thread a configured local `network-proxy` URL from the browser page into
+  the wasm host network bridge and make localhost proxy samples CORS-ready.
+- [x] Add an Emacs-side `wasmacs-url-fetch-proxy-url` setting that can choose a
+  self-hosted proxy from init.el or a scratch buffer.
 
 Validation notes:
 
@@ -2182,6 +2186,21 @@ Validation notes:
   `node --test tests/runtime/network-fetch.test.js
   tests/runtime/wasmacs-url-fetch-lisp.test.js` passed 23 tests; `npm test`
   passed 118 tests plus artifact/plan validation scripts.
+- 2026-06-07: wired localhost proxy selection into the browser network layer.
+  The xterm Atomics+pdump page accepts `network-proxy` /
+  `wasmacs-network-proxy` query parameters, stores the endpoint in
+  `localStorage`, forwards it through `debugOptions` to the worker, and exposes
+  it as `Module.wasmacsNetworkProxyUrl` for the C `EM_JS` host fetch bridge.
+  Direct browser fetch still runs first; on CORS/fetch failure the bridge tries
+  the configured proxy endpoint before the same-origin development
+  `/__wasmacs_network_fetch` route. All proxy samples now answer CORS
+  `OPTIONS` preflight and include `Access-Control-Allow-Origin: *` for
+  credential-free browser POSTs.
+- 2026-06-07: added `wasmacs-url-fetch-proxy-url` to the Lisp overlay. Users can
+  set `(setq wasmacs-url-fetch-proxy-url "http://127.0.0.1:8787/")` before
+  `package-refresh-contents` / `package-install`; the Lisp loader includes it
+  as `proxyUrl` in each host request, and the wasm host bridge gives that
+  request-local value precedence over page-level `network-proxy`.
 
 ## Milestone 15: High-Performance Renderer
 

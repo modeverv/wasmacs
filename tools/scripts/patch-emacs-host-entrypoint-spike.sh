@@ -163,23 +163,52 @@ EM_JS (const char *, wasmacs_host_network_fetch_json,
          function fail(message) {
            return returnJson({ error: String(message) });
          }
-         function proxyFetch(request, directError) {
-           var proxyUrl = new URL("/__wasmacs_network_fetch",
-                                  typeof location !== "undefined" ? location.href : "http://127.0.0.1:5173/").href;
-           var proxy = new XMLHttpRequest();
-           proxy.open("POST", proxyUrl, false);
-           proxy.setRequestHeader("content-type", "application/json");
-           proxy.send(JSON.stringify(request));
-           if (proxy.responseText) {
+         function configuredProxyUrls(request) {
+           var urls = [];
+           var configured = "";
+           if (request && request.proxyUrl)
+             configured = String(request.proxyUrl || "");
+           if (typeof Module !== "undefined" && Module && Module.wasmacsNetworkProxyUrl)
+             configured = configured || String(Module.wasmacsNetworkProxyUrl || "");
+           if (!configured && typeof globalThis !== "undefined" && globalThis.__wasmacsNetworkProxyUrl)
+             configured = String(globalThis.__wasmacsNetworkProxyUrl || "");
+           if (configured) {
              try {
-               return returnJson(JSON.parse(proxy.responseText));
-             } catch (parseError) {
-               return fail("host.network.fetch proxy returned invalid JSON: " + parseError.message);
+               var parsed = new URL(configured, typeof location !== "undefined" ? location.href : "http://127.0.0.1:5173/");
+               if (parsed.protocol === "http:" || parsed.protocol === "https:")
+                 urls.push(parsed.href);
+             } catch (_) {}
+           }
+           urls.push(new URL("/__wasmacs_network_fetch",
+                             typeof location !== "undefined" ? location.href : "http://127.0.0.1:5173/").href);
+           return urls;
+         }
+         function proxyFetch(request, directError) {
+           var urls = configuredProxyUrls(request);
+           var errors = [];
+           for (var i = 0; i < urls.length; i++) {
+             var proxyUrl = urls[i];
+             try {
+               var proxy = new XMLHttpRequest();
+               proxy.open("POST", proxyUrl, false);
+               proxy.setRequestHeader("content-type", "application/json");
+               proxy.send(JSON.stringify(request));
+               if (proxy.responseText) {
+                 try {
+                   return returnJson(JSON.parse(proxy.responseText));
+                 } catch (parseError) {
+                   return fail("host.network.fetch proxy returned invalid JSON from " + proxyUrl + ": " + parseError.message);
+                 }
+               }
+               errors.push(proxyUrl + " status " + proxy.status);
+             } catch (proxyError) {
+               errors.push(proxyUrl + " failed"
+                           + (proxyError && proxyError.message ? ": " + proxyError.message : ""));
              }
            }
            return fail("host.network.fetch direct request failed"
                        + (directError && directError.message ? ": " + directError.message : "")
-                       + "; proxy status " + proxy.status);
+                       + "; proxy attempts: " + errors.join("; "));
          }
          function bytesToBase64(bytes) {
            var chunkSize = 0x8000;

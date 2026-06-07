@@ -231,6 +231,19 @@ const debugBootOptions = {
   debugLog: pageParams.get("debug-log") === "1",
   extraEvals: pageParams.getAll("extra-eval"),
 };
+function getStoredNetworkProxyUrl() {
+  try { return localStorage.getItem("wasmacs.networkProxyUrl") || ""; }
+  catch (_) { return ""; }
+}
+const configuredNetworkProxyUrl =
+  pageParams.get("network-proxy")
+  || pageParams.get("wasmacs-network-proxy")
+  || getStoredNetworkProxyUrl()
+  || "";
+if (configuredNetworkProxyUrl) {
+  debugBootOptions.networkProxyUrl = configuredNetworkProxyUrl;
+  try { localStorage.setItem("wasmacs.networkProxyUrl", configuredNetworkProxyUrl); } catch (_) {}
+}
 
 function flushInputToEmacs() {
   if (!inputSAB || pendingInputBytes.length === 0) return;
