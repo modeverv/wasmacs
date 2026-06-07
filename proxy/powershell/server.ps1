@@ -104,6 +104,7 @@ function Write-JsonResponse {
   $Context.Response.Headers.Set("Access-Control-Allow-Headers", "content-type")
   $Context.Response.Headers.Set("Access-Control-Allow-Methods", "POST, OPTIONS")
   $Context.Response.Headers.Set("Access-Control-Allow-Origin", "*")
+  $Context.Response.Headers.Set("Access-Control-Allow-Private-Network", "true")
   $Context.Response.Headers.Set("Cache-Control", "no-store")
   $Context.Response.ContentType = "application/json; charset=utf-8"
   $Context.Response.ContentLength64 = $Bytes.Length
@@ -124,6 +125,7 @@ try {
       $Context.Response.Headers.Set("Access-Control-Allow-Headers", "content-type")
       $Context.Response.Headers.Set("Access-Control-Allow-Methods", "POST, OPTIONS")
       $Context.Response.Headers.Set("Access-Control-Allow-Origin", "*")
+      $Context.Response.Headers.Set("Access-Control-Allow-Private-Network", "true")
       $Context.Response.Headers.Set("Cache-Control", "no-store")
       $Context.Response.Close()
       continue
@@ -134,6 +136,7 @@ try {
       $Context.Response.Headers.Set("Access-Control-Allow-Headers", "content-type")
       $Context.Response.Headers.Set("Access-Control-Allow-Methods", "POST, OPTIONS")
       $Context.Response.Headers.Set("Access-Control-Allow-Origin", "*")
+      $Context.Response.Headers.Set("Access-Control-Allow-Private-Network", "true")
       $Context.Response.Headers.Set("Allow", "POST")
       $Context.Response.ContentLength64 = $Bytes.Length
       $Context.Response.OutputStream.Write($Bytes, 0, $Bytes.Length)

@@ -72,6 +72,7 @@ def json_response(response, status, payload)
   response['Access-Control-Allow-Headers'] = 'content-type'
   response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
   response['Access-Control-Allow-Origin'] = '*'
+  response['Access-Control-Allow-Private-Network'] = 'true'
   response['Cache-Control'] = 'no-store'
   response['Content-Type'] = 'application/json; charset=utf-8'
   response.body = JSON.generate(payload)
@@ -111,6 +112,7 @@ class ProxyServlet < WEBrick::HTTPServlet::AbstractServlet
     response['Access-Control-Allow-Headers'] = 'content-type'
     response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
     response['Access-Control-Allow-Origin'] = '*'
+    response['Access-Control-Allow-Private-Network'] = 'true'
     response['Cache-Control'] = 'no-store'
   end
 
@@ -119,6 +121,7 @@ class ProxyServlet < WEBrick::HTTPServlet::AbstractServlet
     response['Access-Control-Allow-Headers'] = 'content-type'
     response['Access-Control-Allow-Methods'] = 'POST, OPTIONS'
     response['Access-Control-Allow-Origin'] = '*'
+    response['Access-Control-Allow-Private-Network'] = 'true'
     response['Allow'] = 'POST'
     response.body = 'method not allowed'
   end

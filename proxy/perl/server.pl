@@ -83,6 +83,7 @@ sub json_response {
     'Access-Control-Allow-Headers' => 'content-type',
     'Access-Control-Allow-Methods' => 'POST, OPTIONS',
     'Access-Control-Allow-Origin' => '*',
+    'Access-Control-Allow-Private-Network' => 'true',
     'Cache-Control' => 'no-store',
     'Content-Type' => 'application/json; charset=utf-8',
   }, $json);
@@ -95,6 +96,7 @@ sub handle_proxy {
       'Access-Control-Allow-Headers' => 'content-type',
       'Access-Control-Allow-Methods' => 'POST, OPTIONS',
       'Access-Control-Allow-Origin' => '*',
+      'Access-Control-Allow-Private-Network' => 'true',
       'Cache-Control' => 'no-store',
     }, '');
   }
@@ -103,6 +105,7 @@ sub handle_proxy {
       'Access-Control-Allow-Headers' => 'content-type',
       'Access-Control-Allow-Methods' => 'POST, OPTIONS',
       'Access-Control-Allow-Origin' => '*',
+      'Access-Control-Allow-Private-Network' => 'true',
       'Allow' => 'POST',
     }, 'method not allowed');
   }

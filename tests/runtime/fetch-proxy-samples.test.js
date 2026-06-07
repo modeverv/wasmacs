@@ -120,10 +120,12 @@ async function assertProxyWorks(sample) {
         Origin: "http://127.0.0.1:5173",
         "Access-Control-Request-Method": "POST",
         "Access-Control-Request-Headers": "content-type",
+        "Access-Control-Request-Private-Network": "true",
       },
     });
     assert.equal([200, 204].includes(preflight.status), true);
     assert.equal(preflight.headers.get("access-control-allow-origin"), "*");
+    assert.equal(preflight.headers.get("access-control-allow-private-network"), "true");
     assert.match(preflight.headers.get("access-control-allow-methods") || "", /POST/);
     assert.match(preflight.headers.get("access-control-allow-headers") || "", /content-type/i);
 
@@ -142,6 +144,7 @@ async function assertProxyWorks(sample) {
     const payload = await response.json();
     assert.equal(response.status, 200, JSON.stringify(payload));
     assert.equal(response.headers.get("access-control-allow-origin"), "*");
+    assert.equal(response.headers.get("access-control-allow-private-network"), "true");
     assert.equal(payload.status, 200);
     assert.equal(Buffer.from(payload.bodyBase64, "base64").toString("utf8"), "archive-data");
     assert.equal(
@@ -178,6 +181,7 @@ test("fetch proxy samples document the shared wasmacs host.network.fetch contrac
   assert.match(readme, /Python/);
   assert.match(readme, /PowerShell/);
   assert.match(readme, /Access-Control-Allow-Origin/);
+  assert.match(readme, /Access-Control-Allow-Private-Network/);
   assert.match(rootReadme, /Network Access/);
   assert.match(rootReadme, /self-hosted fetch proxy/);
   assert.match(architecture, /self-hosted fetch proxy/);

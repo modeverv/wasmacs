@@ -2201,6 +2201,21 @@ Validation notes:
   `package-refresh-contents` / `package-install`; the Lisp loader includes it
   as `proxyUrl` in each host request, and the wasm host bridge gives that
   request-local value precedence over page-level `network-proxy`.
+- 2026-06-07: fixed the live GitHub Pages localhost proxy failure reported as
+  `proxy returned invalid JSON from https://modeverv.github.io/__wasmacs_network_fetch`.
+  The wasm host bridge now adds the same-origin `__wasmacs_network_fetch`
+  fallback only on local development origins, so static Pages does not turn its
+  404 HTML into a proxy JSON error. Proxy JSON parse failures are accumulated
+  and the next proxy candidate is tried. All language samples now answer Chrome
+  Private Network Access preflights with
+  `Access-Control-Allow-Private-Network: true`, which is required when a public
+  HTTPS page calls a localhost proxy. Validation: `node --test
+  tests/runtime/fetch-proxy-samples.test.js
+  tests/runtime/wasmacs-url-fetch-lisp.test.js tests/runtime/network-fetch.test.js`
+  passed 28 tests; `npm test` passed 119 tests; `make build` completed; `strings
+  docs/artifacts/emacs-browser-atomics-pdump/temacs.js | rg
+  "isLocalHostName|returned invalid JSON|__wasmacs_network_fetch|wasmacsNetworkProxyUrl"`
+  confirmed the generated Pages artifact contains the corrected host bridge.
 
 ## Milestone 15: High-Performance Renderer
 

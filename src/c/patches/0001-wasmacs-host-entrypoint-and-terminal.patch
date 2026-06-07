@@ -17,13 +17,13 @@ index 7141363..8205327 100644
  ;; We are now capable of resizing the mini-windows, so give the
  ;; variable its advertised default value (it starts as nil, see
 diff --git a/src/emacs.c b/src/emacs.c
-index 1beb295..66b571e 100644
+index 1beb295..f1a662f 100644
 --- a/src/emacs.c
 +++ b/src/emacs.c
-@@ -658,6 +658,1409 @@ init_cmdargs (int argc, char **argv, int skip_args, char const *original_pwd)
+@@ -658,6 +658,1421 @@ init_cmdargs (int argc, char **argv, int skip_args, char const *original_pwd)
    unbind_to (count, Qnil);
  }
-
+ 
 +static char *wasmacs_last_eval_result;
 +static char *wasmacs_last_minibuffer_state;
 +static char *wasmacs_last_interactive_state;
@@ -92,6 +92,13 @@ index 1beb295..66b571e 100644
 +         function fail(message) {
 +           return returnJson({ error: String(message) });
 +         }
++         function isLocalHostName(name) {
++           var normalized = String(name || "").toLowerCase();
++           return normalized === "localhost"
++             || normalized === "127.0.0.1"
++             || normalized === "::1"
++             || normalized === "[::1]";
++         }
 +         function configuredProxyUrls(request) {
 +           var urls = [];
 +           var configured = "";
@@ -105,11 +112,15 @@ index 1beb295..66b571e 100644
 +             try {
 +               var parsed = new URL(configured, typeof location !== "undefined" ? location.href : "http://127.0.0.1:5173/");
 +               if (parsed.protocol === "http:" || parsed.protocol === "https:")
-+                 urls.push(parsed.href);
++               urls.push(parsed.href);
 +             } catch (_) {}
 +           }
-+           urls.push(new URL("/__wasmacs_network_fetch",
-+                             typeof location !== "undefined" ? location.href : "http://127.0.0.1:5173/").href);
++           if (typeof location !== "undefined") {
++             if (isLocalHostName(location.hostname))
++               urls.push(new URL("/__wasmacs_network_fetch", location.href).href);
++           } else {
++             urls.push("http://127.0.0.1:5173/__wasmacs_network_fetch");
++           }
 +           return urls;
 +         }
 +         function proxyFetch(request, directError) {
@@ -126,7 +137,8 @@ index 1beb295..66b571e 100644
 +                 try {
 +                   return returnJson(JSON.parse(proxy.responseText));
 +                 } catch (parseError) {
-+                   return fail("host.network.fetch proxy returned invalid JSON from " + proxyUrl + ": " + parseError.message);
++                   errors.push(proxyUrl + " returned invalid JSON: " + parseError.message);
++                   continue;
 +                 }
 +               }
 +               errors.push(proxyUrl + " status " + proxy.status);
@@ -1430,10 +1442,10 @@ index 1beb295..66b571e 100644
  DEFUN ("invocation-name", Finvocation_name, Sinvocation_name, 0, 0, 0,
         doc: /* Return the program name that was used to run Emacs.
  Any directory names are omitted.  */)
-@@ -3594,6 +4997,7 @@ syms_of_emacs (void)
-
+@@ -3594,6 +5009,7 @@ syms_of_emacs (void)
+ 
    defsubr (&Skill_emacs);
-
+ 
 +  defsubr (&Swasmacs_os_network_fetch_json);
    defsubr (&Sinvocation_name);
    defsubr (&Sinvocation_directory);
@@ -1445,7 +1457,7 @@ index a954801..faf74f5 100644
 @@ -2490,6 +2490,11 @@ read_decoded_event_from_main_queue (struct timespec *end_time,
      }
  }
-
+ 
 +/* wasmacs asyncify input waitpoint spike. */
 +extern int wasmacs_host_wait_for_input (void);
 +extern int wasmacs_host_scheduler_checkpoint (int code);
@@ -1466,7 +1478,7 @@ index a954801..faf74f5 100644
    sys_jmp_buf local_getcjmp;
    sys_jmp_buf save_jump;
 @@ -3012,6 +3021,17 @@ read_char (int commandflag, Lisp_Object map,
-
+ 
    if (NILP (c))
      {
 +      /* wasmacs asyncify input waitpoint spike: yield when an interactive
@@ -1486,7 +1498,7 @@ index a954801..faf74f5 100644
 @@ -3698,6 +3718,43 @@ kbd_buffer_nr_stored (void)
  }
  #endif	/* Store an event obtained at interrupt level into kbd_buffer, fifo */
-
+ 
 +
 +
 +/* wasmacs browser input injection spike. */
@@ -1530,7 +1542,7 @@ index a954801..faf74f5 100644
 @@ -4091,7 +4148,12 @@ kbd_buffer_get_event (KBOARD **kbp,
  		do_display = false;
  	    }
-
+ 
 +#ifdef __EMSCRIPTEN__
 +	  if (kbd_fetch_ptr == kbd_store_ptr)
 +	    wasmacs_host_wait_for_input ();
@@ -1538,7 +1550,7 @@ index a954801..faf74f5 100644
  	  wait_reading_process_output (0, 0, -1, do_display, Qnil, NULL, 0);
 +#endif
  	}
-
+ 
        if (!interrupt_input && kbd_fetch_ptr == kbd_store_ptr)
 diff --git a/src/sysdep.c b/src/sysdep.c
 index 92f6f73..d00add1 100644
@@ -1547,7 +1559,7 @@ index 92f6f73..d00add1 100644
 @@ -2754,6 +2754,14 @@ verify (MAX_RW_COUNT <= INT_MAX);
  verify (MAX_RW_COUNT <= UINT_MAX);
  #endif
-
+ 
 +/* wasmacs terminal tty service spike. */
 +extern int wasmacs_host_wait_for_input (void);
 +extern int wasmacs_host_terminal_input_available (void);
@@ -1560,9 +1572,9 @@ index 92f6f73..d00add1 100644
     If interrupted, process any quits and pending signals immediately
     if INTERRUPTIBLE, and then retry the read unless quitting.
 @@ -2767,6 +2775,35 @@ emacs_intr_read (int fd, void *buf, ptrdiff_t nbyte, bool interruptible)
-
+ 
    ssize_t result;
-
+ 
 +#ifdef __EMSCRIPTEN__
 +  if (wasmacs_host_is_tty_fd (fd))
 +    {
@@ -1602,7 +1614,7 @@ index 8ce68f0..c181fbe 100644
 @@ -1980,6 +1980,25 @@ produce_glyphless_glyph (struct it *it, Lisp_Object acronym)
  /* Turn appearances of face FACE_ID on tty frame F on.
     FACE_ID is a realized face ID number, in the face cache.  */
-
+ 
 +/* wasmacs tty direct-color output: the browser build uses internal
 +   termcap rather than terminfo, so Emacs' terminfo RGB/Tc fallback is not
 +   available.  When the inline TERMCAP advertises 24-bit color cells, emit
@@ -1628,7 +1640,7 @@ index 8ce68f0..c181fbe 100644
 @@ -2034,20 +2053,34 @@ turn_on_face (struct frame *f, int face_id)
        const char *ts;
        char *p;
-
+ 
 -      ts = tty->standout_mode ? tty->TS_set_background : tty->TS_set_foreground;
 +ts = tty->standout_mode ? tty->TS_set_background : tty->TS_set_foreground;
        if (face_tty_specified_color (fg) && ts)
@@ -1647,7 +1659,7 @@ index 8ce68f0..c181fbe 100644
 +	      xfree (p);
 +            }
  	}
-
+ 
        ts = tty->standout_mode ? tty->TS_set_foreground : tty->TS_set_background;
        if (face_tty_specified_color (bg) && ts)
  	{
@@ -1665,5 +1677,5 @@ index 8ce68f0..c181fbe 100644
 +	      xfree (p);
 +            }
  	}
-
+ 
  	ts = tty->TF_set_underline_color;

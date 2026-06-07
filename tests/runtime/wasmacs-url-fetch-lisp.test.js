@@ -39,10 +39,13 @@ test("Emacs patch script registers the host network fetch primitive", async () =
   assert.match(source, /stringToUTF8\(json, ptr, size\)/);
   assert.match(source, /function proxyFetch/);
   assert.match(source, /function configuredProxyUrls\(request\)/);
+  assert.match(source, /function isLocalHostName\(name\)/);
   assert.match(source, /request && request\.proxyUrl/);
   assert.match(source, /wasmacsNetworkProxyUrl/);
   assert.match(source, /__wasmacsNetworkProxyUrl/);
   assert.match(source, /__wasmacs_network_fetch/);
+  assert.match(source, /returned invalid JSON/);
+  assert.match(source, /continue;/);
   assert.match(source, /xfree \(\(void \*\) response\)/);
   assert.doesNotMatch(source, /stringToNewUTF8/);
 });
@@ -61,10 +64,13 @@ test("checked-in Emacs C patch carries the host network fetch primitive", async 
   assert.match(source, /stringToUTF8\(json, ptr, size\)/);
   assert.match(source, /function proxyFetch/);
   assert.match(source, /function configuredProxyUrls\(request\)/);
+  assert.match(source, /function isLocalHostName\(name\)/);
   assert.match(source, /request && request\.proxyUrl/);
   assert.match(source, /wasmacsNetworkProxyUrl/);
   assert.match(source, /__wasmacsNetworkProxyUrl/);
   assert.match(source, /__wasmacs_network_fetch/);
+  assert.match(source, /returned invalid JSON/);
+  assert.match(source, /continue;/);
   assert.match(source, /xfree \(\(void \*\) response\)/);
   assert.doesNotMatch(source, /stringToNewUTF8/);
 });

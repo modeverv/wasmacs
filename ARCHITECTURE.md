@@ -658,8 +658,13 @@ central proxy by default; sample proxies are allowlist-based and preserve the
 same request/response contract as `host.network.fetch`. Browser entrypoints pass
 an optional `network-proxy` endpoint into the worker; the wasm host bridge tries
 direct fetch first, then the configured proxy, then the same-origin development
-proxy when present. Localhost proxy samples must answer CORS preflight because
-they are usually a different origin from the wasmacs page.
+proxy only on local development origins. Static public hosts such as GitHub
+Pages do not provide `__wasmacs_network_fetch`, so they must not be treated as a
+same-origin development proxy. Localhost proxy samples must answer CORS
+preflight because they are usually a different origin from the wasmacs page.
+When a public HTTPS origin calls `127.0.0.1`, modern browsers can also require a
+Private Network Access preflight, so local proxy samples answer
+`Access-Control-Allow-Private-Network: true`.
 - workspace image は信頼境界として扱う
 
 ## 採用候補

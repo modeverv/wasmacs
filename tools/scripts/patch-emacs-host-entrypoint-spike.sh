@@ -163,6 +163,13 @@ EM_JS (const char *, wasmacs_host_network_fetch_json,
          function fail(message) {
            return returnJson({ error: String(message) });
          }
+         function isLocalHostName(name) {
+           var normalized = String(name || "").toLowerCase();
+           return normalized === "localhost"
+             || normalized === "127.0.0.1"
+             || normalized === "::1"
+             || normalized === "[::1]";
+         }
          function configuredProxyUrls(request) {
            var urls = [];
            var configured = "";
@@ -176,11 +183,15 @@ EM_JS (const char *, wasmacs_host_network_fetch_json,
              try {
                var parsed = new URL(configured, typeof location !== "undefined" ? location.href : "http://127.0.0.1:5173/");
                if (parsed.protocol === "http:" || parsed.protocol === "https:")
-                 urls.push(parsed.href);
+               urls.push(parsed.href);
              } catch (_) {}
            }
-           urls.push(new URL("/__wasmacs_network_fetch",
-                             typeof location !== "undefined" ? location.href : "http://127.0.0.1:5173/").href);
+           if (typeof location !== "undefined") {
+             if (isLocalHostName(location.hostname))
+               urls.push(new URL("/__wasmacs_network_fetch", location.href).href);
+           } else {
+             urls.push("http://127.0.0.1:5173/__wasmacs_network_fetch");
+           }
            return urls;
          }
          function proxyFetch(request, directError) {
@@ -197,7 +208,8 @@ EM_JS (const char *, wasmacs_host_network_fetch_json,
                  try {
                    return returnJson(JSON.parse(proxy.responseText));
                  } catch (parseError) {
-                   return fail("host.network.fetch proxy returned invalid JSON from " + proxyUrl + ": " + parseError.message);
+                   errors.push(proxyUrl + " returned invalid JSON: " + parseError.message);
+                   continue;
                  }
                }
                errors.push(proxyUrl + " status " + proxy.status);

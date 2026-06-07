@@ -136,6 +136,7 @@ fn json_response(status: u16, payload: serde_json::Value) -> Response {
         .with_additional_header("Access-Control-Allow-Headers", "content-type")
         .with_additional_header("Access-Control-Allow-Methods", "POST, OPTIONS")
         .with_additional_header("Access-Control-Allow-Origin", "*")
+        .with_additional_header("Access-Control-Allow-Private-Network", "true")
         .with_additional_header("Cache-Control", "no-store")
 }
 
@@ -145,6 +146,7 @@ fn handle_proxy(request: &Request) -> Response {
             .with_additional_header("Access-Control-Allow-Headers", "content-type")
             .with_additional_header("Access-Control-Allow-Methods", "POST, OPTIONS")
             .with_additional_header("Access-Control-Allow-Origin", "*")
+            .with_additional_header("Access-Control-Allow-Private-Network", "true")
             .with_additional_header("Cache-Control", "no-store");
     }
     if request.method() != "POST" {
@@ -153,6 +155,7 @@ fn handle_proxy(request: &Request) -> Response {
             .with_additional_header("Access-Control-Allow-Headers", "content-type")
             .with_additional_header("Access-Control-Allow-Methods", "POST, OPTIONS")
             .with_additional_header("Access-Control-Allow-Origin", "*")
+            .with_additional_header("Access-Control-Allow-Private-Network", "true")
             .with_additional_header("Allow", "POST");
     }
 
@@ -227,6 +230,7 @@ fn handle_proxy(request: &Request) -> Response {
         .with_additional_header("Access-Control-Allow-Headers", "content-type")
         .with_additional_header("Access-Control-Allow-Methods", "POST, OPTIONS")
         .with_additional_header("Access-Control-Allow-Origin", "*")
+        .with_additional_header("Access-Control-Allow-Private-Network", "true")
         .with_additional_header("Cache-Control", "no-store")
 }
 

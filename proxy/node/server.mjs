@@ -81,6 +81,7 @@ function writeJson(response, status, payload) {
     "Access-Control-Allow-Headers": "content-type",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Private-Network": "true",
     "Cache-Control": "no-store",
     "Content-Length": Buffer.byteLength(json),
     "Content-Type": "application/json; charset=utf-8",
@@ -94,6 +95,7 @@ export async function handleProxyRequest(request, response) {
       "Access-Control-Allow-Headers": "content-type",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Private-Network": "true",
       "Cache-Control": "no-store",
     });
     response.end();
@@ -104,6 +106,7 @@ export async function handleProxyRequest(request, response) {
       "Access-Control-Allow-Headers": "content-type",
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Private-Network": "true",
       Allow: "POST",
     });
     response.end("method not allowed");

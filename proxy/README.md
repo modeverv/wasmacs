@@ -29,7 +29,10 @@ It returns JSON:
 For browser-hosted wasmacs to call a localhost proxy from a different page
 origin, each sample answers CORS preflight requests with `OPTIONS` and includes
 `Access-Control-Allow-Origin: *` on JSON responses. The samples do not use
-cookies or credentials.
+cookies or credentials. When a public HTTPS page, such as GitHub Pages, calls
+`127.0.0.1`, modern browsers can also require a Private Network Access
+preflight; the samples answer it with
+`Access-Control-Allow-Private-Network: true`.
 
 All samples require an allowlist. By default they allow GNU ELPA and MELPA:
 

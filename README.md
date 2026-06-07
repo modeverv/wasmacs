@@ -139,8 +139,12 @@ http://127.0.0.1:5173/app/xterm-atomics-pdump.html?network-proxy=http%3A%2F%2F12
 ```
 
 The runtime first tries direct browser fetch. If CORS blocks the archive, it
-falls back to the configured proxy endpoint and then to the development
-same-origin `__wasmacs_network_fetch` route when available.
+falls back to the configured proxy endpoint. On localhost development pages it
+can also use the same-origin `__wasmacs_network_fetch` route exposed by
+`make dev`; static hosts such as GitHub Pages do not provide that route.
+Modern browsers may send a Private Network Access preflight when a public
+HTTPS page calls a localhost proxy, so the bundled proxy samples answer
+`Access-Control-Allow-Private-Network: true`.
 
 You can also set the proxy from Emacs Lisp for a specific user image or init
 flow:

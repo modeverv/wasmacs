@@ -35,6 +35,7 @@ function write_json(int $status, array $payload): void
     header('Access-Control-Allow-Headers: content-type');
     header('Access-Control-Allow-Methods: POST, OPTIONS');
     header('Access-Control-Allow-Origin: *');
+    header('Access-Control-Allow-Private-Network: true');
     header('Cache-Control: no-store');
     header('Content-Type: application/json; charset=utf-8');
     header('Content-Length: ' . strlen($json));
@@ -101,6 +102,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     header('Access-Control-Allow-Headers: content-type');
     header('Access-Control-Allow-Methods: POST, OPTIONS');
     header('Access-Control-Allow-Origin: *');
+    header('Access-Control-Allow-Private-Network: true');
     header('Cache-Control: no-store');
     return;
 }
@@ -109,6 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Access-Control-Allow-Headers: content-type');
     header('Access-Control-Allow-Methods: POST, OPTIONS');
     header('Access-Control-Allow-Origin: *');
+    header('Access-Control-Allow-Private-Network: true');
     header('Allow: POST');
     http_response_code(405);
     echo 'method not allowed';
