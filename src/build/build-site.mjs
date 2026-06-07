@@ -6,10 +6,12 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const wasmSource = join(repoRoot, "src", "wasm");
+const screenshotSource = join(repoRoot, "src", "assets", "screenshots");
 const buildArtifacts = join(repoRoot, "build", "artifacts");
 const docsRoot = join(repoRoot, "docs");
 const docsApp = join(docsRoot, "app");
 const docsArtifacts = join(docsRoot, "artifacts");
+const docsScreenshots = join(docsRoot, "screenshots");
 const pagesIndexTarget = join(docsRoot, "index.html");
 const pagesEntrypoint = "./app/xterm-atomics-pdump.html";
 
@@ -69,10 +71,12 @@ async function patchTemacsJsForAsyncPreload(filePath) {
 await mkdir(docsRoot, { recursive: true });
 await rm(docsApp, { recursive: true, force: true });
 await rm(docsArtifacts, { recursive: true, force: true });
+await rm(docsScreenshots, { recursive: true, force: true });
 await rm(pagesIndexTarget, { force: true });
 await rm(join(docsRoot, "coi-serviceworker.js"), { force: true });
 await cp(wasmSource, docsApp, { recursive: true });
 await cp(join(wasmSource, "coi-serviceworker.js"), join(docsRoot, "coi-serviceworker.js"));
+await copyIfExists(screenshotSource, docsScreenshots);
 
 const pagesIndex = `<!doctype html>
 <html lang="en">

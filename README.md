@@ -8,6 +8,7 @@ input, persistence, and portable filesystem images in the browser.
 
 ```text
 src/wasm/   browser wasm app source
+src/assets/ source assets copied into generated docs output
 src/build/  docs and generated artifact build scripts
 src/c/      Emacs C-side patch layer
 src/runtime/ host/runtime libraries used by tests and tools
@@ -16,8 +17,10 @@ tools/probs/ prototype and exploratory probe code
 vendor/     pinned upstream GNU Emacs source, read-only
 build/      copied Emacs working trees, temporary state, and generated artifacts
 build/artifacts/ generated wasm, pdmp, and wasifs build products
+build2/     VS Code-only copied Emacs workspaces and generated runtime artifacts
 doc/        architecture and planning notes
 docs/       GitHub Pages output
+vscode/     generated VS Code webview app bundle
 logs/       ignored runtime logs; keep only .gitkeep in Git
 tests/      automated test code
 archive/    old outputs and superseded files
@@ -41,6 +44,12 @@ under `build/artifacts/`, while the publishable `docs/` tree includes only the
 checked-in browser bundle and Pages-safe runtime artifacts. The large
 Emscripten preload package is stored as `temacs.data.parts/` chunks under
 `docs/artifacts/` instead of a single oversized `temacs.data` file.
+
+The VS Code `.wasifs` extension uses a separate generated lane. `make
+vscode-build` writes VS Code-only runtime artifacts under `build2/artifacts/`
+and a webview app bundle under `vscode/app/`; it does not consume or update
+`docs/app` or `docs/artifacts`. This keeps the docs/Pages build reproducible
+from `build/` and `docs/` even when VS Code experiments are present.
 
 The Pages bundle uses a root `coi-serviceworker.js` to emulate COOP/COEP for
 `SharedArrayBuffer`, keeps app and artifact URLs relative so project pages work
@@ -92,6 +101,7 @@ npm ci
 make prepare
 make test
 make build
+make vscode-build
 make docs
 make dev
 ```
@@ -113,6 +123,13 @@ tree contains only the Pages runtime payload that is allowed by
 `tools/scripts/validate-git-artifact-policy.sh`, including split
 `temacs.data.parts/` files instead of a single large preload package.
 
+`make vscode-build` builds the Asyncify VS Code runtime route in `build2/` and
+copies the browser-side support files into `vscode/app/`. `make clean-vscode`
+removes only those VS Code generated directories. `make clean` removes legacy
+`dist/` if it exists and empties `build/` and `docs/`; it intentionally leaves
+`build2/` and `vscode/` alone so the two generated lanes can be validated
+independently.
+
 Runtime and validation logs are written under `logs/`, but log files are ignored
 by Git. Historical logs from the reorganization baseline are kept under
 `archive/old-logs/`.
@@ -121,9 +138,7 @@ by Git. Historical logs from the reorganization baseline are kept under
 `src/build/generate-host-abi-wit.mjs`. It is a build artifact, not source
 under `src/`, and is validated by `tools/scripts/validate-host-abi.sh`.
 
-`dist/` is not part of the current layout. `make clean` removes legacy `dist/`
-if it exists, empties `build/` and `docs/`, and keeps `logs/` available for
-ignored runtime output.
+`dist/` is not part of the current layout.
 
 ## Architecture
 

@@ -3,9 +3,9 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 source_ref="${repo_root}/vendor/emacs"
-work_root="${repo_root}/build/native-emacs-30.2"
+work_root="${WASMACS_NATIVE_WORK_ROOT:-${repo_root}/build/native-emacs-30.2}"
 source_copy="${work_root}/src"
-log_file="${repo_root}/logs/native-baseline.txt"
+log_file="${WASMACS_NATIVE_LOG_FILE:-${repo_root}/logs/native-baseline.txt}"
 emacs_source_tag="$(
   git -C "${source_ref}" describe --tags --exact-match HEAD 2>/dev/null \
     || printf 'emacs-%s' "${WASMACS_EMACS_VERSION:-30.2}"

@@ -75,19 +75,18 @@ class WasifsEditorProvider {
 
     const mediaRoot = vscode.Uri.joinPath(this.context.extensionUri, "media");
     const repoRoot = vscode.Uri.joinPath(this.context.extensionUri, "..", "..");
-    const appRoot = vscode.Uri.joinPath(repoRoot, "docs", "app");
-    const artifactRoot = vscode.Uri.joinPath(repoRoot, "docs", "artifacts");
-    const buildArtifactRoot = vscode.Uri.joinPath(repoRoot, "build", "artifacts");
+    const appRoot = vscode.Uri.joinPath(repoRoot, "vscode", "app");
+    const artifactRoot = vscode.Uri.joinPath(repoRoot, "build2", "artifacts");
     webviewPanel.webview.options = {
       enableScripts: true,
-      localResourceRoots: [mediaRoot, appRoot, artifactRoot, buildArtifactRoot],
+      localResourceRoots: [mediaRoot, appRoot, artifactRoot],
     };
 
     webviewPanel.webview.html = this.renderWebview(webviewPanel.webview, document);
     const runtimeBridge = new WasifsRuntimeBridge({
       document,
       postMessage: (message) => webviewPanel.webview.postMessage(message),
-      artifacts: runtimeArtifactStatus(appRoot, artifactRoot, buildArtifactRoot),
+      artifacts: runtimeArtifactStatus(appRoot, artifactRoot),
     });
 
     const sendBootstrap = () => {
@@ -99,7 +98,7 @@ class WasifsEditorProvider {
           userMount: USER_MOUNT,
           initialElisp: INITIAL_ELISP,
           initialView: "dired",
-          assets: runtimeAssets(webviewPanel.webview, appRoot, artifactRoot, buildArtifactRoot),
+          assets: runtimeAssets(webviewPanel.webview, appRoot, artifactRoot),
           bridge: runtimeBridge.bootstrapPayload(),
         },
       });
@@ -222,8 +221,8 @@ class WasifsEditorProvider {
   }
 }
 
-function runtimeAssets(webview, appRoot, artifactRoot, buildArtifactRoot) {
-  const asyncifyXterm = vscode.Uri.joinPath(buildArtifactRoot, "emacs-browser-asyncify-spike");
+function runtimeAssets(webview, appRoot, artifactRoot) {
+  const asyncifyXterm = vscode.Uri.joinPath(artifactRoot, "emacs-browser-asyncify-spike");
   return {
     appRoot: webview.asWebviewUri(appRoot).toString(),
     xtermTerminalModule: webview
@@ -259,8 +258,8 @@ function runtimeAssets(webview, appRoot, artifactRoot, buildArtifactRoot) {
   };
 }
 
-function runtimeArtifactStatus(appRoot, artifactRoot, buildArtifactRoot) {
-  const asyncifyXterm = vscode.Uri.joinPath(buildArtifactRoot, "emacs-browser-asyncify-spike");
+function runtimeArtifactStatus(appRoot, artifactRoot) {
+  const asyncifyXterm = vscode.Uri.joinPath(artifactRoot, "emacs-browser-asyncify-spike");
   const atomicsPdumpArtifactRoot = vscode.Uri.joinPath(artifactRoot, "emacs-browser-atomics-pdump");
   return {
     xtermTerminalModule: artifactRecord(vscode.Uri.joinPath(appRoot, "src", "xterm-emacs-terminal.js")),

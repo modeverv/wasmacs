@@ -11,7 +11,7 @@
  *   that artifact's callMain returns synchronously (number 0), not a Promise.
  *   await number resolves immediately → xterm-session-returned posted → "session ended (status 0)".
  *
- * Fix: startXtermSession uses XTERM_ARTIFACT_DIR = "emacs-browser-asyncify-spike"
+ * Fix: VS Code runtime uses XTERM_ARTIFACT_DIR = "emacs-browser-asyncify-spike"
  *   This artifact's callMain returns a Promise → session stays alive at each handleAsync wait.
  *
  * This smoke validates:
@@ -23,9 +23,9 @@
  *   6. bufferAbc: buffer-string is "abc" after a/b/c input
  *
  * This mirrors what happens in the browser:
- *   main.js → new Worker(asyncify-minibuffer-worker.js) → postMessage({type:"start-xterm-session"})
+ *   VS Code webview → new Worker(asyncify-minibuffer-worker.js) → postMessage({type:"start-xterm-session"})
  *   Worker: ensureXtermEmacs() [loads asyncify-spike] → callMain → Promise → wait
- *   main.js: terminal-output-bytes → xterm.write(); emacs-input-bytes → resolveWait
+ *   webview: terminal-output-bytes → xterm.write(); emacs-input-bytes → resolveWait
  *
  * Note: This probe uses the Node.js vm context approach (no real browser or xterm.js instance).
  * For visual verification of the browser UI, start the dev server (npm run dev) and manually
@@ -46,12 +46,12 @@ import vm from "node:vm";
 
 const repoRoot = new URL("../..", import.meta.url).pathname;
 
-// Use the same artifact as the browser app's startXtermSession (XTERM_ARTIFACT_DIR).
+// Use the same artifact as the VS Code webview's startAsyncifyRuntime (XTERM_ARTIFACT_DIR).
 // This is emacs-browser-asyncify-spike — confirmed working for interactive --nw mode.
 // emacs-browser-interactive is NOT used here (its callMain returns synchronously).
 const artifactDir =
   process.env.WASMACS_ARTIFACT_DIR ??
-  `${repoRoot}/build/artifacts/emacs-browser-asyncify-spike`;
+  `${repoRoot}/build2/artifacts/emacs-browser-asyncify-spike`;
 
 const defaultLogStem = `${repoRoot}/logs/browser-xterm-manual-app-smoke`;
 const textLogPath =
@@ -112,7 +112,7 @@ if (!process.argv.includes("--child")) {
   process.exit(0);
 }
 
-/* ── Child: simulate browser app startXtermSession flow ─────────── */
+/* ── Child: simulate VS Code webview startAsyncifyRuntime flow ───── */
 
 const code = await readFile(`${artifactDir}/temacs`, "utf8");
 let sequence = 0;
@@ -185,8 +185,8 @@ recordCheckpoint("runtime-initialized", {
   note: "HEAPU8 and ENV traps installed to simulate browser export guard; readMemorySnapshot must not access them",
 });
 
-/* ── Simulate startXtermSession callMain ─────────────────────────── */
-// mirrors the fixed startXtermSession: fire callMain, then poll for wait point.
+/* ── Simulate startAsyncifyRuntime callMain ──────────────────────── */
+// mirrors the fixed VS Code webview route: fire callMain, then poll for wait point.
 // DO NOT await callMainResult — in handleAsync mode, callMain returns synchronously (0)
 // even while the WASM stack is suspended. Awaiting 0 would immediately post session-ended.
 
@@ -224,7 +224,7 @@ recordCheckpoint("first-wait-reached", {
 
 /* ── Send a/b/c via emacs-input-bytes path ───────────────────────── */
 
-// This mirrors: main.js xtermTerminal.onData → xtermDataToBytes → emacs-input-bytes
+// This mirrors: VS Code webview xtermTerminal.onData → xtermDataToBytes → emacs-input-bytes
 // → worker emacs-input-bytes handler → __wasmacsQueueTerminalInput + resolveWait
 
 await runStep("insert-a",  [97],  { expectedBuffer: "a",   expectedCommand: "self-insert-command" });
@@ -349,7 +349,7 @@ function buildSummary(snapshots, spawnResult) {
     callMainSyncValue: callMainSnap?.details?.callMainSyncValue ?? null,
     bugFixed: callMainIsPromise,
     bugDescription: "emacs-browser-interactive callMain returns sync number 0 → session ends immediately",
-    fixApplied: "startXtermSession uses XTERM_ARTIFACT_DIR=emacs-browser-asyncify-spike",
+    fixApplied: "VS Code startAsyncifyRuntime uses XTERM_ARTIFACT_DIR=emacs-browser-asyncify-spike",
     // Session lifecycle
     sessionReachesWait,
     terminalBytesPresent,
@@ -367,7 +367,7 @@ function buildSummary(snapshots, spawnResult) {
     allSteps,
     artifact: artifactDir,
     note: [
-      "Simulates browser app startXtermSession flow.",
+      "Simulates VS Code webview startAsyncifyRuntime flow.",
       "callMainIsPromise=true means the session stays alive (Asyncify working).",
       "For visual browser UI confirmation: npm run dev → http://localhost:5173 → Start Interactive Session.",
       "Expected: status 'interactive', Emacs *scratch* visible in xterm pane.",

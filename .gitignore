@@ -27,6 +27,8 @@ pnpm-debug.log*
 
 # Build and generated artifacts
 /build/
+/build2/
+vscode/
 dist/
 out/
 tmp/

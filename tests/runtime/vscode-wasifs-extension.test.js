@@ -109,6 +109,11 @@ test("VS Code wasifs extension exposes runtime asset handoff URIs", async () => 
   assert.match(source, /worker-src blob:/);
   assert.match(source, /WasifsRuntimeBridge/);
   assert.match(source, /wasifs\.bridge-start/);
+  assert.match(source, /"vscode", "app"/);
+  assert.match(source, /"build2", "artifacts"/);
+  assert.doesNotMatch(source, /"docs", "app"/);
+  assert.doesNotMatch(source, /"docs", "artifacts"/);
+  assert.doesNotMatch(source, /"build", "artifacts"/);
   assert.match(source, /xterm-emacs-terminal\.js/);
   assert.match(source, /asyncify-minibuffer-worker\.js/);
   assert.match(source, /asyncifyXtermTemacs/);
@@ -146,8 +151,8 @@ test("VS Code wasifs extension exposes runtime asset handoff URIs", async () => 
   assert.match(webview, /document\.body\.classList\.contains\("xterm-active"\)/);
   assert.match(webview, /wasifs\.inject-terminal-bytes/);
   assert.match(webview, /function sendTerminalBytes/);
-  assert.match(readme, /docs\/app\/src\/xterm-emacs-terminal\.js/);
-  assert.match(readme, /build\/artifacts\/emacs-browser-asyncify-spike/);
+  assert.match(readme, /vscode\/app\/src\/xterm-emacs-terminal\.js/);
+  assert.match(readme, /build2\/artifacts\/emacs-browser-asyncify-spike/);
 });
 
 test("VS Code extension-host keybindings inject terminal bytes into the active webview", async () => {
@@ -161,7 +166,7 @@ test("VS Code extension-host keybindings inject terminal bytes into the active w
 });
 
 test("Asyncify worker accepts VS Code webview runtime artifact configuration", async () => {
-  const worker = await readFile(join(repoRoot, "docs/app/src/asyncify-minibuffer-worker.js"), "utf8");
+  const worker = await readFile(join(repoRoot, "src/wasm/src/asyncify-minibuffer-worker.js"), "utf8");
 
   assert.match(worker, /type === "configure-runtime"/);
   assert.match(worker, /function configureRuntime/);

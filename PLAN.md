@@ -2518,6 +2518,33 @@ Validation notes:
   `tools/scripts/build-emacs-browser-asyncify-spike.sh`. Validation passed with
   focused VS Code/xterm/profile tests, `node --check`, `npm test`, and
   `npm run test:xterm-manual-app-smoke`.
+- 2026-06-07: fixed the current worktree before the build-lane separation with
+  commit `0618846` (`Stabilize browser clean build route`). Then separated the
+  VS Code runtime build from the docs/Pages build: VS Code now uses
+  `build2/` for copied Emacs workspaces and Asyncify runtime artifacts, and
+  `vscode/app/` for generated webview app assets. The `.wasifs` extension no
+  longer exposes `docs/app`, `docs/artifacts`, or `build/artifacts` as local
+  resource roots. Added `make vscode-build`, `make vscode-assets`, and
+  `make clean-vscode`.
+- 2026-06-07: clean VS Code build validation: after `make clean-vscode`,
+  `make vscode-build` generated
+  `build2/artifacts/emacs-browser-asyncify-spike/{temacs,temacs.wasm,temacs.data,package.json}`
+  and `vscode/app/src/{xterm-emacs-terminal.js,asyncify-minibuffer-worker.js}`.
+  `npm run test:xterm-manual-app-smoke` passed against the default
+  `build2/artifacts/emacs-browser-asyncify-spike` route.
+- 2026-06-07: clean docs build validation with `build2/` and `vscode/` still
+  present: `make clean` emptied only `build/` and `docs/`; `make build`
+  regenerated `build/artifacts` and `docs/` from the docs lane. Separation
+  check confirmed `docs/artifacts/emacs-browser-asyncify-spike` is absent while
+  `build2/artifacts/emacs-browser-asyncify-spike/temacs` remains present.
+  Validation passed with `npm test` (106 tests), `npm run browser:smoke`,
+  `npm run test:xterm-terminal-profile`, and
+  `npm run test:xterm-pdump-dired`.
+- 2026-06-07: fixed a clean-build docs regression found during that validation:
+  README screenshots lived only under generated `docs/screenshots/`, so
+  `make clean` removed them and `make build` did not recreate them. Added
+  `src/assets/screenshots/` as the source copy and made `src/build/build-site.mjs`
+  copy it into `docs/screenshots/`.
 - 2026-06-03: OOM layer was narrowed to Emscripten/Asyncify heap-growth
   boundary rather than Emacs `alloc.c:memory_full`. A temporary JS launcher
   probe recorded `_emscripten_resize_heap` requests of 536,940,544 to

@@ -3,7 +3,7 @@ SHELL := /bin/bash
 EMACS_VERSION ?= 30.2
 EMACS_WORK_DIR ?= build/emacs-$(EMACS_VERSION)-patched
 
-.PHONY: all prepare host-abi build-artifacts test build docs dev clean
+.PHONY: all prepare host-abi build-artifacts vscode-build vscode-assets test build docs dev clean clean-vscode
 
 all: build
 
@@ -30,6 +30,13 @@ build: build-artifacts
 
 docs: build
 
+vscode-assets:
+	node src/build/build-vscode-assets.mjs
+
+vscode-build:
+	tools/scripts/build-emacs-browser-asyncify-spike.sh
+	node src/build/build-vscode-assets.mjs
+
 dev:
 	npm run dev
 
@@ -37,3 +44,6 @@ clean:
 	rm -rf dist
 	mkdir -p build docs logs
 	find build docs -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+
+clean-vscode:
+	rm -rf build2 vscode

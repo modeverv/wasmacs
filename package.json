@@ -5,6 +5,8 @@
   "scripts": {
     "dev": "node tools/scripts/serve-app.mjs",
     "build": "node src/build/build-site.mjs",
+    "vscode:assets": "node src/build/build-vscode-assets.mjs",
+    "vscode:build": "tools/scripts/build-emacs-browser-asyncify-spike.sh && node src/build/build-vscode-assets.mjs",
     "browser:smoke": "node tools/scripts/run-browser-smoke.mjs",
     "browser:smoke:editing": "node tools/scripts/run-browser-smoke.mjs minibuffer editing",
     "browser:smoke:all": "node tools/scripts/run-browser-smoke.mjs minibuffer editing files boundaries",

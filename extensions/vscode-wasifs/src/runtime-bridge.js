@@ -106,7 +106,7 @@ function hasAsyncifyXtermArtifact(artifacts = {}) {
 
 function missingAsyncifyNext(artifacts = {}) {
   if (!hasAsyncifyXtermArtifact(artifacts)) {
-    return "Build or package build/artifacts/emacs-browser-asyncify-spike, then expose it to the VS Code webview as the non-Atomics xterm runtime.";
+    return "Build or package build2/artifacts/emacs-browser-asyncify-spike, then expose it to the VS Code webview as the non-Atomics xterm runtime.";
   }
   return "Run the current Atomics runtime outside the webview and stream terminal bytes back to the webview.";
 }

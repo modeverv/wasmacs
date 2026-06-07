@@ -212,6 +212,7 @@ Runtime source and generated outputs are separated:
 
 ```text
 src/wasm/   browser wasm app source
+src/assets/ source assets copied into generated docs output
 src/build/  docs and generated artifact build scripts
 src/c/      Emacs C-side patch layer
 src/runtime/ host/runtime libraries used by tests and tools
@@ -219,8 +220,10 @@ tools/      build, validation, probe, prototype, and inspection tools
 tools/probs/ prototype and exploratory probe code
 build/      copied Emacs source/build workspaces and generated artifacts
 build/artifacts/ generated wasm, pdmp, and wasifs build products
+build2/     VS Code-only copied Emacs workspaces and generated runtime artifacts
 doc/        architecture and planning notes
 docs/       GitHub Pages output
+vscode/     generated VS Code webview app bundle
 logs/       ignored runtime logs
 tests/      automated tests
 archive/    old or superseded files
@@ -241,6 +244,13 @@ directory and should not be recreated.
 `dist/` is retired from the active layout. The maintained Pages bundle is
 `docs/`; `make clean` removes any legacy `dist/`, empties `build/` and `docs/`,
 and a fresh `make build` recreates the publishable `docs/` tree.
+
+The VS Code extension lane is deliberately outside that Pages lane. VS Code
+runtime experiments build under `build2/` and copy webview app assets under
+`vscode/app/`. The extension must not point local resource roots at `docs/app`,
+`docs/artifacts`, or `build/artifacts`; those remain owned by the browser
+docs/Pages build. `make clean-vscode` removes only `build2/` and `vscode/`,
+while `make clean` removes only the docs/browser generated lane.
 
 For GitHub Pages, `docs/index.html` is a lightweight redirect to the canonical
 Atomics/pdump xterm entrypoint at `docs/app/xterm-atomics-pdump.html`. Keeping
