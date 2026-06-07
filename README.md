@@ -112,7 +112,7 @@ cross-origin response readable to JavaScript.
 
 When an archive is blocked by CORS, users can configure a self-hosted fetch
 proxy under their own control. wasmacs does not provide a central proxy service.
-The repository includes sample implementations in `proxy/` for Node, PHP, Go,
+The repository includes sample implementations in `proxy/` for Node, PHP,
 Rust, Perl, Ruby, Python, and PowerShell. Each sample accepts the same JSON
 request shape as the local development `__wasmacs_network_fetch` route and
 returns status, headers, and base64 response bytes.

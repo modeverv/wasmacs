@@ -39,7 +39,8 @@ sub assert_allowed_url {
   my ($scheme, $host_port) = ($1, $2);
   die "unsupported URL scheme: $scheme" unless $scheme eq 'http' || $scheme eq 'https';
   my $origin = "$scheme://$host_port";
-  die "URL origin is not allowed: $origin" unless allowed_origins()->{$origin};
+  my $origins = allowed_origins();
+  die "URL origin is not allowed: $origin" unless $origins->{'*'} || $origins->{$origin};
   return $raw;
 }
 

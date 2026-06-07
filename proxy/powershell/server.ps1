@@ -38,7 +38,8 @@ function Assert-AllowedUrl {
     throw "unsupported URL scheme: $($Target.Scheme)"
   }
   $Origin = "$($Target.Scheme)://$($Target.Authority)"
-  if ((Get-AllowedOrigins) -notcontains $Origin) {
+  $Origins = Get-AllowedOrigins
+  if (($Origins -notcontains '*') -and ($Origins -notcontains $Origin)) {
     throw "URL origin is not allowed: $Origin"
   }
   return $Target

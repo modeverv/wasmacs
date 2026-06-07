@@ -65,12 +65,6 @@ PORT=8787 node proxy/node/server.mjs
 PORT=8787 php -S 127.0.0.1:8787 proxy/php/proxy.php
 ```
 
-## Go
-
-```sh
-PORT=8787 go run proxy/go/main.go
-```
-
 ## Rust
 
 ```sh
