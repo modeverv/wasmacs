@@ -7,11 +7,7 @@ use IO::Socket::INET;
 use JSON::PP qw(decode_json encode_json);
 use MIME::Base64 qw(decode_base64 encode_base64);
 
-my @DEFAULT_ALLOWED_ORIGINS = (
-  'https://elpa.gnu.org',
-  'https://melpa.org',
-  'https://stable.melpa.org',
-);
+my @DEFAULT_ALLOWED_ORIGINS = ('*');
 
 my %BLOCKED_HEADERS = map { $_ => 1 } qw(
   connection

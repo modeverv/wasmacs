@@ -7,12 +7,6 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-DEFAULT_ALLOWED_ORIGINS = [
-    "https://elpa.gnu.org",
-    "https://melpa.org",
-    "https://stable.melpa.org",
-]
-
 BLOCKED_HEADERS = {
     "connection",
     "content-length",
@@ -39,9 +33,6 @@ def assert_allowed_url(raw_url):
         raise ValueError("invalid URL")
     if parsed.scheme not in {"http", "https"}:
         raise ValueError(f"unsupported URL scheme: {parsed.scheme}")
-    origin = f"{parsed.scheme}://{parsed.netloc}"
-    if origin not in allowed_origins():
-        raise ValueError(f"URL origin is not allowed: {origin}")
     return urllib.parse.urlunparse(parsed)
 
 

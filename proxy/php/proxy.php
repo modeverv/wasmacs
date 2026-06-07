@@ -1,10 +1,6 @@
 <?php
 
-const DEFAULT_ALLOWED_ORIGINS = [
-    'https://elpa.gnu.org',
-    'https://melpa.org',
-    'https://stable.melpa.org',
-];
+const DEFAULT_ALLOWED_ORIGINS = ['*'];
 
 const BLOCKED_HEADERS = [
     'connection' => true,

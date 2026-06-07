@@ -2,11 +2,7 @@ param(
   [int]$Port = [int]($env:PORT ?? 8787)
 )
 
-$DefaultAllowedOrigins = @(
-  "https://elpa.gnu.org",
-  "https://melpa.org",
-  "https://stable.melpa.org"
-)
+$DefaultAllowedOrigins = @("*")
 
 $BlockedHeaders = @(
   "connection",
