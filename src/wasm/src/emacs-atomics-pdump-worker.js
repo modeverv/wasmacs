@@ -187,7 +187,7 @@ function installMainThreadNetworkFetchBridge() {
     if (!Number.isFinite(length) || length <= 0 || length > data.length) {
       return returnJson({ error: `host.network.fetch main-thread relay returned invalid length ${length}` });
     }
-    const text = new TextDecoder().decode(data.subarray(0, length));
+    const text = new TextDecoder().decode(new Uint8Array(data.subarray(0, length)));
     try {
       return returnJson(JSON.parse(text));
     } catch (error) {

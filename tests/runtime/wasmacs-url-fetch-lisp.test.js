@@ -196,6 +196,7 @@ test("Pages temacs artifact patches host network fetch to the relay", async () =
   assert.match(builder, /replaceFunction\(source, "wasmacs_host_network_fetch_json"/);
   assert.match(hostFetchFunction, /type: "host-network-fetch"/);
   assert.match(hostFetchFunction, /Atomics\.wait\(signal,\s*0,\s*1,\s*120000\)/);
+  assert.match(hostFetchFunction, /TextDecoder\(\)\.decode\(new Uint8Array\(data\.subarray\(0, length\)\)\)/);
   assert.doesNotMatch(hostFetchFunction, /new XMLHttpRequest/);
 });
 

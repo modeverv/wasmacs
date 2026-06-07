@@ -131,7 +131,7 @@ async function patchTemacsJsForHostNetworkRelay(filePath) {
     if (!Number.isFinite(length) || length <= 0 || length > data.length) {
       return fail("host.network.fetch main-thread relay returned invalid length " + length);
     }
-    var text = new TextDecoder().decode(data.subarray(0, length));
+    var text = new TextDecoder().decode(new Uint8Array(data.subarray(0, length)));
     Atomics.store(signal, 0, 0);
     Atomics.store(signal, 1, 0);
     try {
