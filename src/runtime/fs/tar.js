@@ -20,6 +20,24 @@ function writeOctal(target, offset, length, value) {
   writeString(target, offset, length, text);
 }
 
+function splitTarPath(path) {
+  if (Buffer.byteLength(path, "utf8") <= 100) return { name: path, prefix: "" };
+
+  const parts = path.split("/");
+  for (let index = 1; index < parts.length; index += 1) {
+    const prefix = parts.slice(0, index).join("/");
+    const name = parts.slice(index).join("/");
+    if (
+      Buffer.byteLength(prefix, "utf8") <= 155 &&
+      Buffer.byteLength(name, "utf8") <= 100
+    ) {
+      return { name, prefix };
+    }
+  }
+
+  throw new Error(`tar path is too long for ustar: ${path}`);
+}
+
 function tarPath(path) {
   return path.replace(/^\/+/, "").replace(/\/+/g, "/");
 }
@@ -62,7 +80,8 @@ export function createTar(entries) {
   for (const entry of entries) {
     const path = tarPath(entry.path);
     const isDirectory = entry.type === "directory";
-    const name = isDirectory && !path.endsWith("/") ? `${path}/` : path;
+    const pathWithType = isDirectory && !path.endsWith("/") ? `${path}/` : path;
+    const { name, prefix } = splitTarPath(pathWithType);
     const bytes = isDirectory ? Buffer.alloc(0) : Buffer.from(entry.bytes ?? []);
     const header = Buffer.alloc(BLOCK_SIZE);
 
@@ -76,6 +95,7 @@ export function createTar(entries) {
     header[156] = isDirectory ? "5".charCodeAt(0) : "0".charCodeAt(0);
     writeString(header, 257, 6, "ustar");
     writeString(header, 263, 2, "00");
+    writeString(header, 345, 155, prefix);
 
     const checksum = header.reduce((sum, byte) => sum + byte, 0);
     writeOctal(header, 148, 7, checksum);

@@ -109,6 +109,24 @@ make dev
 `make prepare` copies `vendor/emacs` into `build/emacs-30.2-patched/src` and
 applies `src/c/patches/*.patch`. Do not edit `vendor/emacs` directly.
 
+## wasifs Images
+
+`.wasifs` files are the portable filesystem images used by the browser runtime.
+The current spike format is tar-compatible, so `tar tf image.wasifs` remains a
+valid low-level inspection path. For routine repo work, use the npm scripts:
+
+```sh
+npm run wasifs:list -- user-filesystem.wasifs
+npm run wasifs:pack -- ./home-user user-filesystem.wasifs --root home/user
+npm run wasifs:unpack -- user-filesystem.wasifs ./out
+```
+
+`wasifs:pack` packs a local directory under the requested image root. Use
+`--root home/user` for writable user images and `--root system` for read-only
+system image experiments. `wasifs:list` and `wasifs:unpack` hide tar metadata
+noise such as `PaxHeader`, AppleDouble `._*`, and `.DS_Store` entries so the
+visible tree matches the portable filesystem contents.
+
 `make build` regenerates the Emacs wasm/pdump/wasifs artifacts under
 `build/artifacts/`, then refreshes the GitHub Pages bundle in `docs/`. The old
 512MB pdump restore failure is no longer the current browser status; the

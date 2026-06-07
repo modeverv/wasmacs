@@ -364,6 +364,13 @@ Validation notes:
 - 2026-06-01: validation passed with
   `tools/scripts/validate-user-filesystem-image.sh`; image hash is
   `d564ab223a470c4beda0c39763a4f726ce8e51cbd89796f13903d722b8e7f055`.
+- 2026-06-07: added npm-runnable `.wasifs` pack/list/unpack tooling:
+  `npm run wasifs`, `npm run wasifs:list`, `npm run wasifs:pack`, and
+  `npm run wasifs:unpack`. The CLI is dependency-free, uses the repo tar
+  parser/writer, hides `PaxHeader`, AppleDouble `._*`, and `.DS_Store`
+  metadata during normal list/unpack, and preserves longer USTAR paths through
+  the tar prefix field. Validation passed with
+  `node --test tests/runtime/wasifs-cli.test.js tests/runtime/browser-wasifs.test.js`.
 
 ## Milestone 6: Host ABI Draft
 

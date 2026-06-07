@@ -10,6 +10,19 @@ listed with `tar tf` and hashed with common checksum tools. Compression,
 deduplication, and content-addressed storage are deferred until runtime mount
 semantics are proven.
 
+The repo-local convenience CLI is available through npm:
+
+```sh
+npm run wasifs:list -- user-filesystem.wasifs
+npm run wasifs:pack -- ./home-user user-filesystem.wasifs --root home/user
+npm run wasifs:unpack -- user-filesystem.wasifs ./out
+```
+
+The CLI keeps the same tar-compatible spike payload. Its normal list/unpack
+path hides tar implementation metadata such as `PaxHeader`, AppleDouble
+`._*`, and `.DS_Store` entries so user image inspection stays focused on the
+portable filesystem tree.
+
 ## System Image
 
 `system-lisp.wasifs` is read-only and rooted at `system/` inside the tar
