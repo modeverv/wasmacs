@@ -2239,22 +2239,28 @@ Why this pivot:
   `xdisp.c -> term.c -> tty output` path, and the browser can render that
   stream with xterm.js.
 
-Current source-backed blocker:
+Current source-backed state:
 
-- `tools/scripts/build-emacs-browser-interactive.sh` now builds a pdmp-free
-  system-Lisp-tree Asyncify artifact.
-- `asyncify-minibuffer-worker.js` starts
+- `tools/scripts/build-emacs-browser-asyncify-spike.sh` now builds the
+  pdmp-free xterm product artifact from its own fresh copied GNU Emacs 30.2
+  source tree under `build/emacs-browser-asyncify-spike/`.
+- `asyncify-minibuffer-worker.js` starts the product route with
   `callMain(["--quick", "--no-splash", "--nw"])`.
-- This avoids the previous browser-worker cold-start `RangeError`; standard
-  Lisp loads through `Finding pointers to doc strings`.
-- The current failure is that `callMain` returns status `1` before
-  `read_char` / `wasmacs_host_wait_for_input`; exported state reports
-  `command-loop-level:0`, `commandState:"idle"`, and minibuffer inactive.
-- The next investigation should stay on the terminal startup path, especially
-  `vendor/emacs/src/emacs.c`, `vendor/emacs/src/dispnew.c`,
-  `vendor/emacs/src/term.c`, `vendor/emacs/src/keyboard.c`, and
-  `vendor/emacs/src/sysdep.c`. Do not return to pdmp or forced minibuffer
-  probes as the first response.
+- The previous `Loading subr (source)...` / `traverse_intervals` crash was
+  traced to rebuilding the Asyncify artifact from the shared
+  `build/emacs-core-spike` copied tree. Fresh recopying from `vendor/emacs`
+  cleared that failure.
+- `npm run test:xterm-cold-loadup-failure` is now a cold-loadup smoke: it
+  verifies the product route reaches the interactive tty waitpoint on a
+  browser-like small JS stack with no `--dump-file`.
+- `npm run test:xterm-manual-app-smoke` now reaches the first tty waitpoint
+  and proves printable terminal bytes go through the real Emacs command loop
+  as `self-insert-command`, mutating the buffer to `abc`.
+- The next investigation should stay on VS Code/webview `.wasifs` mounting and
+  terminal surface polish: pass the opened image into the runtime before
+  startup and hand Emacs `(dired "/home/user")`. The custom editor now has an
+  xterm.js surface for terminal bytes; do not return to pdmp or forced
+  minibuffer probes as the first response.
 
 Next implementation slice:
 
@@ -2335,6 +2341,183 @@ Validation notes:
   is present; treat OOM elimination as the next terminal-profile stability
   blocker before wiring xterm.js or promoting the profile beyond byte-level
   diagnostic proof.
+- 2026-06-07: added a VS Code `.wasifs` custom editor host scaffold under
+  `extensions/vscode-wasifs/`. This is a host/document lifecycle spike, not a
+  replacement for the active Terminal/Tty Service route. Opening `*.wasifs`
+  registers `wasmacs.wasifsEditor`, passes image bytes to a webview, declares
+  `/home/user` as the writable mount, and records `(dired "/home/user")` as the
+  initial Emacs handoff. The webview currently renders a Dired-like inventory
+  preview until real xterm.js + wasm worker wiring is ready.
+- 2026-06-07: validation passed with `npm test` after adding
+  `tests/runtime/vscode-wasifs-extension.test.js`; 94 node tests passed and the
+  existing git artifact, browser worker, minibuffer, and owned Asyncify plan
+  validators passed.
+- 2026-06-07: extended the VS Code `.wasifs` scaffold with runtime asset
+  handoff URIs and in-webview preflight. The bootstrap now includes webview
+  URIs for `docs/app/src/xterm-emacs-terminal.js`,
+  `docs/app/src/emacs-atomics-worker.js`,
+  `docs/app/src/emacs-atomics-pdump-worker.js`,
+  `docs/artifacts/system-lisp-emacs-30.2.wasifs`, and
+  `docs/artifacts/user-filesystem-empty.wasifs`. The webview reports local
+  asset fetch status plus `SharedArrayBuffer` / `Worker` availability so the
+  next xterm/worker integration can be diagnosed inside VS Code. Validation
+  passed with `npm test`: 95 node tests plus the existing validators.
+- 2026-06-07: live VS Code Extension Development Host check showed the
+  `.wasifs` custom editor and Dired handoff preview working, but all runtime
+  asset preflight rows initially failed because the webview CSP lacked
+  `connect-src`. Added `connect-src ${webview.cspSource}` and made preflight
+  report detailed asset status. The same live check showed
+  `SharedArrayBuffer: unavailable` while `Worker: available`, so the current
+  Atomics runtime is not a direct VS Code webview route. Added
+  `extensions/vscode-wasifs/src/runtime-bridge.js`; the bridge selects
+  `extension-host-bridge` unless SAB and Worker are both available in the
+  webview. Validation passed with `npm test`: 97 node tests plus existing
+  validators.
+- 2026-06-07: fixed the VS Code preflight UI so asset checks update
+  progressively instead of waiting for every large image fetch to finish.
+  Added timeout-guarded `fetch()` probes, immediate route publication for
+  SAB/Worker availability, and a `Start Bridge` button. The button now sends
+  `wasifs.bridge-start` to the extension host and reports the selected route's
+  current start plan. With `extension-host-bridge` selected, start is
+  intentionally reported as blocked until a non-Atomics runtime bridge or an
+  out-of-webview Atomics process is attached. Validation passed with
+  `npm test`: 98 node tests plus existing validators.
+- 2026-06-07: advanced the VS Code runtime route from a generic
+  `extension-host-bridge` placeholder to explicit non-Atomics Asyncify
+  detection. `extensions/vscode-wasifs/src/runtime-bridge.js` now selects
+  `webview-asyncify` when `Worker` is available, `SharedArrayBuffer` is
+  unavailable, and `build/artifacts/emacs-browser-asyncify-spike` exists.
+  Fixed two malformed Perl substitutions in
+  `tools/scripts/patch-emacs-host-entrypoint-spike.sh` and added the missing
+  terminal resize imports to `tools/scripts/wasmacs-asyncify-host-library.js`;
+  after that, `tools/scripts/build-emacs-browser-asyncify-spike.sh` completed
+  and produced `build/artifacts/emacs-browser-asyncify-spike/{temacs,
+  temacs.wasm,temacs.data}`. The VS Code scaffold now passes webview URIs for
+  that Asyncify artifact. Validation passed with `npm test`: 99 node tests plus
+  existing validators.
+- 2026-06-07: connected the VS Code `Start Bridge` button to the Asyncify
+  worker as the first real runtime attempt. `asyncify-minibuffer-worker.js` now
+  accepts a `configure-runtime` message so the VS Code webview can provide
+  webview-local artifact base URIs instead of the normal `/artifacts/...`
+  browser paths. The custom editor creates the worker, sends
+  `configure-runtime`, then sends `start-xterm-session`, and appends worker
+  status / terminal bytes into the editor's preformatted terminal area. This
+  is intentionally still a plain terminal byte surface, not browser-owned
+  Emacs semantics. Validation passed with `npm test`: 100 node tests plus
+  existing validators.
+- 2026-06-07: live VS Code Start Bridge attempt proved that a webview-local
+  `https://file+.vscode-resource.vscode-cdn.net/.../asyncify-minibuffer-worker.js`
+  URL can be fetched during preflight but cannot be used directly as a
+  `new Worker(...)` script from the `vscode-webview://...` origin. Added
+  `worker-src blob:` / `child-src blob:` CSP and changed the custom editor to
+  fetch the worker source and create a `blob:` worker fallback. Validation
+  passed with `npm test`: 100 node tests plus existing validators.
+- 2026-06-07: the next live VS Code Start Bridge attempt reached the Asyncify
+  worker, but `importScripts(.../emacs-browser-asyncify-spike/temacs)` failed
+  from inside the blob worker for the same webview-origin reason. Added
+  `xtermEntrypointUrl` and `xtermLocateFiles` to the worker
+  `configure-runtime` message. The VS Code custom editor now fetches
+  `temacs`, `temacs.wasm`, and `temacs.data`, wraps them in blob URLs, and lets
+  the worker import the JS glue plus resolve wasm/data through `locateFile()`.
+  Validation passed with `npm test`: 100 node tests plus existing validators.
+- 2026-06-07: follow-up live VS Code run showed that even a
+  `blob:vscode-webview://...` URL created by the outer webview can fail when
+  imported inside the blob worker. Added `script-src ... blob:` and changed the
+  VS Code handoff again: the outer webview now sends `temacs` as source text
+  and transfers `temacs.wasm` / `temacs.data` as ArrayBuffers; the Asyncify
+  worker creates the entrypoint and locateFile blob URLs inside its own global
+  scope. Validation passed with `npm test`: 100 node tests plus existing
+  validators.
+- 2026-06-07: live VS Code run reached Emscripten wasm loading. Streaming wasm
+  compile was blocked by CSP, and the ArrayBuffer fallback attempted
+  `XMLHttpRequest` against a worker-local blob URL for `temacs.wasm`. Added
+  `wasm-unsafe-eval` to the custom editor script CSP and changed the Asyncify
+  xterm worker handoff to provide `Module.wasmBinary` from transferred
+  `temacs.wasm` bytes and `Module.getPreloadedPackage()` from transferred
+  `temacs.data` bytes. Validation passed with `npm test`: 100 node tests plus
+  existing validators.
+- 2026-06-07: live VS Code run reached `xterm emacs runtime initialized` and
+  cold loadup began. It then emitted Emscripten export-guard aborts for
+  `STACK_SIZE`, `HEAPU8`, and `ENV` before failing while printing an error near
+  `Loading subr (source)...` (`traverse_intervals -> print_object ->
+  print_error_message`). Removed all runtime diagnostic probes of those
+  unexported properties from `asyncify-minibuffer-worker.js`; `try/catch` is
+  not enough because the Emscripten guard emits abort noise and can disturb the
+  session. Validation passed with `npm test`: 100 node tests plus existing
+  validators.
+- 2026-06-07: after removing the export-guard diagnostic probes, live VS Code
+  still failed at `Loading subr (source)...` with
+  `traverse_intervals -> print_object -> print_error_message`. This is no
+  longer a VS Code webview loading problem. Re-ran the repo probes against the
+  same `build/artifacts/emacs-browser-asyncify-spike` artifact:
+  `npm run test:xterm-cold-loadup-failure` reproduced
+  `RuntimeError: memory access out of bounds`, and
+  `npm run test:xterm-manual-app-smoke` failed with the same stack. Also tried
+  the pdump diagnostic smoke using the available
+  `emacs-browser-atomics-pdump/bootstrap-emacs.pdmp`; it loaded the pdmp but
+  failed with the same stack before interactive wait. Current blocker:
+  asyncify-spike product cold loadup/runtime artifact fails before interactive
+  wait; VS Code integration has reached that blocker.
+- 2026-06-07: resolved the active asyncify-spike cold-loadup blocker by moving
+  `tools/scripts/build-emacs-browser-asyncify-spike.sh` off the shared
+  `build/emacs-core-spike` copied tree. The script now creates its own fresh
+  copy from `vendor/emacs` under `build/emacs-browser-asyncify-spike/`, passes
+  that path to `patch-emacs-host-entrypoint-spike.sh` via `WASMACS_SPIKE_SRC`,
+  and supports `WASMACS_ASYNCIFY_FORCE_RECOPY=1` for deterministic rebuilds.
+  After `WASMACS_ASYNCIFY_FORCE_RECOPY=1
+  tools/scripts/build-emacs-browser-asyncify-spike.sh`, the cold-loadup smoke
+  passed on a 1.5MB JS stack with no pdump, and
+  `npm run test:xterm-manual-app-smoke` passed: runtime initialized, first tty
+  waitpoint reached, terminal bytes flowed, and injected `a`, `b`, `c` were
+  handled by Emacs as `self-insert-command` with buffer readback `abc`.
+  Validation passed with `npm test`: 101 node tests plus existing validators.
+- 2026-06-07: replaced the VS Code custom editor's raw terminal escape-stream
+  display with an xterm.js surface. The webview now loads xterm.js and the fit
+  addon from the same jsDelivr policy used by the browser app, dynamically
+  imports `xterm-emacs-terminal.js`, writes `terminal-output-bytes` into xterm,
+  sends xterm input back to the worker as `emacs-input-bytes`, and forwards
+  terminal resize events to the worker as `terminal-resize`. The worker updates
+  its terminal rows/cols and resize version for the existing terminal resize
+  host imports. Validation passed with `npm test`, `node --check` on the
+  touched webview/worker files, and `npm run test:xterm-manual-app-smoke`.
+- 2026-06-07: improved the VS Code custom editor terminal ergonomics after live
+  testing showed an unclear cursor and VS Code keybinding capture pain. The
+  xterm integration now uses a visible blinking block cursor with VS Code
+  terminal theme colors, treats macOS Option as Meta, and captures common Emacs
+  terminal keys before VS Code/browser default handling when the event reaches
+  the webview: `C-a`..`C-z`, `C-SPC`, `C-[`, `M-x`-style Alt character chords,
+  `ESC`, `RET`, `TAB`, `DEL`, and arrow keys. The `.wasifs` webview no longer
+  consumes `C-s` for Save once xterm is active. Validation passed with focused
+  xterm/VS Code tests, `node --check`, `npm test`, and
+  `npm run test:xterm-manual-app-smoke`.
+- 2026-06-07: added a stronger VS Code key capture route for Emacs terminal
+  input. VS Code documents `activeCustomEditorId` as the context key for the
+  currently active custom editor, so the extension now contributes
+  `wasmacs.sendTerminalKeys` keybindings scoped to
+  `activeCustomEditorId == 'wasmacs.wasifsEditor'`. Captured keybindings
+  include `C-x C-f`, common `C-x` window/buffer/file chords, `M-x`, `C-SPC`,
+  `ESC`, `C-s`, `C-g`, and common Control navigation/editing keys. The
+  extension host posts `wasifs.inject-terminal-bytes` to the active webview,
+  and the webview forwards those bytes to the Asyncify worker as
+  `emacs-input-bytes`. This catches keys VS Code would otherwise consume
+  before xterm's DOM key handler sees them, while leaving non-wasmacs editors
+  untouched. Validation passed with focused VS Code/xterm tests, `node
+  --check`, `npm test`, and `npm run test:xterm-manual-app-smoke`.
+- 2026-06-07: extended the VS Code key capture and terminal profile after live
+  testing showed that `C-x C-f` could enter the minibuffer but printable
+  minibuffer input was unreliable, the xterm cursor was still invisible, and
+  mouse/xterm256color support needed to be explicit. The extension now also
+  captures printable lowercase letters, digits, space, Enter, Backspace, `/`,
+  `.`, `-`, and `_` while `activeCustomEditorId == 'wasmacs.wasifsEditor'`,
+  routing them through the same `wasifs.inject-terminal-bytes` path. The
+  Asyncify `--nw` startup eval enables `visible-cursor` and `(xterm-mouse-mode
+  1)` through Emacs' built-in `xt-mouse`, and both terminal host libraries now
+  advertise xterm cursor visibility capabilities (`vi`, `ve`, `vs`) alongside
+  `TERM=xterm-256color` and truecolor. Rebuilt
+  `build/artifacts/emacs-browser-asyncify-spike` with
+  `tools/scripts/build-emacs-browser-asyncify-spike.sh`. Validation passed with
+  focused VS Code/xterm/profile tests, `node --check`, `npm test`, and
+  `npm run test:xterm-manual-app-smoke`.
 - 2026-06-03: OOM layer was narrowed to Emscripten/Asyncify heap-growth
   boundary rather than Emacs `alloc.c:memory_full`. A temporary JS launcher
   probe recorded `_emscripten_resize_heap` requests of 536,940,544 to
@@ -3288,6 +3471,92 @@ X2/X3 確認後、org-mode 最小確認:
 - `(require 'org)` が通るか
 - `.org` ファイル open/見出し入力/保存
 - 不足なら emacs.pdmp 生成 (full dump) を検討
+
+**vendor/emacs unchanged.**
+
+### Clean browser Atomics/pdump build and smoke verification (2026-06-07)
+
+- `build/` was fully emptied with `rm -rf build && mkdir -p build`; the
+  pre-build `find build -mindepth 1 -maxdepth 1 -print` check produced no
+  entries.
+- `make build` completed from the empty `build/` directory and regenerated the
+  native baseline logs, system Lisp image, empty user filesystem image,
+  Atomics/pdump browser artifacts, and the docs bundle.
+- Final clean-build browser artifact hashes:
+  - `build/artifacts/emacs-browser-atomics-pdump/temacs.wasm` sha256:
+    `f05ed4c56576f7d39561a41dfc4d94bbdd0b9198d33f48b41a2a81b6c2fb7d98`.
+  - `build/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp` sha256:
+    `c5e0a99b462290724c4df486566680f9c2324868d7676df3a13d91c28e1166a6`.
+- Browser-route issue found and fixed: the main app xterm start path still used
+  the older `asyncify-minibuffer-worker.js` route.  The app now starts the
+  current Atomics/pdump worker, fetches the bundled pdmp, posts the `start`
+  message, and forwards terminal input with `emacs-input-bytes`.
+- Atomics terminal output is now posted in the normal browser path rather than
+  only under diagnostic logging.  TERMCAP cursor-visibility entries and xterm
+  mouse enable bytes are kept consistent across the worker, host library, and
+  terminal-profile probe.
+- `tools/scripts/run-browser-smoke.mjs` now defaults to the current
+  `/app/xterm-atomics-pdump.html` route for the no-argument smoke test while
+  preserving the older explicit legacy scenarios.
+- Added `tests/runtime/browser-app-route.test.js` to lock the main app route to
+  Atomics/pdump and to assert that the worker accepts browser terminal input.
+- Validation:
+  - `make build`: PASS from an empty `build/`.
+  - `npm run browser:smoke`: PASS for
+    `http://127.0.0.1:5173/app/xterm-atomics-pdump.html?clear-storage=1`.
+  - `npm test`: PASS (`106` tests).
+  - `npm run test:xterm-terminal-profile`: PASS.
+  - `npm run test:xterm-pdump-dired`: PASS.
+  - In-app Browser attach timed out repeatedly in this session, so the
+    repository Chrome/CDP smoke test was used as the browser runtime proof.
+- `npm run test:xterm-manual-app-smoke` is stale for the current route: it still
+  expects `build/artifacts/emacs-browser-asyncify-spike/temacs`.  The current
+  browser smoke owner is now the Atomics/pdump `browser:smoke` path above.
+- Repeated clean-build verification after the first run:
+  - Start time: `2026-06-07 12:55:28 JST`.
+  - `rm -rf build && mkdir -p build`: PASS.
+  - `find build -mindepth 1 -maxdepth 1 -print`: PASS, no entries.
+  - `du -sh build`: `0B`.
+  - `make build`: PASS from the empty `build/` directory.
+  - Regenerated artifact sizes: `build` `1.4G`, `build/artifacts` `309M`,
+    `docs` `312M`, `docs/artifacts` `311M`.
+  - Repeated clean-build artifact hashes:
+    - `build/artifacts/emacs-browser-atomics-pdump/temacs.wasm` sha256:
+      `f05ed4c56576f7d39561a41dfc4d94bbdd0b9198d33f48b41a2a81b6c2fb7d98`.
+    - `build/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp`
+      sha256:
+      `c1fa94ad942eea01387b1180a2da4c44d5387b65716d4019bddc142f97364946`.
+    - `build/artifacts/system-lisp-emacs-30.2.wasifs` sha256:
+      `7458f723fa8559855c55b1b33973ddc3c2c8cb568b592838a5050f519690444c`.
+    - `build/artifacts/user-filesystem-empty.wasifs` sha256:
+      `db271db6793a25675e0237f24f6d4ccd97ffa2d16f3238f595965527c7e45361`.
+  - Repeated validation:
+    - `npm run browser:smoke`: PASS for the Atomics/pdump xterm route.
+    - `npm test`: PASS (`106` tests).
+    - `npm run test:xterm-terminal-profile`: PASS.
+    - `npm run test:xterm-pdump-dired`: PASS.
+  - Reproducibility assessment: functional clean-build reproducibility is now
+    confirmed by two empty-`build/` runs and browser/runtime probes.  Bitwise
+    artifact reproducibility is not confirmed because `bootstrap-emacs.pdmp`
+    changed hash between the two clean builds while `temacs.wasm` stayed stable.
+
+**vendor/emacs unchanged.**
+
+### README browser route refresh (2026-06-07)
+
+- Reviewed `README.md` against the current Atomics/pdump xterm browser route.
+- Removed the stale statement that the current pdump browser route still has an
+  `out of memory` blocker after static delivery. The current documented status
+  is that the bundled pdmp materializes and the xterm route reaches the
+  interactive waitpoint from both the dev server and the static Pages bundle.
+- Updated the Pages artifact policy text: `build/artifacts/` remains generated
+  output, while `docs/artifacts/` now contains the checked-in Pages-safe runtime
+  payload, including split `temacs.data.parts/` chunks.
+- Added README notes for current browser behavior: xterm-256color/truecolor,
+  xterm mouse, control-key transport, bracketed-paste normalization,
+  responsive resize, `?debug-log=1`, and `?no-live-resize=1`.
+- Validation:
+  - `git diff --check README.md PLAN.md`: PASS.
 
 **vendor/emacs unchanged.**
 

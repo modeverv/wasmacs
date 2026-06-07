@@ -1,10 +1,17 @@
-const ARTIFACT_DIR = "/artifacts/emacs-browser-interactive";
+let ARTIFACT_DIR = "/artifacts/emacs-browser-interactive";
 const DUMP_FILE = "bootstrap-emacs.pdmp";
 
 // XTERM_ARTIFACT_DIR: artifact for the xterm interactive session.
 // emacs-browser-asyncify-spike: full Asyncify instrumentation + all terminal byte symbols.
 // emacs-browser-interactive: callMain returns sync 0 → session ends immediately (wrong).
-const XTERM_ARTIFACT_DIR = "/artifacts/emacs-browser-asyncify-spike";
+let XTERM_ARTIFACT_DIR = "/artifacts/emacs-browser-asyncify-spike";
+let XTERM_ENTRYPOINT_URL = null;
+let XTERM_ENTRYPOINT_SOURCE = null;
+let XTERM_LOCATE_FILES = {};
+let XTERM_LOCATE_FILE_PAYLOADS = {};
+let XTERM_WASM_BINARY = null;
+let XTERM_DATA_PACKAGE = null;
+let XTERM_PDMP_PAYLOAD = null;
 
 // OPEN BLOCKER: browser-worker-cold-loadup-js-stack-overflow
 // callMain(['--quick','--no-splash','--nw']) triggers loadup.el which recurses ~1000+
@@ -17,7 +24,7 @@ const XTERM_ARTIFACT_DIR = "/artifacts/emacs-browser-asyncify-spike";
 // DIAGNOSTIC ONLY: pdump constants. Used by start-pdump-xterm-session only.
 // NOT used in startXtermSession (the product xterm path).
 // pdump boot avoids loadup recursion but is not the product default.
-const XTERM_PDMP_URL = "/artifacts/emacs-browser-asyncify-pdump/bootstrap-emacs.pdmp";
+let XTERM_PDMP_URL = "/artifacts/emacs-browser-asyncify-pdump/bootstrap-emacs.pdmp";
 const XTERM_PDMP_PATH = "/bootstrap-emacs.pdmp";
 
 function post(type, payload = {}) {
@@ -103,6 +110,10 @@ function startTerminalOutputStream() {
 }
 
 self.onmessage = async (event) => {
+  if (event.data?.type === "configure-runtime") {
+    configureRuntime(event.data);
+    return;
+  }
   if (event.data?.type === "boot-probe") {
     await runBootProbe(event.data);
     return;
@@ -150,10 +161,57 @@ self.onmessage = async (event) => {
       wakeEmacsInput();
     }
   }
+  if (event.data?.type === "terminal-resize") {
+    updateTerminalSize(event.data);
+  }
   if (event.data?.type === "emacs-read-state") {
     handleEmacsReadState(event.data);
   }
 };
+
+function configureRuntime(config = {}) {
+  if (config.artifactDir) ARTIFACT_DIR = String(config.artifactDir).replace(/\/$/, "");
+  if (config.xtermArtifactDir) XTERM_ARTIFACT_DIR = String(config.xtermArtifactDir).replace(/\/$/, "");
+  if (config.xtermEntrypointUrl) XTERM_ENTRYPOINT_URL = String(config.xtermEntrypointUrl);
+  if (config.xtermEntrypointSource) XTERM_ENTRYPOINT_SOURCE = String(config.xtermEntrypointSource);
+  if (config.xtermLocateFiles && typeof config.xtermLocateFiles === "object") XTERM_LOCATE_FILES = config.xtermLocateFiles;
+  if (config.xtermLocateFilePayloads && typeof config.xtermLocateFilePayloads === "object") {
+    XTERM_LOCATE_FILE_PAYLOADS = config.xtermLocateFilePayloads;
+    XTERM_WASM_BINARY = XTERM_LOCATE_FILE_PAYLOADS["temacs.wasm"]?.bytes ?? null;
+    XTERM_DATA_PACKAGE = XTERM_LOCATE_FILE_PAYLOADS["temacs.data"]?.bytes ?? null;
+    XTERM_LOCATE_FILES = createLocateFileBlobMap(XTERM_LOCATE_FILE_PAYLOADS);
+  }
+  if (config.xtermPdmpUrl) XTERM_PDMP_URL = String(config.xtermPdmpUrl);
+  if (config.xtermPdmpPayload?.bytes) XTERM_PDMP_PAYLOAD = config.xtermPdmpPayload.bytes;
+  post("runtime-configured", {
+    artifactDir: ARTIFACT_DIR,
+    xtermArtifactDir: XTERM_ARTIFACT_DIR,
+    xtermEntrypointUrl: XTERM_ENTRYPOINT_URL,
+    xtermEntrypointSource: XTERM_ENTRYPOINT_SOURCE ? "provided" : "missing",
+    xtermLocateFiles: Object.keys(XTERM_LOCATE_FILES),
+    xtermWasmBinary: XTERM_WASM_BINARY ? "provided" : "missing",
+    xtermDataPackage: XTERM_DATA_PACKAGE ? "provided" : "missing",
+    xtermPdmpPayload: XTERM_PDMP_PAYLOAD ? "provided" : "missing",
+    xtermPdmpUrl: XTERM_PDMP_URL,
+  });
+}
+
+function createLocateFileBlobMap(payloads) {
+  const urls = {};
+  for (const [path, payload] of Object.entries(payloads)) {
+    if (!payload?.bytes) continue;
+    const type = payload.type || "application/octet-stream";
+    urls[path] = URL.createObjectURL(new Blob([payload.bytes], { type }));
+  }
+  return urls;
+}
+
+function xtermEntrypointScriptUrl() {
+  if (XTERM_ENTRYPOINT_SOURCE) {
+    return URL.createObjectURL(new Blob([XTERM_ENTRYPOINT_SOURCE], { type: "text/javascript" }));
+  }
+  return XTERM_ENTRYPOINT_URL || `${XTERM_ARTIFACT_DIR}/temacs`;
+}
 
 async function ensureAsyncifyEmacs() {
   if (emacsReady) {
@@ -590,10 +648,10 @@ function readTtySnapshot(module) {
       return { fd, error: String(error) };
     }
   }
-  // ENV is not in EXPORTED_RUNTIME_METHODS for asyncify-spike — safe accessor needed.
-  let term, termcap;
-  try { term = module.ENV?.TERM; } catch {}
-  try { termcap = module.ENV?.TERMCAP; } catch {}
+  // ENV is not exported by asyncify-spike. In browser Workers, even probing it
+  // emits Emscripten export-guard abort noise.
+  const term = "not-exported";
+  const termcap = "";
   return {
     term,
     termcap,
@@ -610,6 +668,15 @@ function queueTerminalInput(input = "") {
     throw new Error("terminal input queue is unavailable");
   }
   self.__wasmacsQueueTerminalInput(input);
+}
+
+function updateTerminalSize(message = {}) {
+  const cols = Number(message.cols);
+  const rows = Number(message.rows);
+  if (!Number.isFinite(cols) || !Number.isFinite(rows)) return;
+  self.__wasmacsTerminalCols = Math.max(20, Math.floor(cols));
+  self.__wasmacsTerminalRows = Math.max(3, Math.floor(rows));
+  self.__wasmacsTerminalResizeVersion = (self.__wasmacsTerminalResizeVersion || 0) + 1;
 }
 
 async function ensureAsyncifyRuntimeOnly() {
@@ -673,7 +740,12 @@ async function ensureXtermEmacs() {
     var Module = {
       noInitialRun: true,
       thisProgram: "emacs",
+      wasmBinary: XTERM_WASM_BINARY,
+      getPreloadedPackage(_remotePackageName, _remotePackageSize) {
+        return XTERM_DATA_PACKAGE;
+      },
       locateFile(path) {
+        if (XTERM_LOCATE_FILES[path]) return XTERM_LOCATE_FILES[path];
         return `${XTERM_ARTIFACT_DIR}/${path}`;
       },
       print(text) {
@@ -756,7 +828,7 @@ async function ensureXtermEmacs() {
     }
 
     try {
-      importScripts(`${XTERM_ARTIFACT_DIR}/temacs`);
+      importScripts(xtermEntrypointScriptUrl());
     } catch (error) {
       reject(error);
     }
@@ -785,6 +857,8 @@ async function startXtermSession() {
     const args = ["--quick", "--no-splash", "--nw",
       "--eval", [
         "(setq timer-list nil timer-idle-list nil gc-cons-threshold 500000000)",
+        "(setq visible-cursor t cursor-in-non-selected-windows t)",
+        "(when (require 'xt-mouse nil t) (xterm-mouse-mode 1))",
         "(add-hook 'pre-command-hook (lambda () (message \"PRE-CMD %.3f\" (float-time))))",
         "(add-hook 'post-command-hook (lambda () (message \"POST-CMD %.3f\" (float-time))))",
       ].join(" ")];
@@ -895,27 +969,22 @@ async function startXtermSession() {
 // readArtifactFingerprint: collects diagnostic info about the loaded artifact.
 // Used to compare probe route vs browser route.
 function readArtifactFingerprint(module) {
-  let stackSize, initialMemory, allowMemoryGrowth, asyncifyIgnoreIndirect;
   let handleAsyncMode = typeof globalThis.__wasmacsWaitImportMode !== "undefined"
     ? globalThis.__wasmacsWaitImportMode : (self.__wasmacsWaitImportMode ?? "unknown");
-  // Read build-time constants embedded in the temacs JS if accessible.
-  try { stackSize = module.STACK_SIZE; } catch {}
-  try { initialMemory = module.INITIAL_MEMORY; } catch {}
-  try { allowMemoryGrowth = module.ALLOW_MEMORY_GROWTH; } catch {}
   return {
     artifactDir: XTERM_ARTIFACT_DIR,
     wasmUrl: `${XTERM_ARTIFACT_DIR}/temacs.wasm`,
     dataUrl: `${XTERM_ARTIFACT_DIR}/temacs.data`,
-    stackSize: stackSize ?? "not exported",
-    initialMemory: initialMemory ?? "not exported",
-    allowMemoryGrowth: allowMemoryGrowth ?? "not exported",
-    asyncifyIgnoreIndirect: asyncifyIgnoreIndirect ?? "not exported",
+    stackSize: "not-probed",
+    initialMemory: "not-probed",
+    allowMemoryGrowth: "not-probed",
+    asyncifyIgnoreIndirect: "not-probed",
     handleAsyncMode,
-    heapU8Exported: (() => { try { return Boolean(module.HEAPU8); } catch { return false; } })(),
-    envExported: (() => { try { return Boolean(module.ENV); } catch { return false; } })(),
+    heapU8Exported: "not-probed",
+    envExported: "not-probed",
     wasmacsQueueTerminalInputPresent: typeof self.__wasmacsQueueTerminalInput === "function",
     wasmacsTerminalOutputBytesPresent: Array.isArray(self.__wasmacsTerminalOutputBytes),
-    note: "fingerprint collected after onRuntimeInitialized; some build-time flags not exported",
+    note: "fingerprint avoids unexported Emscripten runtime properties in browser Workers",
   };
 }
 
@@ -932,9 +1001,9 @@ async function ensureXtermPdmp(module) {
   post("status", { text: "[diagnostic] loading xterm pdump" });
   post("xterm-loadup-checkpoint", { phase: "pdmp-fetch-start", url: XTERM_PDMP_URL });
   try {
-    const response = await fetch(XTERM_PDMP_URL);
-    if (!response.ok) throw new Error(`fetch ${XTERM_PDMP_URL}: ${response.status}`);
-    const bytes = new Uint8Array(await response.arrayBuffer());
+    const bytes = XTERM_PDMP_PAYLOAD
+      ? new Uint8Array(XTERM_PDMP_PAYLOAD)
+      : await fetchXtermPdmpBytes();
     module.FS.writeFile(XTERM_PDMP_PATH, bytes);
     xtermPdmpLoaded = true;
     post("status", { text: `[diagnostic] xterm pdump loaded (${bytes.length} bytes)` });
@@ -943,6 +1012,12 @@ async function ensureXtermPdmp(module) {
     post("xterm-loadup-checkpoint", { phase: "pdmp-load-failed", error: String(err) });
     throw err;
   }
+}
+
+async function fetchXtermPdmpBytes() {
+  const response = await fetch(XTERM_PDMP_URL);
+  if (!response.ok) throw new Error(`fetch ${XTERM_PDMP_URL}: ${response.status}`);
+  return new Uint8Array(await response.arrayBuffer());
 }
 
 async function startPdumpXtermSession() {

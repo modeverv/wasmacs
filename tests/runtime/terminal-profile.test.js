@@ -17,5 +17,10 @@ for (const relativePath of [
     assert.match(source, /ENV\.COLORTERM\s+= ENV\.COLORTERM\s+\|\| 'truecolor'/);
     assert.ok(source.includes("ku=\\\\\\\\E[A:kd=\\\\\\\\E[B:kr=\\\\\\\\E[C:kl=\\\\\\\\E[D"));
     assert.ok(source.includes("ks=\\\\\\\\E[?1h\\\\\\\\E=:ke=\\\\\\\\E[?1l\\\\\\\\E>"));
+    assert.ok(source.includes("vi=\\\\\\\\E[?25l:ve=\\\\\\\\E[?25h:vs=\\\\\\\\E[?25h"));
+    assert.match(source, /wasmacs_host_terminal_resize_pending/);
+    assert.match(source, /wasmacs_host_terminal_resize_cols/);
+    assert.match(source, /wasmacs_host_terminal_resize_rows/);
+    assert.match(source, /wasmacs_host_terminal_resize_ack/);
   });
 }

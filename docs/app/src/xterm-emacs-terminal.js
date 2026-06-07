@@ -12,6 +12,12 @@ const DEFAULT_TERMINAL_DIMENSIONS = Object.freeze({ cols: 80, rows: 24 });
 const MIN_TERMINAL_COLS = 20;
 const MIN_TERMINAL_ROWS = 3;
 export const DEFAULT_XTERM_FONT_SIZE = 20;
+const FALLBACK_XTERM_THEME = Object.freeze({
+  background: "#1e1e1e",
+  foreground: "#d4d4d4",
+  cursor: "#ffd866",
+  cursorAccent: "#1e1e1e",
+});
 
 function normalizeTerminalDimensions(dimensions = {}) {
   const cols = Number.isInteger(dimensions.cols) ? dimensions.cols : DEFAULT_TERMINAL_DIMENSIONS.cols;
@@ -61,20 +67,51 @@ function createFitAddon() {
   return null;
 }
 
+function readCssColor(name, fallback) {
+  if (typeof window === "undefined" || typeof window.getComputedStyle !== "function") return fallback;
+  if (typeof document === "undefined" || !document.documentElement) return fallback;
+  const value = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  return value || fallback;
+}
+
+function createXtermTheme() {
+  return {
+    background: readCssColor("--vscode-terminal-background", FALLBACK_XTERM_THEME.background),
+    foreground: readCssColor("--vscode-terminal-foreground", FALLBACK_XTERM_THEME.foreground),
+    cursor: readCssColor("--vscode-terminalCursor-foreground", FALLBACK_XTERM_THEME.cursor),
+    cursorAccent: readCssColor("--vscode-terminalCursor-background", FALLBACK_XTERM_THEME.cursorAccent),
+    selectionBackground: readCssColor("--vscode-terminal-selectionBackground", "#555555"),
+  };
+}
+
 export function createXtermEmacsTerminal(container, options = {}) {
   if (typeof window.Terminal === "undefined") {
     throw new Error("xterm.js Terminal global not found — check CDN script tag");
   }
 
   const initialDimensions = normalizeTerminalDimensions(options.initialDimensions);
+  let dataHandler = null;
+  const captureEmacsKey = (event) => {
+    const bytes = terminalKeyEventToBytes(event);
+    if (!bytes || !dataHandler) return true;
+    event.preventDefault();
+    event.stopPropagation();
+    dataHandler(String.fromCharCode(...bytes));
+    return false;
+  };
 
   const term = new window.Terminal({
     convertEol: false,
+    cursorBlink: true,
+    cursorStyle: "block",
     scrollback: 1000,
     fontFamily: "monospace",
     fontSize: options.fontSize ?? DEFAULT_XTERM_FONT_SIZE,
     cols: initialDimensions.cols,
     rows: initialDimensions.rows,
+    macOptionIsMeta: true,
+    theme: createXtermTheme(),
+    customKeyEventHandler: captureEmacsKey,
   });
   const fitAddon = createFitAddon();
   if (fitAddon) term.loadAddon(fitAddon);
@@ -117,18 +154,16 @@ export function createXtermEmacsTerminal(container, options = {}) {
     window.addEventListener("resize", fit);
   }
 
-  let dataHandler = null;
   term.onData((data) => {
     if (dataHandler) dataHandler(data);
   });
-  const controlKeyFallback = (event) => {
-    const bytes = terminalKeyEventToBytes(event);
-    if (!bytes || !dataHandler) return;
-    event.preventDefault();
-    event.stopPropagation();
-    dataHandler(String.fromCharCode(...bytes));
+  const emacsKeyFallback = (event) => {
+    captureEmacsKey(event);
   };
-  container.addEventListener("keydown", controlKeyFallback, { capture: true });
+  container.addEventListener("keydown", emacsKeyFallback, { capture: true });
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+    document.addEventListener("keydown", emacsKeyFallback, { capture: true });
+  }
 
   let focusedOnFirstOutput = false;
   return {
@@ -149,8 +184,14 @@ export function createXtermEmacsTerminal(container, options = {}) {
     getDimensions() {
       return currentDimensions;
     },
+    focus() {
+      term.focus();
+    },
     dispose() {
-      container.removeEventListener("keydown", controlKeyFallback, { capture: true });
+      container.removeEventListener("keydown", emacsKeyFallback, { capture: true });
+      if (typeof document !== "undefined" && typeof document.removeEventListener === "function") {
+        document.removeEventListener("keydown", emacsKeyFallback, { capture: true });
+      }
       if (resizeObserver) resizeObserver.disconnect();
       else window.removeEventListener("resize", fit);
       term.dispose();
@@ -172,16 +213,35 @@ export function stripBracketedPasteMarkers(data) {
 
 export function controlKeyEventToBytes(event) {
   if (!event?.ctrlKey || event.altKey || event.metaKey) return null;
+  if (event.key === " ") return [0];
+  if (event.key === "[") return [27];
+  if (event.key === "]") return [29];
+  if (event.key === "\\") return [28];
+  if (event.key === "^") return [30];
+  if (event.key === "_") return [31];
+  if (event.key === "?") return [127];
   if (typeof event.key !== "string" || event.key.length !== 1) return null;
   const code = event.key.toLowerCase().charCodeAt(0);
   if (code < 97 || code > 122) return null;
   return [code - 96];
 }
 
+export function metaKeyEventToBytes(event) {
+  if (!event?.altKey || event.ctrlKey || event.metaKey) return null;
+  if (typeof event.key !== "string" || event.key.length !== 1) return null;
+  return [27, ...Array.from(new TextEncoder().encode(event.key))];
+}
+
 export function terminalKeyEventToBytes(event) {
   const controlBytes = controlKeyEventToBytes(event);
   if (controlBytes) return controlBytes;
+  const metaBytes = metaKeyEventToBytes(event);
+  if (metaBytes) return metaBytes;
   if (event?.ctrlKey || event?.altKey || event?.metaKey) return null;
+  if (event?.key === "Escape") return [27];
+  if (event?.key === "Backspace") return [127];
+  if (event?.key === "Enter") return [13];
+  if (event?.key === "Tab") return [9];
   if (event?.key === "ArrowUp") return [27, 91, 65];
   if (event?.key === "ArrowDown") return [27, 91, 66];
   if (event?.key === "ArrowRight") return [27, 91, 67];

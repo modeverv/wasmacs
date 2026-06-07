@@ -16,7 +16,7 @@ mergeInto(LibraryManager.library, {
   $wasmacs_asyncify_env__deps: ["$ENV"],
   $wasmacs_asyncify_env__postset: [
     "ENV.TERM     = ENV.TERM     || 'xterm-256color';",
-    "ENV.TERMCAP  = ENV.TERMCAP  || 'xterm-256color:co#80:li#24:Co#16777216:cl=\\\\E[H\\\\E[2J:cm=\\\\E[%i%d;%dH:up=\\\\E[A:do=\\\\E[B:nd=\\\\E[C:le=\\\\b:bs:ku=\\\\E[A:kd=\\\\E[B:kr=\\\\E[C:kl=\\\\E[D:kh=\\\\E[H:@7=\\\\E[F:kD=\\\\E[3~:ks=\\\\E[?1h\\\\E=:ke=\\\\E[?1l\\\\E>:ti=\\\\E[?1049h:te=\\\\E[?1049l:so=\\\\E[7m:se=\\\\E[27m:us=\\\\E[4m:ue=\\\\E[24m:md=\\\\E[1m:mr=\\\\E[7m:me=\\\\E[0m:AF=\\\\E[38;5;%dm:AB=\\\\E[48;5;%dm:op=\\\\E[39;49m:';",
+    "ENV.TERMCAP  = ENV.TERMCAP  || 'xterm-256color:co#80:li#24:Co#16777216:cl=\\\\E[H\\\\E[2J:cm=\\\\E[%i%d;%dH:up=\\\\E[A:do=\\\\E[B:nd=\\\\E[C:le=\\\\b:bs:ku=\\\\E[A:kd=\\\\E[B:kr=\\\\E[C:kl=\\\\E[D:kh=\\\\E[H:@7=\\\\E[F:kD=\\\\E[3~:ks=\\\\E[?1h\\\\E=:ke=\\\\E[?1l\\\\E>:vi=\\\\E[?25l:ve=\\\\E[?25h:vs=\\\\E[?25h:ti=\\\\E[?1049h:te=\\\\E[?1049l:so=\\\\E[7m:se=\\\\E[27m:us=\\\\E[4m:ue=\\\\E[24m:md=\\\\E[1m:mr=\\\\E[7m:me=\\\\E[0m:AF=\\\\E[38;5;%dm:AB=\\\\E[48;5;%dm:op=\\\\E[39;49m:';",
     "ENV.COLORTERM = ENV.COLORTERM || 'truecolor';",
     "ENV.HOME     = ENV.HOME     || '/home/user';",
     "ENV.USER     = ENV.USER     || 'wasmacs';",
@@ -45,6 +45,8 @@ mergeInto(LibraryManager.library, {
     "};",
     "globalThis.__wasmacsTerminalRows = globalThis.__wasmacsTerminalRows || 24;",
     "globalThis.__wasmacsTerminalCols = globalThis.__wasmacsTerminalCols || 80;",
+    "globalThis.__wasmacsTerminalResizeVersion = globalThis.__wasmacsTerminalResizeVersion || 0;",
+    "globalThis.__wasmacsTerminalResizeSeen = globalThis.__wasmacsTerminalResizeSeen || 0;",
     "globalThis.__wasmacsQueueTerminalInput = function (bytes) {",
     "  var queue = globalThis.__wasmacsTerminalInputBytes;",
     "  if (typeof bytes === 'string') {",
@@ -175,6 +177,38 @@ mergeInto(LibraryManager.library, {
     } catch (e) {
       return 0;
     }
+  },
+
+  wasmacs_host_terminal_resize_pending__deps: ["$wasmacs_terminal"],
+  wasmacs_host_terminal_resize_pending: function () {
+    return (globalThis.__wasmacsTerminalResizeVersion || 0) !==
+      (globalThis.__wasmacsTerminalResizeSeen || 0) ? 1 : 0;
+  },
+
+  wasmacs_host_terminal_resize_cols__deps: ["$wasmacs_terminal"],
+  wasmacs_host_terminal_resize_cols: function () {
+    return globalThis.__wasmacsTerminalCols || 80;
+  },
+
+  wasmacs_host_terminal_resize_rows__deps: ["$wasmacs_terminal"],
+  wasmacs_host_terminal_resize_rows: function () {
+    return globalThis.__wasmacsTerminalRows || 24;
+  },
+
+  wasmacs_host_terminal_resize_ack__deps: ["$wasmacs_terminal"],
+  wasmacs_host_terminal_resize_ack: function () {
+    globalThis.__wasmacsTerminalResizeSeen = globalThis.__wasmacsTerminalResizeVersion || 0;
+    if (typeof self !== "undefined" && typeof self.postMessage === "function") {
+      try {
+        self.postMessage({
+          type: "terminal-resized",
+          cols: globalThis.__wasmacsTerminalCols || 80,
+          rows: globalThis.__wasmacsTerminalRows || 24,
+          version: globalThis.__wasmacsTerminalResizeSeen,
+        });
+      } catch (_) {}
+    }
+    return 0;
   },
 
   wasmacs_host_wait_for_input__deps: ["$wasmacs_asyncify_env", "$wasmacs_terminal"],

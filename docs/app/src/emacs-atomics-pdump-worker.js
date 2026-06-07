@@ -45,6 +45,14 @@ function postTerminalTail(reason) {
   } catch (_) {}
 }
 
+function queueTerminalControlSequence(text) {
+  try {
+    const bytes = new TextEncoder().encode(text);
+    const out = globalThis.__wasmacsTerminalOutputBytes;
+    if (Array.isArray(out)) out.push(...bytes);
+  } catch (_) {}
+}
+
 function createRunDependencyLogFilter() {
   let pendingCount = 0;
   let suppressing = false;
@@ -131,6 +139,17 @@ function updateTerminalSize(size = {}) {
   Atomics.add(signal, 0, 1);
 }
 
+function injectTerminalInput(bytes = []) {
+  const signal = new Int32Array(INPUT_SAB, 0, 2);
+  const data = new Uint8Array(INPUT_SAB, 8);
+  const chunk = Array.from(bytes).slice(0, data.length);
+  data.fill(0);
+  data.set(chunk);
+  Atomics.store(signal, 1, chunk.length);
+  Atomics.add(signal, 0, 1);
+  Atomics.notify(signal, 0, 1);
+}
+
 self.onmessage = async (event) => {
   const msg = event.data;
   if (msg?.type === "terminal-resize") {
@@ -139,6 +158,9 @@ self.onmessage = async (event) => {
       rows: globalThis.__wasmacsTerminalRows,
       cols: globalThis.__wasmacsTerminalCols,
     });
+  }
+  if (msg?.type === "emacs-input-bytes") {
+    injectTerminalInput(msg.bytes || []);
   }
   if (msg?.type === "start") {
     updateTerminalSize(msg.terminalSize);
@@ -583,7 +605,7 @@ async function startEmacs(pdmpBytes, debugOptions = {}) {
     ENV.LOGNAME = "user";
     ENV.TERM = "xterm-256color";
     ENV.COLORTERM = "truecolor";
-    ENV.TERMCAP = "xterm-256color:co#80:li#24:Co#16777216:cl=\\E[H\\E[2J:cm=\\E[%i%d;%dH:up=\\E[A:do=\\E[B:nd=\\E[C:le=\\b:bs:ku=\\E[A:kd=\\E[B:kr=\\E[C:kl=\\E[D:kh=\\E[H:@7=\\E[F:kD=\\E[3~:ks=\\E[?1h\\E=:ke=\\E[?1l\\E>:ti=\\E[?1049h:te=\\E[?1049l:so=\\E[7m:se=\\E[27m:us=\\E[4m:ue=\\E[24m:md=\\E[1m:mr=\\E[7m:me=\\E[0m:AF=\\E[38;5;%dm:AB=\\E[48;5;%dm:op=\\E[39;49m:";
+    ENV.TERMCAP = "xterm-256color:co#80:li#24:Co#16777216:cl=\\E[H\\E[2J:cm=\\E[%i%d;%dH:up=\\E[A:do=\\E[B:nd=\\E[C:le=\\b:bs:ku=\\E[A:kd=\\E[B:kr=\\E[C:kl=\\E[D:kh=\\E[H:@7=\\E[F:kD=\\E[3~:ks=\\E[?1h\\E=:ke=\\E[?1l\\E>:vi=\\E[?25l:ve=\\E[?25h:vs=\\E[?25h:ti=\\E[?1049h:te=\\E[?1049l:so=\\E[7m:se=\\E[27m:us=\\E[4m:ue=\\E[24m:md=\\E[1m:mr=\\E[7m:me=\\E[0m:AF=\\E[38;5;%dm:AB=\\E[48;5;%dm:op=\\E[39;49m:";
   } catch (_) {}
 
   installXtermTermShim(Module.FS);
@@ -621,6 +643,7 @@ async function startEmacs(pdmpBytes, debugOptions = {}) {
   for (const expr of debugOptions.extraEvals || []) {
     if (typeof expr === "string" && expr.length > 0) COMMON_EVALS.push("--eval", expr);
   }
+  queueTerminalControlSequence("\u001b[?1000h\u001b[?1003h\u001b[?1006h");
   const bootArgs = pdmpBytes
     ? ["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "-nw", ...COMMON_EVALS]
     : ["--quick", "--no-splash", "-nw", ...COMMON_EVALS];

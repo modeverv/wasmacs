@@ -1,8 +1,8 @@
 {
   "file": "temacs.data",
-  "size": 145918281,
+  "size": 145846992,
   "chunkSize": 33554432,
-  "sha256": "50f1a727869f23a50658f3a1d03b131f608162d081f65ff929386b4ce921956c",
+  "sha256": "45540e0b075de25006ecb0ca552e064276f81fd5f0bb4615ac248df103923919",
   "parts": [
     {
       "name": "part-000",
@@ -12,22 +12,22 @@
     {
       "name": "part-001",
       "size": 33554432,
-      "sha256": "7b4778dc61d08c4062bf7ecd8977575650797d3d548b5e5499b93831d7bc9dfc"
+      "sha256": "a10a15573319749432c933c291daacaa82d23cc7e1ce599cefb482bcb29cb7a6"
     },
     {
       "name": "part-002",
       "size": 33554432,
-      "sha256": "9b862dfb96d38745818112f6a06bf1ad253341e6b2adf8543f0a5ec7dd1c9ac6"
+      "sha256": "55a14b7c571a100d30fdf4807034ec48bafce7f934f690b9c9d3b8cfa85c1341"
     },
     {
       "name": "part-003",
       "size": 33554432,
-      "sha256": "f8e4d9f127ff0436d9cfa8e837d2397c245f37cd39632f69ebc7cb20cece3cc7"
+      "sha256": "274d4d0c17f0bf9fac249cca794ed6ea9e6de85c93690878caf6d6fea64bc4fc"
     },
     {
       "name": "part-004",
-      "size": 11700553,
-      "sha256": "061d7806916b23ac5989a1e74fef67bffe41680b9d79387853e58bea2e49ac93"
+      "size": 11629264,
+      "sha256": "fabdfed6c0f1dbfc5f80dac10dd9a08a67c267d17db6eca6dde5f132786f28e3"
     }
   ]
 }

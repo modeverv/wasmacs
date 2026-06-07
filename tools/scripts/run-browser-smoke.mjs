@@ -4,11 +4,24 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const appUrl = process.env.WASMACS_BROWSER_URL || "http://127.0.0.1:5173/?clear-storage=1&browser-smoke=minibuffer";
 const repoRoot = new URL("../..", import.meta.url).pathname;
 const logPath = process.env.WASMACS_BROWSER_SMOKE_LOG || `${repoRoot}/logs/browser-runner-smoke.txt`;
 const scenarios = process.argv.slice(2);
-if (scenarios.length === 0) scenarios.push("minibuffer");
+if (scenarios.length === 0) scenarios.push("xterm");
+const legacyScenarios = new Set([
+  "minibuffer",
+  "editing",
+  "files",
+  "boundaries",
+  "asyncify",
+  "interactive-loop",
+  "interactive-semantics",
+]);
+const usesLegacyIndex = scenarios.some((scenario) => legacyScenarios.has(scenario));
+const defaultAppPath = usesLegacyIndex
+  ? "/?clear-storage=1&browser-smoke=minibuffer"
+  : "/app/xterm-atomics-pdump.html?clear-storage=1";
+const appUrl = process.env.WASMACS_BROWSER_URL || `http://127.0.0.1:5173${defaultAppPath}`;
 const evidence = [];
 
 async function logEvent(message) {
@@ -197,8 +210,31 @@ try {
   await logEvent(`PAGE_NAVIGATE ${appUrl}`);
   await client.send("Page.navigate", { url: appUrl }, sessionId);
   await waitFor(client, sessionId, "document.readyState === 'complete' || document.readyState === 'interactive'", 30_000, "document-ready");
-  await waitFor(client, sessionId, "Boolean(window.__wasmacsSmoke && document.querySelector('#minibuffer'))", 300_000, "smoke-api-and-minibuffer");
-  await waitForSmokeIdle(client, sessionId, 30_000);
+
+  if (scenarios.includes("xterm")) {
+    await logEvent("SCENARIO_START xterm");
+    await waitFor(client, sessionId, "Boolean(document.querySelector('#start-btn') && document.querySelector('#xterm-container'))", 30_000, "xterm-page-ready");
+    await evaluate(client, sessionId, "document.querySelector('#start-btn').click(); true");
+    await waitFor(client, sessionId, "document.querySelector('#status')?.classList.contains('interactive')", 180_000, "xterm-interactive-status");
+    const xtermState = await evaluate(client, sessionId, `({
+      status: document.querySelector('#status')?.textContent,
+      className: document.querySelector('#status')?.className,
+      pdmp: document.querySelector('#pdmp-status')?.textContent,
+      binary: document.querySelector('#bin-info')?.textContent,
+    })`);
+    await logEvent(`XTERM_STATE ${JSON.stringify(xtermState)}`);
+    if (!String(xtermState.binary || "").includes("emacs-browser-atomics-pdump")) {
+      throw new Error(`expected Atomics pdump binary info, got ${JSON.stringify(xtermState)}`);
+    }
+    evidence.push("PASS xterm atomics pdump interactive");
+    await logEvent("SCENARIO_PASS xterm");
+    console.log("browser smoke scenario passed: xterm");
+  }
+
+  if (usesLegacyIndex) {
+    await waitFor(client, sessionId, "Boolean(window.__wasmacsSmoke && document.querySelector('#minibuffer'))", 300_000, "smoke-api-and-minibuffer");
+    await waitForSmokeIdle(client, sessionId, 30_000);
+  }
 
   if (scenarios.includes("minibuffer")) {
     await logEvent("SCENARIO_START minibuffer");

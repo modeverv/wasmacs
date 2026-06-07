@@ -1,29 +1,21 @@
 /**
  * probe-browser-xterm-cold-loadup-failure.mjs
  *
- * Documents the cold loadup JS call stack overflow blocker.
- * Blocker ID: browser-worker-cold-loadup-js-stack-overflow
+ * Verifies the product cold-loadup xterm route under a browser-like JS stack.
+ * Historical blocker: browser-worker-cold-loadup-js-stack-overflow
  *
  * This probe intentionally runs with a small JS stack (--stack-size=1500, ~1.5MB)
  * to simulate browser Worker conditions (~1-4MB JS stack).
  *
- * Expected result: FAIL with RangeError: Maximum call stack size exceeded at eval_sub
- * (Same as the browser Worker failure)
- *
- * If this probe PASSES, the blocker may be resolved (or stack is still too large).
+ * Expected result: reach the interactive tty waitpoint without --dump-file.
  *
  * Product route: startXtermSession uses ['--quick','--no-splash','--nw'] — NO pdump.
  * This is the correct product route. It is currently blocked.
  *
  * PASS criteria for this probe:
- *   - The probe correctly REPRODUCES the browser failure (coldLoadupFailed: true)
- *   - errorName is "RangeError" or "RuntimeError"
- *   - errorMessage includes "Maximum call stack" or "Aborted"
+ *   - cold loadup reaches the interactive waitpoint
  *   - No --dump-file in args (confirms cold loadup)
  *   - No pdump used
- *
- * If the product is FIXED (cold loadup succeeds), this probe should be updated to
- * reflect that and removed from the blocker documentation.
  *
  * Logs:
  *   logs/browser-xterm-cold-loadup-failure.txt
@@ -96,16 +88,14 @@ if (!process.argv.includes("--child")) {
     ["SUMMARY_BEGIN", JSON.stringify(summary, null, 2), "SUMMARY_END", ""].join("\n")
   );
 
-  // This probe PASSES when it successfully REPRODUCES the browser failure.
-  // It FAILS if the cold loadup unexpectedly succeeds (may indicate the blocker is fixed).
-  if (summary.status === "RESOLVED") {
-    console.log("cold loadup failure probe: BLOCKER RESOLVED — cold loadup succeeds on small stack — see " + textLogPath);
-  } else if (summary.status === "PASS") {
-    console.log("cold loadup failure probe: blocker confirmed (cold loadup fails as expected) — see " + textLogPath);
+  if (summary.status === "PASS") {
+    console.log("cold loadup smoke passed — product cold loadup reaches interactive wait — see " + textLogPath);
+  } else if (summary.status === "REGRESSION") {
+    console.error("cold loadup smoke failed — historical blocker reproduced — see " + textLogPath);
   } else {
     console.error("cold loadup failure probe: inconclusive result — see " + textLogPath);
   }
-  process.exit(0);
+  process.exit(summary.status === "PASS" ? 0 : 1);
 }
 
 /* ── Child: attempt cold loadup with small stack ─────────────────── */
@@ -153,7 +143,7 @@ await ready;
 recordCheckpoint("runtime-initialized", {
   artifact: artifactDir,
   stackSizeKb: 1500,
-  note: "simulating browser Worker JS stack (~1-4MB); cold loadup (no pdump)",
+  note: "simulating browser Worker JS stack (~1-4MB); product cold loadup (no pdump)",
 });
 
 const args = ["--quick", "--no-splash", "--nw"]; // product default — NO --dump-file
@@ -184,7 +174,7 @@ try {
       stackSizeKb: 1500,
       productRoute: args.join(" "),
       hasDumpFile: args.some((a) => a === "--dump-file"),
-      note: "BLOCKER RESOLVED: cold loadup succeeded on small stack. ASYNCIFY_REMOVE=eval_sub fixed the JS call stack overflow.",
+      note: "cold loadup succeeded on small stack and reached interactive wait.",
     });
     coldLoadupFailed = false;
   } else {
@@ -229,11 +219,9 @@ function buildSummary(snapshots, spawnResult) {
   const hasDumpFile = failSnap?.details?.hasDumpFile ?? false;
   const lastLoadupFile = failSnap?.details?.lastLoadupFile ?? null;
 
-  // This probe PASSES when the blocker is correctly reproduced.
-  // It means: cold loadup failed as expected in browser-like conditions.
   const blockerReproduced = coldLoadupFailed && !hasDumpFile;
 
-  const status = blockerReproduced ? "PASS" : unexpectedSuccess ? "RESOLVED" : "INCONCLUSIVE";
+  const status = unexpectedSuccess ? "PASS" : blockerReproduced ? "REGRESSION" : "INCONCLUSIVE";
 
   return {
     status,
@@ -254,8 +242,8 @@ function buildSummary(snapshots, spawnResult) {
     artifactDir,
     stackSizeKb: 1500,
     note: [
-      "PASS = blocker confirmed (cold loadup fails with small stack as expected in browser).",
-      "RESOLVED = cold loadup unexpectedly succeeded (blocker may be fixed).",
+      "PASS = product cold loadup reaches interactive wait on a browser-like small JS stack.",
+      "REGRESSION = historical blocker reproduced.",
       "hasDumpFile=false confirms this is the product cold loadup route.",
       "Browser Workers use ~1-4MB JS stack; this probe uses --stack-size=1500.",
     ].join(" "),

@@ -5,6 +5,7 @@ import {
   controlKeyEventToBytes,
   DEFAULT_XTERM_FONT_SIZE,
   createXtermEmacsTerminal,
+  metaKeyEventToBytes,
   stripBracketedPasteMarkers,
   terminalKeyEventToBytes,
   xtermDataToBytes,
@@ -18,6 +19,7 @@ test("createXtermEmacsTerminal passes the default font size to xterm", () => {
   const originalWindow = globalThis.window;
   const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
   let terminalOptions;
+  let focused = 0;
 
   class FakeTerminal {
     constructor(options) {
@@ -27,7 +29,9 @@ test("createXtermEmacsTerminal passes the default font size to xterm", () => {
       this.rows = options.rows;
     }
     open() {}
-    focus() {}
+    focus() {
+      focused += 1;
+    }
     onData() {}
     write() {}
     dispose() {}
@@ -40,11 +44,12 @@ test("createXtermEmacsTerminal passes the default font size to xterm", () => {
   };
   globalThis.requestAnimationFrame = () => {};
   try {
-    createXtermEmacsTerminal({
+    const terminal = createXtermEmacsTerminal({
       isConnected: false,
       addEventListener() {},
       removeEventListener() {},
     });
+    terminal.focus();
   } finally {
     if (originalWindow === undefined) delete globalThis.window;
     else globalThis.window = originalWindow;
@@ -53,6 +58,12 @@ test("createXtermEmacsTerminal passes the default font size to xterm", () => {
   }
 
   assert.equal(terminalOptions.fontSize, 20);
+  assert.equal(terminalOptions.cursorBlink, true);
+  assert.equal(terminalOptions.cursorStyle, "block");
+  assert.equal(terminalOptions.macOptionIsMeta, true);
+  assert.equal(typeof terminalOptions.customKeyEventHandler, "function");
+  assert.equal(terminalOptions.theme.cursor.length > 0, true);
+  assert.equal(focused >= 2, true);
 });
 
 test("fallback terminal fit derives rows and columns from container pixels", () => {
@@ -93,6 +104,9 @@ test("fallback terminal fit keeps a usable minimum size", () => {
 test("control-key fallback maps Ctrl letters to terminal control bytes", () => {
   assert.deepEqual(controlKeyEventToBytes({ ctrlKey: true, key: "b" }), [2]);
   assert.deepEqual(controlKeyEventToBytes({ ctrlKey: true, key: "F" }), [6]);
+  assert.deepEqual(controlKeyEventToBytes({ ctrlKey: true, key: "x" }), [24]);
+  assert.deepEqual(controlKeyEventToBytes({ ctrlKey: true, key: " " }), [0]);
+  assert.deepEqual(controlKeyEventToBytes({ ctrlKey: true, key: "[" }), [27]);
 });
 
 test("control-key fallback ignores non-terminal control chords", () => {
@@ -100,6 +114,20 @@ test("control-key fallback ignores non-terminal control chords", () => {
   assert.equal(controlKeyEventToBytes({ metaKey: true, ctrlKey: true, key: "b" }), null);
   assert.equal(controlKeyEventToBytes({ ctrlKey: true, key: "ArrowLeft" }), null);
   assert.equal(controlKeyEventToBytes({ key: "b" }), null);
+});
+
+test("meta-key fallback maps Alt character chords to ESC-prefixed Emacs bytes", () => {
+  assert.deepEqual(metaKeyEventToBytes({ altKey: true, key: "x" }), [27, 120]);
+  assert.deepEqual(metaKeyEventToBytes({ altKey: true, key: "F" }), [27, 70]);
+  assert.equal(metaKeyEventToBytes({ altKey: true, ctrlKey: true, key: "x" }), null);
+  assert.equal(metaKeyEventToBytes({ altKey: true, key: "ArrowLeft" }), null);
+});
+
+test("terminal key fallback maps common Emacs special keys", () => {
+  assert.deepEqual(terminalKeyEventToBytes({ key: "Escape" }), [27]);
+  assert.deepEqual(terminalKeyEventToBytes({ key: "Backspace" }), [127]);
+  assert.deepEqual(terminalKeyEventToBytes({ key: "Enter" }), [13]);
+  assert.deepEqual(terminalKeyEventToBytes({ key: "Tab" }), [9]);
 });
 
 test("terminal key fallback maps arrow keys to xterm cursor sequences", () => {

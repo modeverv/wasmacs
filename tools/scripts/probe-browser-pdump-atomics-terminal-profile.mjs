@@ -87,6 +87,7 @@ if (!isMainThread) {
   context.globalThis.__wasmacsInputSAB = inputSAB;
   context.globalThis.__wasmacsTerminalOutputBytes = terminalOutput;
   context.globalThis.__wasmacsTerminalInputBytes = terminalInput;
+  context.globalThis.__wasmacsDiagnosticLog = true;
   context.globalThis.__wasmacsTerminalRows = 24;
   context.globalThis.__wasmacsTerminalCols = 80;
   context.Module.FS.writeFile("/temacs", new Uint8Array([0]));
@@ -95,21 +96,23 @@ if (!isMainThread) {
   installXtermTermShim(context.Module.FS);
   context.ENV.TERM = "xterm-256color";
   context.ENV.COLORTERM = "truecolor";
-  context.ENV.TERMCAP = "xterm-256color:co#80:li#24:Co#16777216:cl=\\E[H\\E[2J:cm=\\E[%i%d;%dH:up=\\E[A:do=\\E[B:nd=\\E[C:le=\\b:bs:ku=\\E[A:kd=\\E[B:kr=\\E[C:kl=\\E[D:kh=\\E[H:@7=\\E[F:kD=\\E[3~:ks=\\E[?1h\\E=:ke=\\E[?1l\\E>:ti=\\E[?1049h:te=\\E[?1049l:so=\\E[7m:se=\\E[27m:us=\\E[4m:ue=\\E[24m:md=\\E[1m:mr=\\E[7m:me=\\E[0m:AF=\\E[38;5;%dm:AB=\\E[48;5;%dm:op=\\E[39;49m:";
+  context.ENV.TERMCAP = "xterm-256color:co#80:li#24:Co#16777216:cl=\\E[H\\E[2J:cm=\\E[%i%d;%dH:up=\\E[A:do=\\E[B:nd=\\E[C:le=\\b:bs:ku=\\E[A:kd=\\E[B:kr=\\E[C:kl=\\E[D:kh=\\E[H:@7=\\E[F:kD=\\E[3~:ks=\\E[?1h\\E=:ke=\\E[?1l\\E>:vi=\\E[?25l:ve=\\E[?25h:vs=\\E[?25h:ti=\\E[?1049h:te=\\E[?1049l:so=\\E[7m:se=\\E[27m:us=\\E[4m:ue=\\E[24m:md=\\E[1m:mr=\\E[7m:me=\\E[0m:AF=\\E[38;5;%dm:AB=\\E[48;5;%dm:op=\\E[39;49m:";
 
   post("ready");
+  const xtermMouseEnableBytes = Array.from(new TextEncoder().encode("\u001b[?1000h\u001b[?1003h\u001b[?1006h"));
+  context.globalThis.__wasmacsTerminalOutputBytes.push(...xtermMouseEnableBytes);
   const bootArgs = [
     "--dump-file=/bootstrap-emacs.pdmp",
     "--quick",
     "--no-splash",
     "-nw",
-    "--eval", "(message \"T=%s\" (getenv \"TERM\"))",
-    "--eval", "(message \"CT=%s\" (getenv \"COLORTERM\"))",
-    "--eval", "(message \"CC=%S\" (display-color-cells))",
-    "--eval", "(message \"TC=%S\" (length (tty-color-alist)))",
-    "--eval", "(message \"PX=%S\" (tty-color-translate \"#123456\"))",
+    "--eval", "(insert (format \"WASMACS-TERM=%s\\n\" (getenv \"TERM\")))",
+    "--eval", "(insert (format \"WASMACS-COLORTERM=%s\\n\" (getenv \"COLORTERM\")))",
+    "--eval", "(insert (format \"WASMACS-CELLS=%S\\n\" (display-color-cells)))",
+    "--eval", "(insert (format \"WASMACS-TTY-COLORS=%S\\n\" (length (tty-color-alist))))",
+    "--eval", "(insert (format \"WASMACS-PIXEL=%S\\n\" (tty-color-translate \"#123456\")))",
     "--eval", "(insert (propertize \"WASMACS-TRUECOLOR-SAMPLE\" 'face '(:foreground \"#123456\" :background \"#654321\")))",
-    "--eval", "(progn (require 'xt-mouse) (xterm-mouse-mode 1) (message \"WASMACS-XTERM-MOUSE=%S\" xterm-mouse-mode))",
+    "--eval", "(progn (require 'xt-mouse) (xterm-mouse-mode 1) (insert (format \"\\nWASMACS-XTERM-MOUSE=%S\\nWASMACS-TERMINAL-LIVE=%S\\nWASMACS-TERMINAL-NAME=%S\\nWASMACS-MOUSE-PARAM=%S\\n\" xterm-mouse-mode (mapcar #'terminal-live-p (terminal-list)) (mapcar #'terminal-name (terminal-list)) (terminal-parameter nil 'xterm-mouse-mode))))",
   ];
   try {
     const status = context.Module.callMain(bootArgs);
@@ -159,7 +162,7 @@ if (!isMainThread) {
     hasDirectColorEscape: /\u001b\[(?:38|48);2;[0-9]{1,3};[0-9]{1,3};[0-9]{1,3}m/.test(probeText),
     hasXtermMouseMode: probeText.includes("WASMACS-XTERM-MOUSE=t"),
     hasMouse1006Enable: finalText.includes("\u001b[?1006h"),
-    hasArrowEditResult: finalText.includes("abc") && finalText.includes("\bZc\b"),
+    hasArrowEditResult: finalText.includes("abc") && /\x08(?:\u001b\[[0-9;?]*[ -/]*[@-~])*Zc\x08/.test(finalText),
     waitEvents: messages.filter((m) => m.type === "wait-entered").length,
     terminalOutputBytes: messages.at(-1)?.terminalOutputBytes ?? null,
   };

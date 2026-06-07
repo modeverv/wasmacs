@@ -1559,12 +1559,20 @@ perl -0pi -e 'BEGIN { $block = $ENV{"WASMACS_INPUT_BLOCK"} } s#void\nkbd_buffer_
 if [ "${WASMACS_ENABLE_ASYNCIFY_WAITPOINT:-0}" = "1" ]; then
   case "${waitpoint_mode}" in
     read-char)
-      perl -0pi -e 's~\n      /\* wasmacs asyncify input waitpoint spike:.*?\n\n      c = read_decoded_event_from_main_queue#\n      c = read_decoded_event_from_main_queue~sg' "${keyboard_file}"
-      perl -0pi -e 's~/\* Read a character from the keyboard; call the redisplay if needed\.  \*/#/\* wasmacs asyncify input waitpoint spike. \*/\nextern int wasmacs_host_wait_for_input (void);\nextern int wasmacs_host_scheduler_checkpoint (int code);
-extern void wasmacs_os_timing_checkpoint (int code);\n\n/\* Read a character from the keyboard; call the redisplay if needed.  \*/#' "${keyboard_file}"
+      perl -0pi -e 's~\n      /\* wasmacs asyncify input waitpoint spike:.*?\n\n      c = read_decoded_event_from_main_queue~\n      c = read_decoded_event_from_main_queue~sg' "${keyboard_file}"
+      read -r -d '' WASMACS_READ_CHAR_HEADER <<'EOF' || true
+/* wasmacs asyncify input waitpoint spike. */
+extern int wasmacs_host_wait_for_input (void);
+extern int wasmacs_host_scheduler_checkpoint (int code);
+extern void wasmacs_os_timing_checkpoint (int code);
+
+/* Read a character from the keyboard; call the redisplay if needed.  */
+EOF
+      WASMACS_READ_CHAR_HEADER="${WASMACS_READ_CHAR_HEADER}" \
+        perl -0pi -e 'BEGIN { $p = $ENV{"WASMACS_READ_CHAR_HEADER"} } s~/\* Read a character from the keyboard; call the redisplay if needed\.  \*/~$p~' "${keyboard_file}"
       perl -0pi -e 's~read_char \(int commandflag, Lisp_Object map,\n\t   Lisp_Object prev_event,\n\t   bool \*used_mouse_menu, struct timespec \*end_time\)\n\{~read_char (int commandflag, Lisp_Object map,\n\t   Lisp_Object prev_event,\n\t   bool *used_mouse_menu, struct timespec *end_time)\n{\n#ifdef __EMSCRIPTEN__\n  wasmacs_host_scheduler_checkpoint (200);\n#endif\n~' "${keyboard_file}"
 
-      perl -0pi -e 's~  if \(NILP \(c\)\)\n    \{\n      c = read_decoded_event_from_main_queue \(end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu\);#  if (NILP (c))\n    {\n      /* wasmacs asyncify input waitpoint spike: yield when an interactive\n         command loop would otherwise block for real browser input.  In the\n         browser host, stdin readiness can look like input_pending without a\n         real Emacs key event, so JS owns the actual wait/resume boundary. */\n      if (!noninteractive && !end_time)\n        {\n          wasmacs_host_scheduler_checkpoint (201);\n          wasmacs_host_wait_for_input ();\n          wasmacs_host_scheduler_checkpoint (202);\n        }\n\n      c = read_decoded_event_from_main_queue (end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu);#' "${keyboard_file}"
+      perl -0pi -e 's~  if \(NILP \(c\)\)\n    \{\n      c = read_decoded_event_from_main_queue \(end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu\);~  if (NILP (c))\n    {\n      /* wasmacs asyncify input waitpoint spike: yield when an interactive\n         command loop would otherwise block for real browser input.  In the\n         browser host, stdin readiness can look like input_pending without a\n         real Emacs key event, so JS owns the actual wait/resume boundary. */\n      if (!noninteractive && !end_time)\n        {\n          wasmacs_host_scheduler_checkpoint (201);\n          wasmacs_host_wait_for_input ();\n          wasmacs_host_scheduler_checkpoint (202);\n        }\n\n      c = read_decoded_event_from_main_queue (end_time, local_getcjmp,\n                                              prev_event, used_mouse_menu);~' "${keyboard_file}"
 
       # Patch kbd_buffer_get_event: replace wait_reading_process_output with our
       # OS-level blocking wait. Eliminates select()/setitimer loop overhead.

@@ -1,0 +1,587 @@
+{
+  "name": "wasmacs-wasifs-vscode",
+  "displayName": "Wasmacs WASIFS",
+  "description": "Open portable wasmacs .wasifs images as Emacs/Dired workspaces.",
+  "version": "0.0.1",
+  "publisher": "wasmacs",
+  "private": true,
+  "engines": {
+    "vscode": "^1.92.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "wasmacs.openFilesystemImage",
+        "title": "Wasmacs: Open Filesystem Image"
+      },
+      {
+        "command": "wasmacs.sendTerminalKeys",
+        "title": "Wasmacs: Send Terminal Keys"
+      }
+    ],
+    "keybindings": [
+      {
+        "key": "ctrl+x ctrl+f",
+        "mac": "ctrl+x ctrl+f",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [24, 6], "label": "C-x C-f" }
+      },
+      {
+        "key": "ctrl+x ctrl+s",
+        "mac": "ctrl+x ctrl+s",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [24, 19], "label": "C-x C-s" }
+      },
+      {
+        "key": "ctrl+x ctrl+b",
+        "mac": "ctrl+x ctrl+b",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [24, 2], "label": "C-x C-b" }
+      },
+      {
+        "key": "ctrl+x b",
+        "mac": "ctrl+x b",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [24, 98], "label": "C-x b" }
+      },
+      {
+        "key": "ctrl+x k",
+        "mac": "ctrl+x k",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [24, 107], "label": "C-x k" }
+      },
+      {
+        "key": "ctrl+x o",
+        "mac": "ctrl+x o",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [24, 111], "label": "C-x o" }
+      },
+      {
+        "key": "ctrl+x 0",
+        "mac": "ctrl+x 0",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [24, 48], "label": "C-x 0" }
+      },
+      {
+        "key": "ctrl+x 1",
+        "mac": "ctrl+x 1",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [24, 49], "label": "C-x 1" }
+      },
+      {
+        "key": "ctrl+x 2",
+        "mac": "ctrl+x 2",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [24, 50], "label": "C-x 2" }
+      },
+      {
+        "key": "ctrl+x 3",
+        "mac": "ctrl+x 3",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [24, 51], "label": "C-x 3" }
+      },
+      {
+        "key": "alt+x",
+        "mac": "alt+x",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [27, 120], "label": "M-x" }
+      },
+      {
+        "key": "ctrl+space",
+        "mac": "ctrl+space",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [0], "label": "C-SPC" }
+      },
+      {
+        "key": "ctrl+s",
+        "mac": "ctrl+s",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [19], "label": "C-s" }
+      },
+      {
+        "key": "ctrl+g",
+        "mac": "ctrl+g",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [7], "label": "C-g" }
+      },
+      {
+        "key": "ctrl+c",
+        "mac": "ctrl+c",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [3], "label": "C-c" }
+      },
+      {
+        "key": "ctrl+a",
+        "mac": "ctrl+a",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [1], "label": "C-a" }
+      },
+      {
+        "key": "ctrl+b",
+        "mac": "ctrl+b",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [2], "label": "C-b" }
+      },
+      {
+        "key": "ctrl+d",
+        "mac": "ctrl+d",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [4], "label": "C-d" }
+      },
+      {
+        "key": "ctrl+e",
+        "mac": "ctrl+e",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [5], "label": "C-e" }
+      },
+      {
+        "key": "ctrl+f",
+        "mac": "ctrl+f",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [6], "label": "C-f" }
+      },
+      {
+        "key": "ctrl+h",
+        "mac": "ctrl+h",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [8], "label": "C-h" }
+      },
+      {
+        "key": "ctrl+j",
+        "mac": "ctrl+j",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [10], "label": "C-j" }
+      },
+      {
+        "key": "ctrl+k",
+        "mac": "ctrl+k",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [11], "label": "C-k" }
+      },
+      {
+        "key": "ctrl+l",
+        "mac": "ctrl+l",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [12], "label": "C-l" }
+      },
+      {
+        "key": "ctrl+n",
+        "mac": "ctrl+n",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [14], "label": "C-n" }
+      },
+      {
+        "key": "ctrl+p",
+        "mac": "ctrl+p",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [16], "label": "C-p" }
+      },
+      {
+        "key": "ctrl+q",
+        "mac": "ctrl+q",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [17], "label": "C-q" }
+      },
+      {
+        "key": "ctrl+r",
+        "mac": "ctrl+r",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [18], "label": "C-r" }
+      },
+      {
+        "key": "ctrl+t",
+        "mac": "ctrl+t",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [20], "label": "C-t" }
+      },
+      {
+        "key": "ctrl+u",
+        "mac": "ctrl+u",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [21], "label": "C-u" }
+      },
+      {
+        "key": "ctrl+v",
+        "mac": "ctrl+v",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [22], "label": "C-v" }
+      },
+      {
+        "key": "ctrl+w",
+        "mac": "ctrl+w",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [23], "label": "C-w" }
+      },
+      {
+        "key": "ctrl+y",
+        "mac": "ctrl+y",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [25], "label": "C-y" }
+      },
+      {
+        "key": "ctrl+z",
+        "mac": "ctrl+z",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [26], "label": "C-z" }
+      },
+      {
+        "key": "enter",
+        "mac": "enter",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [13], "label": "RET" }
+      },
+      {
+        "key": "backspace",
+        "mac": "backspace",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [127], "label": "DEL" }
+      },
+      {
+        "key": "space",
+        "mac": "space",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [32], "label": "SPC" }
+      },
+      {
+        "key": "a",
+        "mac": "a",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [97], "label": "a" }
+      },
+      {
+        "key": "b",
+        "mac": "b",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [98], "label": "b" }
+      },
+      {
+        "key": "c",
+        "mac": "c",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [99], "label": "c" }
+      },
+      {
+        "key": "d",
+        "mac": "d",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [100], "label": "d" }
+      },
+      {
+        "key": "e",
+        "mac": "e",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [101], "label": "e" }
+      },
+      {
+        "key": "f",
+        "mac": "f",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [102], "label": "f" }
+      },
+      {
+        "key": "g",
+        "mac": "g",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [103], "label": "g" }
+      },
+      {
+        "key": "h",
+        "mac": "h",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [104], "label": "h" }
+      },
+      {
+        "key": "i",
+        "mac": "i",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [105], "label": "i" }
+      },
+      {
+        "key": "j",
+        "mac": "j",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [106], "label": "j" }
+      },
+      {
+        "key": "k",
+        "mac": "k",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [107], "label": "k" }
+      },
+      {
+        "key": "l",
+        "mac": "l",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [108], "label": "l" }
+      },
+      {
+        "key": "m",
+        "mac": "m",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [109], "label": "m" }
+      },
+      {
+        "key": "n",
+        "mac": "n",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [110], "label": "n" }
+      },
+      {
+        "key": "o",
+        "mac": "o",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [111], "label": "o" }
+      },
+      {
+        "key": "p",
+        "mac": "p",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [112], "label": "p" }
+      },
+      {
+        "key": "q",
+        "mac": "q",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [113], "label": "q" }
+      },
+      {
+        "key": "r",
+        "mac": "r",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [114], "label": "r" }
+      },
+      {
+        "key": "s",
+        "mac": "s",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [115], "label": "s" }
+      },
+      {
+        "key": "t",
+        "mac": "t",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [116], "label": "t" }
+      },
+      {
+        "key": "u",
+        "mac": "u",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [117], "label": "u" }
+      },
+      {
+        "key": "v",
+        "mac": "v",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [118], "label": "v" }
+      },
+      {
+        "key": "w",
+        "mac": "w",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [119], "label": "w" }
+      },
+      {
+        "key": "x",
+        "mac": "x",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [120], "label": "x" }
+      },
+      {
+        "key": "y",
+        "mac": "y",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [121], "label": "y" }
+      },
+      {
+        "key": "z",
+        "mac": "z",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [122], "label": "z" }
+      },
+      {
+        "key": "0",
+        "mac": "0",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [48], "label": "0" }
+      },
+      {
+        "key": "1",
+        "mac": "1",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [49], "label": "1" }
+      },
+      {
+        "key": "2",
+        "mac": "2",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [50], "label": "2" }
+      },
+      {
+        "key": "3",
+        "mac": "3",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [51], "label": "3" }
+      },
+      {
+        "key": "4",
+        "mac": "4",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [52], "label": "4" }
+      },
+      {
+        "key": "5",
+        "mac": "5",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [53], "label": "5" }
+      },
+      {
+        "key": "6",
+        "mac": "6",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [54], "label": "6" }
+      },
+      {
+        "key": "7",
+        "mac": "7",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [55], "label": "7" }
+      },
+      {
+        "key": "8",
+        "mac": "8",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [56], "label": "8" }
+      },
+      {
+        "key": "9",
+        "mac": "9",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [57], "label": "9" }
+      },
+      {
+        "key": "/",
+        "mac": "/",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [47], "label": "/" }
+      },
+      {
+        "key": ".",
+        "mac": ".",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [46], "label": "." }
+      },
+      {
+        "key": "-",
+        "mac": "-",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [45], "label": "-" }
+      },
+      {
+        "key": "shift+-",
+        "mac": "shift+-",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [95], "label": "_" }
+      },
+      {
+        "key": "escape",
+        "mac": "escape",
+        "command": "wasmacs.sendTerminalKeys",
+        "when": "activeCustomEditorId == 'wasmacs.wasifsEditor'",
+        "args": { "bytes": [27], "label": "ESC" }
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "wasmacs.wasifsEditor",
+        "displayName": "Wasmacs Filesystem Image",
+        "selector": [
+          {
+            "filenamePattern": "*.wasifs"
+          }
+        ],
+        "priority": "default"
+      }
+    ]
+  }
+}

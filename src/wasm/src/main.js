@@ -34,28 +34,37 @@ const startXtermSessionButton = document.querySelector("#start-xterm-session");
 
 let xtermWorker = null;
 let xtermTerminal = null;
+let xtermStartInFlight = false;
 
 function setXtermStatus(text) {
   if (xtermStatusEl) xtermStatusEl.textContent = text;
 }
 
-function startXtermSession() {
-  if (xtermWorker) return;
+async function startXtermSession() {
+  if (xtermWorker || xtermStartInFlight) return;
+  xtermStartInFlight = true;
+  if (startXtermSessionButton) startXtermSessionButton.disabled = true;
   if (!xtermTerminal) {
     try {
-      xtermTerminal = createXtermEmacsTerminal(xtermContainer);
+      xtermTerminal = createXtermEmacsTerminal(xtermContainer, {
+        onResize(dimensions) {
+          if (xtermWorker) xtermWorker.postMessage({ type: "terminal-resize", ...dimensions });
+        },
+      });
       xtermTerminal.onData((data) => {
         if (!xtermWorker) return;
         xtermWorker.postMessage({ type: "emacs-input-bytes", bytes: xtermDataToBytes(data) });
       });
     } catch (err) {
       setXtermStatus(`xterm init failed: ${err.message}`);
+      xtermStartInFlight = false;
+      if (startXtermSessionButton) startXtermSessionButton.disabled = false;
       return;
     }
   }
 
-  xtermWorker = new Worker("/app/src/asyncify-minibuffer-worker.js");
-  setXtermStatus("loading…");
+  xtermWorker = new Worker("/app/src/emacs-atomics-pdump-worker.js");
+  setXtermStatus("loading pdmp…");
 
   xtermWorker.onmessage = (event) => {
     const msg = event.data;
@@ -68,30 +77,44 @@ function startXtermSession() {
       }
     }
     if (msg.type === "status") setXtermStatus(msg.text);
-    if (msg.type === "xterm-session-started") setXtermStatus("loading…");
-    if (msg.type === "xterm-session-at-wait") setXtermStatus("interactive");
+    if (msg.type === "ready") setXtermStatus("runtime ready");
+    if (msg.type === "pdmp-materialized") setXtermStatus("starting Emacs");
+    if (msg.type === "timing-wait-enter") setXtermStatus("interactive");
     if (msg.type === "stderr" && /^Loading /.test(msg.text ?? "")) {
       setXtermStatus(`loadup: ${(msg.text ?? "").slice(8, 60)}`);
     }
-    if (msg.type === "xterm-session-returned") {
+    if (msg.type === "session-ended") {
       const err = msg.error ? ` — ${msg.error.slice(0, 80)}` : "";
       setXtermStatus(`session ended (status ${msg.status ?? "?"}${err}`);
       xtermWorker = null;
+      xtermStartInFlight = false;
       if (startXtermSessionButton) startXtermSessionButton.disabled = false;
-    }
-    if (msg.type === "xterm-session-error") {
-      setXtermStatus(`session error: ${(msg.error ?? "unknown").slice(0, 80)}`);
     }
   };
 
   xtermWorker.onerror = (event) => {
     setXtermStatus(`worker error: ${event.message}`);
     xtermWorker = null;
+    xtermStartInFlight = false;
     if (startXtermSessionButton) startXtermSessionButton.disabled = false;
   };
 
-  xtermWorker.postMessage({ type: "start-xterm-session" });
-  if (startXtermSessionButton) startXtermSessionButton.disabled = true;
+  try {
+    const pdmpResponse = await fetch("/artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp", { cache: "no-store" });
+    if (!pdmpResponse.ok) throw new Error(`pdmp fetch failed: ${pdmpResponse.status}`);
+    const pdmpBytes = await pdmpResponse.arrayBuffer();
+    xtermWorker.postMessage({
+      type: "start",
+      pdmpBytes,
+      terminalSize: xtermTerminal.getDimensions(),
+    }, [pdmpBytes]);
+  } catch (err) {
+    setXtermStatus(`start failed: ${err.message}`);
+    xtermWorker.terminate();
+    xtermWorker = null;
+    xtermStartInFlight = false;
+    if (startXtermSessionButton) startXtermSessionButton.disabled = false;
+  }
 }
 
 if (startXtermSessionButton) {
@@ -342,7 +365,7 @@ function runNextBufferCommand() {
 
 // [LEGACY] runWorkerCommand uses browser-runtime-worker.js (old command bridge).
 // JS constructs Lisp command forms; this path is retained for the textarea/frame-grid legacy UI.
-// Product editing: use the xterm pane (startXtermSession → asyncify-minibuffer-worker.js).
+// Product editing: use the xterm pane (startXtermSession -> emacs-atomics-pdump-worker.js).
 function runWorkerCommand(command) {
   output.textContent = "";
   if (command.type !== "key-prefix") setMinibuffer("");

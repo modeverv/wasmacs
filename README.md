@@ -23,21 +23,36 @@ tests/      automated test code
 archive/    old outputs and superseded files
 ```
 
-The current browser entrypoint is available during development at:
+The current browser app is the Atomics/pdump xterm route. During development it
+is available at:
 
 ```text
 http://127.0.0.1:5173/app/xterm-atomics-pdump.html
 ```
 
-`make docs` also writes a GitHub Pages bundle. `docs/index.html` redirects `/`
-to the canonical app page at `/app/xterm-atomics-pdump.html`, and GitHub
-Actions builds and publishes that bundle on `master`; generated
-`docs/artifacts/` files are intentionally not committed.
+`make docs` also writes the GitHub Pages bundle. `docs/index.html` redirects
+`/` to the canonical app page at `/app/xterm-atomics-pdump.html`. The published
+route is expected to boot to `interactive` with `SharedArrayBuffer`, the bundled
+`bootstrap-emacs.pdmp`, xterm.js rendering, and import/export for
+`user-filesystem.wasifs`.
+
+The Pages artifact policy is deliberately split: build outputs are generated
+under `build/artifacts/`, while the publishable `docs/` tree includes only the
+checked-in browser bundle and Pages-safe runtime artifacts. The large
+Emscripten preload package is stored as `temacs.data.parts/` chunks under
+`docs/artifacts/` instead of a single oversized `temacs.data` file.
 
 The Pages bundle uses a root `coi-serviceworker.js` to emulate COOP/COEP for
 `SharedArrayBuffer`, keeps app and artifact URLs relative so project pages work
 under `/repo-name/`, and publishes the Emscripten glue as `temacs.js` so static
 servers return a JavaScript MIME type.
+
+The browser terminal profile is `TERM=xterm-256color` with truecolor output,
+xterm mouse mode, cursor and control-key transport, bracketed-paste
+normalization, and responsive terminal resize. Routine diagnostic logs are
+quiet by default; append `?debug-log=1` to show verbose worker/runtime logs.
+For DevTools sessions that resize the viewport, append `?no-live-resize=1` to
+keep the post-boot terminal size stable while inspecting the page.
 
 ## Browser Screenshots
 
@@ -85,18 +100,18 @@ make dev
 applies `src/c/patches/*.patch`. Do not edit `vendor/emacs` directly.
 
 `make build` regenerates the Emacs wasm/pdump/wasifs artifacts under
-`build/artifacts/`, then refreshes the GitHub Pages bundle in `docs/`.
-The Atomics/pdump browser profile defaults to 1GB initial wasm memory because
-the bundled `bootstrap-emacs.pdmp` can fail to load at the old 512MB setting.
-The current pdump browser route still has a runtime `out of memory` blocker
-after static delivery succeeds; track that separately from Pages publishing.
+`build/artifacts/`, then refreshes the GitHub Pages bundle in `docs/`. The old
+512MB pdump restore failure is no longer the current browser status; the
+Atomics/pdump xterm route has been verified to materialize the bundled pdmp and
+reach the interactive waitpoint from both the dev server and the static Pages
+bundle.
 
-Generated wasm/js/pdump/wasifs artifacts are written under `build/artifacts/`.
-The development server still exposes them at `/artifacts/...` so existing
-browser workers and smoke URLs keep their runtime URL contract. `docs/artifacts/`
-is also generated output: CI publishes it as a Pages artifact, and
-`tools/scripts/validate-git-artifact-policy.sh` keeps large generated files out
-of Git history.
+The development server exposes runtime files at `/artifacts/...` so browser
+workers and smoke URLs keep the same URL contract as Pages. The generated
+`build/artifacts/` tree remains disposable. The checked-in `docs/artifacts/`
+tree contains only the Pages runtime payload that is allowed by
+`tools/scripts/validate-git-artifact-policy.sh`, including split
+`temacs.data.parts/` files instead of a single large preload package.
 
 Runtime and validation logs are written under `logs/`, but log files are ignored
 by Git. Historical logs from the reorganization baseline are kept under

@@ -1,0 +1,127 @@
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editor-foreground);
+  font-family: var(--vscode-editor-font-family, Menlo, Consolas, monospace);
+}
+
+.wasifs-shell {
+  box-sizing: border-box;
+  display: grid;
+  height: 100%;
+  padding: 12px;
+}
+
+.terminal-frame {
+  border: 1px solid var(--vscode-panel-border);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+}
+
+.terminal-title {
+  align-items: center;
+  background: var(--vscode-sideBar-background);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  box-sizing: border-box;
+  display: flex;
+  font-size: 12px;
+  gap: 12px;
+  justify-content: space-between;
+  line-height: 1.4;
+  min-height: 30px;
+  padding: 5px 8px;
+  white-space: nowrap;
+}
+
+#filename {
+  color: var(--vscode-sideBar-foreground);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.terminal-title strong {
+  color: var(--vscode-testing-iconPassed);
+  font-weight: 600;
+}
+
+.terminal-title button {
+  background: var(--vscode-button-background);
+  border: 0;
+  color: var(--vscode-button-foreground);
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 8px;
+}
+
+.terminal-title button:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+#state {
+  color: var(--vscode-descriptionForeground);
+  flex: none;
+}
+
+#screen {
+  box-sizing: border-box;
+  color: var(--vscode-terminal-foreground, var(--vscode-editor-foreground));
+  font-family: var(--vscode-editor-font-family, Menlo, Consolas, monospace);
+  font-size: var(--vscode-editor-font-size, 13px);
+  line-height: 1.35;
+  margin: 0;
+  outline: none;
+  overflow: auto;
+  padding: 10px;
+  tab-size: 8;
+  white-space: pre;
+}
+
+#xterm-container {
+  box-sizing: border-box;
+  display: none;
+  min-height: 0;
+  overflow: hidden;
+  padding: 2px;
+}
+
+body.xterm-active #screen {
+  display: none;
+}
+
+body.xterm-active #xterm-container {
+  display: block;
+}
+
+#xterm-container .xterm {
+  height: 100%;
+}
+
+#xterm-container .xterm-viewport,
+#xterm-container .xterm-screen {
+  background: var(--vscode-terminal-background, var(--vscode-editor-background));
+}
+
+#xterm-container .xterm-cursor-layer .xterm-cursor,
+#xterm-container .xterm-cursor-block {
+  background-color: var(--vscode-terminalCursor-foreground, #ffd866) !important;
+  border-color: var(--vscode-terminalCursor-foreground, #ffd866) !important;
+  color: var(--vscode-terminalCursor-background, #1e1e1e) !important;
+  opacity: 1 !important;
+}
+
+#xterm-container .xterm.focus .xterm-cursor {
+  opacity: 1 !important;
+}
