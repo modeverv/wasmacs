@@ -7394,7 +7394,58 @@ function checkIncomingModuleAPI() {
   ignoredModuleProp('onFree');
   ignoredModuleProp('onSbrkGrow');
 }
-function wasmacs_host_network_fetch_json(request_json) { function returnJson(value) { var json = JSON.stringify(value); var size = lengthBytesUTF8(json) + 1; var ptr = _malloc(size); if (!ptr) return 0; stringToUTF8(json, ptr, size); return ptr; } function fail(message) { return returnJson({ error: String(message) }); } function isLocalHostName(name) { var normalized = String(name || "").toLowerCase(); return normalized === "localhost" || normalized === "127.0.0.1" || normalized === "::1" || normalized === "[::1]"; } function configuredProxyUrls(request) { var urls = []; var configured = ""; if (request && request.proxyUrl) configured = String(request.proxyUrl || ""); if (typeof Module !== "undefined" && Module && Module.wasmacsNetworkProxyUrl) configured = configured || String(Module.wasmacsNetworkProxyUrl || ""); if (!configured && typeof globalThis !== "undefined" && globalThis.__wasmacsNetworkProxyUrl) configured = String(globalThis.__wasmacsNetworkProxyUrl || ""); if (configured) { try { var parsed = new URL(configured, typeof location !== "undefined" ? location.href : "http://127.0.0.1:5173/"); if (parsed.protocol === "http:" || parsed.protocol === "https:") urls.push(parsed.href); } catch (_) {} } if (typeof location !== "undefined") { if (isLocalHostName(location.hostname)) urls.push(new URL("/__wasmacs_network_fetch", location.href).href); } else { urls.push("http://127.0.0.1:5173/__wasmacs_network_fetch"); } return urls; } function proxyFetch(request, directError) { var urls = configuredProxyUrls(request); var errors = []; for (var i = 0; i < urls.length; i++) { var proxyUrl = urls[i]; try { var proxy = new XMLHttpRequest(); proxy.open("POST", proxyUrl, false); proxy.send(JSON.stringify(request)); if (proxy.responseText) { try { return returnJson(JSON.parse(proxy.responseText)); } catch (parseError) { errors.push(proxyUrl + " returned invalid JSON: " + parseError.message); continue; } } errors.push(proxyUrl + " status " + proxy.status); } catch (proxyError) { errors.push(proxyUrl + " failed" + (proxyError && proxyError.message ? ": " + proxyError.message : "")); } } return fail("host.network.fetch direct request failed" + (directError && directError.message ? ": " + directError.message : "") + "; proxy attempts: " + errors.join("; ")); } function bytesToBase64(bytes) { var chunkSize = 0x8000; var binary = ""; for (var offset = 0; offset < bytes.length; offset += chunkSize) { var chunk = bytes.subarray(offset, offset + chunkSize); binary += String.fromCharCode.apply(null, chunk); } return btoa(binary); } try { var request = JSON.parse(UTF8ToString(request_json)); var url = String(request.url || ""); var parsed = new URL(url, typeof location !== "undefined" ? location.href : undefined); if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return fail("unsupported URL scheme: " + parsed.protocol); var method = String(request.method || "GET").toUpperCase(); var xhr = new XMLHttpRequest(); xhr.open(method, parsed.href, false); var headers = Array.isArray(request.headers) ? request.headers : []; for (var i = 0; i < headers.length; i++) { var header = headers[i]; if (Array.isArray(header) && header.length >= 2) xhr.setRequestHeader(String(header[0]), String(header[1])); else if (header && typeof header === "object" && header.name) xhr.setRequestHeader(String(header.name), String(header.value || "")); } xhr.responseType = "arraybuffer"; xhr.send(request.body || null); var responseHeaders = []; var rawHeaders = xhr.getAllResponseHeaders() || ""; rawHeaders.trim().split(String.fromCharCode(10)).forEach(function (line) { if (line.charCodeAt(line.length - 1) === 13) line = line.slice(0, -1); if (!line) return; var colon = line.indexOf(":"); if (colon <= 0) return; responseHeaders.push({ name: line.slice(0, colon).trim().toLowerCase(), value: line.slice(colon + 1).trim(), }); }); var bodyBytes = new Uint8Array(xhr.response || new ArrayBuffer(0)); return returnJson({ url: xhr.responseURL || parsed.href, status: xhr.status, statusText: xhr.statusText || "", headers: responseHeaders, bodyBase64: bytesToBase64(bodyBytes), }); } catch (error) { try { var fallbackRequest = JSON.parse(UTF8ToString(request_json)); return proxyFetch(fallbackRequest, error); } catch (fallbackError) { return fail(fallbackError && fallbackError.message ? fallbackError.message : fallbackError); } } }
+function wasmacs_host_network_fetch_json(request_json) {
+  function returnJson(value) {
+    var json = JSON.stringify(value);
+    var size = lengthBytesUTF8(json) + 1;
+    var ptr = _malloc(size);
+    if (!ptr) return 0;
+    stringToUTF8(json, ptr, size);
+    return ptr;
+  }
+  function fail(message) { return returnJson({ error: String(message) }); }
+  try {
+    if (typeof self === "undefined" || typeof self.postMessage !== "function") {
+      return fail("host.network.fetch relay requires a worker postMessage host");
+    }
+    if (typeof SharedArrayBuffer !== "function" || typeof Atomics === "undefined") {
+      return fail("host.network.fetch relay requires SharedArrayBuffer and Atomics");
+    }
+    var requestJson = UTF8ToString(request_json);
+    var responseSAB = globalThis.__wasmacsNetworkResponseSAB;
+    if (!responseSAB) {
+      responseSAB = new SharedArrayBuffer(64 * 1024 * 1024);
+      globalThis.__wasmacsNetworkResponseSAB = responseSAB;
+    }
+    var signal = new Int32Array(responseSAB, 0, 4);
+    var data = new Uint8Array(responseSAB, 16);
+    Atomics.store(signal, 0, 1);
+    Atomics.store(signal, 1, 0);
+    self.postMessage({
+      type: "host-network-fetch",
+      requestJson: requestJson,
+      responseSAB: responseSAB
+    });
+    var waitResult = Atomics.wait(signal, 0, 1, 120000);
+    if (waitResult === "timed-out") {
+      return fail("host.network.fetch main-thread relay timed out");
+    }
+    var length = Atomics.load(signal, 1);
+    if (!Number.isFinite(length) || length <= 0 || length > data.length) {
+      return fail("host.network.fetch main-thread relay returned invalid length " + length);
+    }
+    var text = new TextDecoder().decode(data.subarray(0, length));
+    Atomics.store(signal, 0, 0);
+    Atomics.store(signal, 1, 0);
+    try {
+      return returnJson(JSON.parse(text));
+    } catch (parseError) {
+      return fail("host.network.fetch main-thread relay returned invalid JSON: " + parseError.message);
+    }
+  } catch (error) {
+    return fail(error && error.message ? error.message : error);
+  }
+}
 
 // Imports from the Wasm binary.
 var _strerror = makeInvalidEarlyAccess('_strerror');

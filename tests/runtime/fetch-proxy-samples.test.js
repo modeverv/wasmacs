@@ -168,6 +168,36 @@ async function assertProxyWorks(sample) {
   }
 }
 
+async function assertRubyDefaultAllowsAnyOrigin() {
+  const upstream = await startUpstream();
+  const upstreamPort = upstream.address().port;
+  const proxyPort = await getFreePort();
+  const targetUrl = `http://127.0.0.1:${upstreamPort}/packages/archive-contents`;
+  const child = await startProxy({
+    command: "ruby",
+    args: ["proxy/ruby/server.rb"],
+    env: { PORT: String(proxyPort) },
+  });
+  try {
+    await waitForProxy(proxyPort, child);
+    const response = await fetch(`http://127.0.0.1:${proxyPort}/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://localhost:5173",
+      },
+      body: JSON.stringify({ url: targetUrl, method: "GET" }),
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(payload));
+    assert.equal(payload.status, 200);
+    assert.equal(Buffer.from(payload.bodyBase64, "base64").toString("utf8"), "archive-data");
+  } finally {
+    await stopProcess(child);
+    await new Promise((resolve) => upstream.close(resolve));
+  }
+}
+
 test("fetch proxy samples document the shared wasmacs host.network.fetch contract", async () => {
   const readme = await readFile(join(repoRoot, "proxy", "README.md"), "utf8");
   const rootReadme = await readFile(join(repoRoot, "README.md"), "utf8");
@@ -248,6 +278,10 @@ test("Ruby fetch proxy sample fetches allowed origins and rejects others", { tim
       env: { PORT: String(port), WASMACS_PROXY_ALLOWED_ORIGINS: allowedOrigin },
     }),
   });
+});
+
+test("Ruby fetch proxy sample defaults to all origins for localhost development", { timeout: 30_000, skip: !(await executableExists("ruby")) }, async () => {
+  await assertRubyDefaultAllowsAnyOrigin();
 });
 
 test("Python fetch proxy sample fetches allowed origins and rejects others", { timeout: 30_000, skip: !(await executableExists("python3")) }, async () => {

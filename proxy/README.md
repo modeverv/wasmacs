@@ -89,6 +89,16 @@ PORT=8787 perl proxy/perl/server.pl
 PORT=8787 ruby proxy/ruby/server.rb
 ```
 
+The Ruby sample binds to `127.0.0.1` and defaults to
+`WASMACS_PROXY_ALLOWED_ORIGINS=*` for local development. Set
+`WASMACS_PROXY_ALLOWED_ORIGINS` explicitly to restore an allowlist:
+
+```sh
+WASMACS_PROXY_ALLOWED_ORIGINS=https://elpa.gnu.org,https://melpa.org \
+PORT=8787 \
+ruby proxy/ruby/server.rb
+```
+
 ## Python
 
 ```sh

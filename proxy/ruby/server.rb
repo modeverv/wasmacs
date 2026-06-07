@@ -8,11 +8,7 @@ require 'time'
 require 'uri'
 require 'webrick'
 
-DEFAULT_ALLOWED_ORIGINS = [
-  'https://elpa.gnu.org',
-  'https://melpa.org',
-  'https://stable.melpa.org'
-].freeze
+DEFAULT_ALLOWED_ORIGINS = ['*'].freeze
 
 BLOCKED_HEADERS = %w[
   connection
@@ -40,7 +36,8 @@ def assert_allowed_url(raw_url)
 
   origin = "#{target.scheme}://#{target.host}"
   origin += ":#{target.port}" if target.port && target.port != target.default_port
-  raise "URL origin is not allowed: #{origin}" unless allowed_origins.include?(origin)
+  origins = allowed_origins
+  raise "URL origin is not allowed: #{origin}" unless origins.include?('*') || origins.include?(origin)
 
   target
 end

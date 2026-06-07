@@ -117,15 +117,16 @@ Rust, Perl, Ruby, Python, and PowerShell. Each sample accepts the same JSON
 request shape as the local development `__wasmacs_network_fetch` route and
 returns status, headers, and base64 response bytes.
 
-The samples are intentionally allowlist-based. Set
+The samples are intentionally allowlist-based, except for the Ruby sample which
+defaults to `*` for localhost-only development. Set
 `WASMACS_PROXY_ALLOWED_ORIGINS` to the archive origins you are willing to fetch:
 
 ```sh
 WASMACS_PROXY_ALLOWED_ORIGINS=https://elpa.gnu.org,https://melpa.org
 ```
 
-For ad-hoc smoke tests against another origin, include that origin explicitly;
-for example `https://happy-lucky.work` is not allowed by the default samples.
+For ad-hoc smoke tests against another origin, include that origin explicitly
+unless you are using the Ruby sample's local-only default.
 
 This is a user-operated network gateway, not a hidden project service. The
 operator is responsible for hosting policy, access control, logging, and the

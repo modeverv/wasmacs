@@ -2249,6 +2249,19 @@ Validation notes:
   page performs direct/proxy `fetch` and wakes the worker. Validation:
   `node --test tests/runtime/wasmacs-url-fetch-lisp.test.js
   tests/runtime/browser-app-route.test.js` passed 19 tests.
+- 2026-06-08: changed only the Ruby localhost proxy to default
+  `WASMACS_PROXY_ALLOWED_ORIGINS=*` for local-only development while preserving
+  explicit allowlist behavior when the env var is set. Validation:
+  `ruby -c proxy/ruby/server.rb`, `node --test
+  tests/runtime/fetch-proxy-samples.test.js`, and `npm test` passed; the proxy
+  suite now includes a Ruby default-all-origin test.
+- 2026-06-08: GitHub Pages still showed worker-local `XMLHttpRequest` failures
+  because replacing `wasmacs_host_network_fetch_json` after `temacs.js` loads is
+  too late for the wasm import table. `build-site.mjs` now patches the checked-in
+  Pages `temacs.js` artifact so `wasmacs_host_network_fetch_json` itself posts
+  `host-network-fetch` and waits on the SharedArrayBuffer relay. Validation:
+  `node --test tests/runtime/wasmacs-url-fetch-lisp.test.js` verifies the Pages
+  artifact no longer uses `new XMLHttpRequest` inside that function.
 
 ## Milestone 15: High-Performance Renderer
 

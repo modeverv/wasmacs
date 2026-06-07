@@ -182,6 +182,23 @@ test("Atomics pdump host network fetch relays through the main page", async () =
   assert.match(page, /Atomics\.notify\(signal,\s*0,\s*1\)/);
 });
 
+test("Pages temacs artifact patches host network fetch to the relay", async () => {
+  const builder = await readFile(join(repoRoot, "src/build/build-site.mjs"), "utf8");
+  const temacs = await readFile(
+    join(repoRoot, "docs/artifacts/emacs-browser-atomics-pdump/temacs.js"),
+    "utf8",
+  );
+  const functionStart = temacs.indexOf("function wasmacs_host_network_fetch_json");
+  const functionEnd = temacs.indexOf("function _wasmacs_host_network_fetch", functionStart);
+  const hostFetchFunction = temacs.slice(functionStart, functionEnd);
+
+  assert.match(builder, /patchTemacsJsForHostNetworkRelay/);
+  assert.match(builder, /replaceFunction\(source, "wasmacs_host_network_fetch_json"/);
+  assert.match(hostFetchFunction, /type: "host-network-fetch"/);
+  assert.match(hostFetchFunction, /Atomics\.wait\(signal,\s*0,\s*1,\s*120000\)/);
+  assert.doesNotMatch(hostFetchFunction, /new XMLHttpRequest/);
+});
+
 test("Atomics pdump worker suppresses Emscripten run dependency stderr spam", async () => {
   const source = await readFile(
     join(repoRoot, "src/wasm/src/emacs-atomics-pdump-worker.js"),

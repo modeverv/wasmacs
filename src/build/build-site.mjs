@@ -68,6 +68,85 @@ async function patchTemacsJsForAsyncPreload(filePath) {
   if (awaited !== source) await writeFile(filePath, awaited);
 }
 
+function replaceFunction(source, functionName, replacement) {
+  const marker = `function ${functionName}`;
+  const start = source.indexOf(marker);
+  if (start < 0) return source;
+  const open = source.indexOf("{", start);
+  if (open < 0) return source;
+  let depth = 0;
+  for (let index = open; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === "{") depth += 1;
+    if (char === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(0, start) + replacement + source.slice(index + 1);
+      }
+    }
+  }
+  return source;
+}
+
+async function patchTemacsJsForHostNetworkRelay(filePath) {
+  if (!existsSync(filePath)) return;
+  const source = await readFile(filePath, "utf8");
+  const replacement = `function wasmacs_host_network_fetch_json(request_json) {
+  function returnJson(value) {
+    var json = JSON.stringify(value);
+    var size = lengthBytesUTF8(json) + 1;
+    var ptr = _malloc(size);
+    if (!ptr) return 0;
+    stringToUTF8(json, ptr, size);
+    return ptr;
+  }
+  function fail(message) { return returnJson({ error: String(message) }); }
+  try {
+    if (typeof self === "undefined" || typeof self.postMessage !== "function") {
+      return fail("host.network.fetch relay requires a worker postMessage host");
+    }
+    if (typeof SharedArrayBuffer !== "function" || typeof Atomics === "undefined") {
+      return fail("host.network.fetch relay requires SharedArrayBuffer and Atomics");
+    }
+    var requestJson = UTF8ToString(request_json);
+    var responseSAB = globalThis.__wasmacsNetworkResponseSAB;
+    if (!responseSAB) {
+      responseSAB = new SharedArrayBuffer(64 * 1024 * 1024);
+      globalThis.__wasmacsNetworkResponseSAB = responseSAB;
+    }
+    var signal = new Int32Array(responseSAB, 0, 4);
+    var data = new Uint8Array(responseSAB, 16);
+    Atomics.store(signal, 0, 1);
+    Atomics.store(signal, 1, 0);
+    self.postMessage({
+      type: "host-network-fetch",
+      requestJson: requestJson,
+      responseSAB: responseSAB
+    });
+    var waitResult = Atomics.wait(signal, 0, 1, 120000);
+    if (waitResult === "timed-out") {
+      return fail("host.network.fetch main-thread relay timed out");
+    }
+    var length = Atomics.load(signal, 1);
+    if (!Number.isFinite(length) || length <= 0 || length > data.length) {
+      return fail("host.network.fetch main-thread relay returned invalid length " + length);
+    }
+    var text = new TextDecoder().decode(data.subarray(0, length));
+    Atomics.store(signal, 0, 0);
+    Atomics.store(signal, 1, 0);
+    try {
+      return returnJson(JSON.parse(text));
+    } catch (parseError) {
+      return fail("host.network.fetch main-thread relay returned invalid JSON: " + parseError.message);
+    }
+  } catch (error) {
+    return fail(error && error.message ? error.message : error);
+  }
+}`;
+  const patched = replaceFunction(source, "wasmacs_host_network_fetch_json", replacement);
+  if (patched !== source) await writeFile(filePath, patched);
+}
+
 await mkdir(docsRoot, { recursive: true });
 await rm(docsApp, { recursive: true, force: true });
 await rm(docsArtifacts, { recursive: true, force: true });
@@ -104,6 +183,7 @@ if (existsSync(docsTemacs) && !existsSync(docsTemacsJs)) {
   await cp(docsTemacs, docsTemacsJs);
 }
 await patchTemacsJsForAsyncPreload(docsTemacsJs);
+await patchTemacsJsForHostNetworkRelay(docsTemacsJs);
 await splitLargeDataFile(join(docsAtomicsPdump, "temacs.data"));
 
 console.log("Built docs GitHub Pages bundle.");
