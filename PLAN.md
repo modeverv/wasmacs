@@ -2240,6 +2240,15 @@ Validation notes:
   syntax/type checks passed for Node, PHP, Go, Rust, Perl, Ruby, Python, and
   PowerShell; `node --test tests/runtime/fetch-proxy-samples.test.js` passed 9
   tests and verified `https://modeverv.github.io` is echoed by every sample.
+- 2026-06-08: Ruby proxy logging showed no request line when GitHub Pages tried
+  the configured `127.0.0.1:8787` proxy, which means Chrome stopped the request
+  before it reached the proxy process. The Atomics pdump route now replaces the
+  generated `wasmacs_host_network_fetch_json` JS hook after `temacs.js` loads:
+  worker-side C/wasm still gets a synchronous primitive, but the worker posts a
+  `host-network-fetch` message and waits on a SharedArrayBuffer while the main
+  page performs direct/proxy `fetch` and wakes the worker. Validation:
+  `node --test tests/runtime/wasmacs-url-fetch-lisp.test.js
+  tests/runtime/browser-app-route.test.js` passed 19 tests.
 
 ## Milestone 15: High-Performance Renderer
 

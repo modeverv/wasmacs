@@ -165,6 +165,23 @@ test("Atomics pdump browser runtime forwards configured local network proxy to w
   assert.match(worker, /wasmacsNetworkProxyUrl: globalThis\.__wasmacsNetworkProxyUrl/);
 });
 
+test("Atomics pdump host network fetch relays through the main page", async () => {
+  const page = await readFile(join(repoRoot, "src/wasm/xterm-atomics-pdump.html"), "utf8");
+  const worker = await readFile(
+    join(repoRoot, "src/wasm/src/emacs-atomics-pdump-worker.js"),
+    "utf8",
+  );
+
+  assert.match(worker, /NETWORK_RESPONSE_SAB/);
+  assert.match(worker, /installMainThreadNetworkFetchBridge/);
+  assert.match(worker, /type: "host-network-fetch"/);
+  assert.match(worker, /Atomics\.wait\(signal,\s*0,\s*1,\s*120000\)/);
+  assert.match(page, /async function handleHostNetworkFetch/);
+  assert.match(page, /async function hostNetworkFetch/);
+  assert.match(page, /configuredProxyUrls\(request\)/);
+  assert.match(page, /Atomics\.notify\(signal,\s*0,\s*1\)/);
+});
+
 test("Atomics pdump worker suppresses Emscripten run dependency stderr spam", async () => {
   const source = await readFile(
     join(repoRoot, "src/wasm/src/emacs-atomics-pdump-worker.js"),

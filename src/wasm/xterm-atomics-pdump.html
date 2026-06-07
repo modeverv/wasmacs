@@ -245,6 +245,129 @@ if (configuredNetworkProxyUrl) {
   try { localStorage.setItem("wasmacs.networkProxyUrl", configuredNetworkProxyUrl); } catch (_) {}
 }
 
+function isLocalHostName(name) {
+  const normalized = String(name || "").toLowerCase();
+  return normalized === "localhost"
+    || normalized === "127.0.0.1"
+    || normalized === "::1"
+    || normalized === "[::1]";
+}
+
+function configuredProxyUrls(request = {}) {
+  const urls = [];
+  const configured = String(request.proxyUrl || configuredNetworkProxyUrl || "");
+  if (configured) {
+    try {
+      const parsed = new URL(configured, location.href);
+      if (parsed.protocol === "http:" || parsed.protocol === "https:") urls.push(parsed.href);
+    } catch (_) {}
+  }
+  if (isLocalHostName(location.hostname)) {
+    urls.push(new URL("/__wasmacs_network_fetch", location.href).href);
+  }
+  return urls;
+}
+
+function responseHeadersArray(headers) {
+  return Array.from(headers.entries()).map(([name, value]) => ({
+    name: name.toLowerCase(),
+    value,
+  }));
+}
+
+function bytesToBase64(bytes) {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+}
+
+async function hostNetworkFetch(request) {
+  const url = String(request.url || "");
+  const parsed = new URL(url, location.href);
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`unsupported URL scheme: ${parsed.protocol}`);
+  }
+  const method = String(request.method || "GET").toUpperCase();
+  const headers = Array.isArray(request.headers)
+    ? Object.fromEntries(request.headers.map((header) => {
+        if (Array.isArray(header)) return [String(header[0]), String(header[1] ?? "")];
+        return [String(header.name), String(header.value ?? "")];
+      }))
+    : undefined;
+
+  try {
+    const response = await fetch(parsed.href, {
+      method,
+      headers,
+      body: request.body || undefined,
+      redirect: "follow",
+    });
+    const body = new Uint8Array(await response.arrayBuffer());
+    return {
+      url: response.url || parsed.href,
+      status: response.status,
+      statusText: response.statusText || "",
+      headers: responseHeadersArray(response.headers),
+      bodyBase64: bytesToBase64(body),
+    };
+  } catch (directError) {
+    const errors = [];
+    for (const proxyUrl of configuredProxyUrls(request)) {
+      try {
+        const proxyResponse = await fetch(proxyUrl, {
+          method: "POST",
+          body: JSON.stringify(request),
+          redirect: "follow",
+        });
+        const text = await proxyResponse.text();
+        if (!text) {
+          errors.push(`${proxyUrl} status ${proxyResponse.status}`);
+          continue;
+        }
+        try {
+          return JSON.parse(text);
+        } catch (parseError) {
+          errors.push(`${proxyUrl} returned invalid JSON: ${parseError.message}`);
+        }
+      } catch (proxyError) {
+        errors.push(`${proxyUrl} failed${proxyError?.message ? ": " + proxyError.message : ""}`);
+      }
+    }
+    throw new Error(
+      `host.network.fetch direct request failed`
+      + `${directError?.message ? ": " + directError.message : ""}`
+      + `; proxy attempts: ${errors.join("; ")}`,
+    );
+  }
+}
+
+async function handleHostNetworkFetch(message) {
+  const signal = new Int32Array(message.responseSAB, 0, 4);
+  const data = new Uint8Array(message.responseSAB, 16);
+  function write(value) {
+    const json = JSON.stringify(value);
+    const bytes = new TextEncoder().encode(json);
+    const payload = bytes.length <= data.length
+      ? value
+      : { error: `host.network.fetch response is too large for relay buffer: ${bytes.length} bytes` };
+    const finalBytes = payload === value ? bytes : new TextEncoder().encode(JSON.stringify(payload));
+    data.fill(0, 0, Math.min(data.length, finalBytes.length + 1));
+    data.set(finalBytes.subarray(0, data.length));
+    Atomics.store(signal, 1, finalBytes.length);
+    Atomics.store(signal, 0, 2);
+    Atomics.notify(signal, 0, 1);
+  }
+  try {
+    addLog("info", "network relay: " + JSON.parse(message.requestJson).url);
+    write(await hostNetworkFetch(JSON.parse(message.requestJson)));
+  } catch (error) {
+    write({ error: error?.message || String(error) });
+  }
+}
+
 function flushInputToEmacs() {
   if (!inputSAB || pendingInputBytes.length === 0) return;
   const signal = new Int32Array(inputSAB, 0, 2);
@@ -373,6 +496,11 @@ function startEmacsWithPdmp(pdmpBytes) {
 
   emacsWorker.onmessage = (evt) => {
     const msg = evt.data;
+
+    if (msg.type === "host-network-fetch") {
+      handleHostNetworkFetch(msg);
+      return;
+    }
 
     if (msg.type === "ready") {
       inputSAB = msg.sab;

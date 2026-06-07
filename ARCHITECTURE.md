@@ -666,6 +666,13 @@ When a public HTTPS origin calls `127.0.0.1`, modern browsers can also require a
 Private Network Access preflight, so local proxy samples answer
 `Access-Control-Allow-Private-Network: true` and echo the requesting `Origin`
 instead of wildcard CORS.
+
+On the Atomics pdump route, C/wasm still observes `host.network.fetch` as a
+synchronous primitive, but the browser transport is owned by the main page. The
+worker posts a `host-network-fetch` request and waits on a SharedArrayBuffer
+result slot; the page performs direct `fetch` or localhost proxy `fetch` and
+wakes the worker. This avoids worker-local synchronous XHR being blocked before
+Chrome sends a request to `127.0.0.1`.
 - workspace image は信頼境界として扱う
 
 ## 採用候補

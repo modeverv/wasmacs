@@ -119,6 +119,7 @@ async function fetchSplitPreloadedPackage(packageName, expectedSize) {
 // ── SharedArrayBuffer ────────────────────────────────────────────
 const INPUT_SAB = new SharedArrayBuffer(264);
 const TERMINAL_SIZE_SAB = new SharedArrayBuffer(12);
+const NETWORK_RESPONSE_SAB = new SharedArrayBuffer(64 * 1024 * 1024);
 globalThis.__wasmacsInputSAB = INPUT_SAB;
 globalThis.__wasmacsTerminalSizeSAB = TERMINAL_SIZE_SAB;
 globalThis.__wasmacsTerminalOutputBytes = [];
@@ -148,6 +149,58 @@ function injectTerminalInput(bytes = []) {
   Atomics.store(signal, 1, chunk.length);
   Atomics.add(signal, 0, 1);
   Atomics.notify(signal, 0, 1);
+}
+
+function installMainThreadNetworkFetchBridge() {
+  if (typeof UTF8ToString !== "function"
+      || typeof lengthBytesUTF8 !== "function"
+      || typeof stringToUTF8 !== "function"
+      || typeof _malloc !== "function") {
+    return false;
+  }
+
+  function returnJson(value) {
+    const json = JSON.stringify(value);
+    const size = lengthBytesUTF8(json) + 1;
+    const ptr = _malloc(size);
+    if (!ptr) return 0;
+    stringToUTF8(json, ptr, size);
+    return ptr;
+  }
+
+  const bridgedFetch = function bridgedHostNetworkFetchJson(requestJsonPtr) {
+    const requestJson = UTF8ToString(requestJsonPtr);
+    const signal = new Int32Array(NETWORK_RESPONSE_SAB, 0, 4);
+    const data = new Uint8Array(NETWORK_RESPONSE_SAB, 16);
+    Atomics.store(signal, 0, 1);
+    Atomics.store(signal, 1, 0);
+    self.postMessage({
+      type: "host-network-fetch",
+      requestJson,
+      responseSAB: NETWORK_RESPONSE_SAB,
+    });
+    const waitResult = Atomics.wait(signal, 0, 1, 120000);
+    if (waitResult === "timed-out") {
+      return returnJson({ error: "host.network.fetch main-thread relay timed out" });
+    }
+    const length = Atomics.load(signal, 1);
+    if (!Number.isFinite(length) || length <= 0 || length > data.length) {
+      return returnJson({ error: `host.network.fetch main-thread relay returned invalid length ${length}` });
+    }
+    const text = new TextDecoder().decode(data.subarray(0, length));
+    try {
+      return returnJson(JSON.parse(text));
+    } catch (error) {
+      return returnJson({ error: `host.network.fetch main-thread relay returned invalid JSON: ${error.message}` });
+    } finally {
+      Atomics.store(signal, 0, 0);
+      Atomics.store(signal, 1, 0);
+    }
+  };
+
+  globalThis.wasmacs_host_network_fetch_json = bridgedFetch;
+  try { wasmacs_host_network_fetch_json = bridgedFetch; } catch (_) {}
+  return true;
 }
 
 self.onmessage = async (event) => {
@@ -600,6 +653,10 @@ async function startEmacs(pdmpBytes, debugOptions = {}) {
       return originalAtomicsWait(...args);
     };
   } catch (_) {}
+
+  if (installMainThreadNetworkFetchBridge()) {
+    post("status", { text: "host.network.fetch relay ready" });
+  }
 
   try {
     ENV.LANG = "C";
