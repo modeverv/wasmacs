@@ -7,6 +7,8 @@ import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+DEFAULT_ALLOWED_ORIGINS = ["*"]
+
 BLOCKED_HEADERS = {
     "connection",
     "content-length",
@@ -33,6 +35,10 @@ def assert_allowed_url(raw_url):
         raise ValueError("invalid URL")
     if parsed.scheme not in {"http", "https"}:
         raise ValueError(f"unsupported URL scheme: {parsed.scheme}")
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+    origins = allowed_origins()
+    if "*" not in origins and origin not in origins:
+        raise ValueError(f"URL origin is not allowed: {origin}")
     return urllib.parse.urlunparse(parsed)
 
 

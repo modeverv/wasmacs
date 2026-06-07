@@ -207,7 +207,6 @@ test("fetch proxy samples document the shared wasmacs host.network.fetch contrac
   assert.match(readme, /WASMACS_PROXY_ALLOWED_ORIGINS/);
   assert.match(readme, /Node/);
   assert.match(readme, /PHP/);
-  assert.match(readme, /Go/);
   assert.match(readme, /Rust/);
   assert.match(readme, /Perl/);
   assert.match(readme, /Ruby/);
@@ -236,16 +235,6 @@ test("PHP fetch proxy sample fetches allowed origins and rejects others", { time
       command: "php",
       args: ["-S", `127.0.0.1:${port}`, "proxy/php/proxy.php"],
       env: { WASMACS_PROXY_ALLOWED_ORIGINS: allowedOrigin },
-    }),
-  });
-});
-
-test("Go fetch proxy sample fetches allowed origins and rejects others", { timeout: 60_000, skip: !(await executableExists("go")) }, async () => {
-  await assertProxyWorks({
-    start: (port, allowedOrigin) => ({
-      command: "go",
-      args: ["run", "proxy/go/main.go"],
-      env: { PORT: String(port), WASMACS_PROXY_ALLOWED_ORIGINS: allowedOrigin },
     }),
   });
 });

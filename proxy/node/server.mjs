@@ -25,7 +25,8 @@ function assertAllowedUrl(rawUrl) {
   if (target.protocol !== "http:" && target.protocol !== "https:") {
     throw new Error(`unsupported URL scheme: ${target.protocol}`);
   }
-  if (!allowedOrigins().has(target.origin)) {
+  const origins = allowedOrigins();
+  if (!origins.has("*") && !origins.has(target.origin)) {
     throw new Error(`URL origin is not allowed: ${target.origin}`);
   }
   return target;

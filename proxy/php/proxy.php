@@ -58,7 +58,8 @@ function assert_allowed_url(string $url): string
     }
     $port = isset($parts['port']) ? ':' . $parts['port'] : '';
     $origin = $parts['scheme'] . '://' . $parts['host'] . $port;
-    if (!in_array($origin, allowed_origins(), true)) {
+    $origins = allowed_origins();
+    if (!in_array('*', $origins, true) && !in_array($origin, $origins, true)) {
         throw new RuntimeException('URL origin is not allowed: ' . $origin);
     }
     return $url;
