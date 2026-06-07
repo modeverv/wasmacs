@@ -103,13 +103,18 @@ local value is \"http://127.0.0.1:8787/\".")
     response))
 
 (defun wasmacs-url-fetch--request-headers ()
-  "Return request headers from dynamically bound url.el variables."
+  "Return request headers from dynamically bound url.el variables.
+
+The result is a vector of two-element vectors so `json-serialize' encodes
+it as a JSON array of `[name, value]' pairs.  `json-serialize' treats Lisp
+lists as JSON objects (and rejects string keys with `wrong-type-argument'),
+so an alist here would fail to serialize."
   (let ((headers nil))
     (dolist (header url-request-extra-headers)
       (when (consp header)
-        (push (cons (format "%s" (car header)) (format "%s" (cdr header)))
+        (push (vector (format "%s" (car header)) (format "%s" (cdr header)))
               headers)))
-    (nreverse headers)))
+    (vconcat (nreverse headers))))
 
 (defun wasmacs-url-fetch--request (url)
   "Return a host fetch request plist for URL."

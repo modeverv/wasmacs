@@ -1,6 +1,6 @@
 # System Lisp Image
 
-date: 2026-06-07T16:18:53Z
+date: 2026-06-07T17:00:07Z
 source: vendor/emacs
 commit: 636f166cfc86aa90d63f592fd99f3fdd9ef95ebd
 tag: emacs-30.2
@@ -11,4 +11,4 @@ lisp_el_files: 1652
 lisp_elc_files: 1620
 loaddefs_files: 20
 total_files: 3447
-sha256: f9cd9040442a03164db277622f5deda989fb2f092863bee3c216feeb63c79b2d
+sha256: faa3e440d7070b27908634dd6566816896d4dd60b90fb2549dbe7df2b8699237
