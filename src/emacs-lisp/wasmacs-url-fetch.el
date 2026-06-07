@@ -113,10 +113,12 @@ local value is \"http://127.0.0.1:8787/\".")
 
 (defun wasmacs-url-fetch--request (url)
   "Return a host fetch request plist for URL."
-  (let ((request (list :url (url-recreate-url url)
-                       :method (or url-request-method "GET")
-                       :headers (wasmacs-url-fetch--request-headers)
-                       :body url-request-data)))
+  (let* ((method (or url-request-method "GET"))
+         (request (list :url (url-recreate-url url)
+                        :method method
+                        :headers (wasmacs-url-fetch--request-headers))))
+    (unless (member (upcase method) '("GET" "HEAD"))
+      (setq request (plist-put request :body url-request-data)))
     (if (and (stringp wasmacs-url-fetch-proxy-url)
              (not (string-empty-p wasmacs-url-fetch-proxy-url)))
         (plist-put request :proxyUrl wasmacs-url-fetch-proxy-url)

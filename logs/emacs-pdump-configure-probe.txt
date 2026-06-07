@@ -1,10 +1,10 @@
 pdump configure probe
 source: vendor/emacs
-workdir: /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/build-gnu-host-internal-termcap-pdump
+workdir: /Users/seijiro/by-llms/wasmacs/build/emacs-pdump-configure-probe/build-gnu-host-internal-termcap-pdump
 host: wasm32-unknown-linux-gnu
 dumping: pdumper
 
-emconfigure: /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/configure --host=wasm32-unknown-linux-gnu --build=aarch64-apple-darwin25.5.0 --without-all --without-x --without-ns --without-pgtk --without-sound --without-dbus --without-gconf --without-gsettings --without-native-compilation --with-wide-int --with-dumping=pdumper --with-pdumper=yes --with-unexec=no 'emacs_cv_tputs_lib=none required' ac_cv_func_malloc_trim=no emacs_cv_linux_sysinfo=no ac_cv_func_sigsuspend=no in directory /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/build-gnu-host-internal-termcap-pdump
+emconfigure: /Users/seijiro/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/configure --host=wasm32-unknown-linux-gnu --build=aarch64-apple-darwin25.5.0 --without-all --without-x --without-ns --without-pgtk --without-sound --without-dbus --without-gconf --without-gsettings --without-native-compilation --with-wide-int --with-dumping=pdumper --with-pdumper=yes --with-unexec=no 'emacs_cv_tputs_lib=none required' ac_cv_func_malloc_trim=no emacs_cv_linux_sysinfo=no ac_cv_func_sigsuspend=no in directory /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/build-gnu-host-internal-termcap-pdump
 checking for xcrun... xcrun
 checking for make... yes
 checking for GNU Make... make
@@ -491,7 +491,7 @@ checking whether MB_CUR_MAX is defined to function that won't link... no
 
 Configured for 'wasm32-unknown-linux-gnu'.
 
-  Where should the build process find the source code?    /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src
+  Where should the build process find the source code?    /Users/seijiro/by-llms/wasmacs/build/emacs-pdump-configure-probe/src
   What compiler should emacs be built with?               /opt/homebrew/Cellar/emscripten/5.0.7/libexec/emcc -std=gnu23 -g3 -O0
   Should Emacs use the GNU version of malloc?             no
     (The GNU allocators don't work with this system configuration.)
@@ -552,7 +552,7 @@ config.status: creating src/verbose.mk
 config.status: creating src/emacs-module.h
 config.status: creating Makefile
 config.status: creating lib/gnulib.mk
-config.status: creating /Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/doc/man/emacs.1
+config.status: creating /Users/seijiro/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/doc/man/emacs.1
 config.status: creating lib/Makefile
 config.status: creating lib-src/Makefile
 config.status: creating oldXMenu/Makefile
@@ -584,9 +584,9 @@ configure: WARNING: This configuration installs a 'movemail' program
 that does not retrieve POP3 email.  By default, Emacs 25 and earlier
 installed a 'movemail' program that retrieved POP3 email via only
 insecure channels, a practice that is no longer recommended but that
-you can continue to support by using '/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/configure --with-pop'.
+you can continue to support by using '/Users/seijiro/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/configure --with-pop'.
 configure: You might want to install GNU Mailutils
-<https://mailutils.org> and use '/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/configure --with-mailutils'.
+<https://mailutils.org> and use '/Users/seijiro/by-llms/wasmacs/build/emacs-pdump-configure-probe/src/configure --with-mailutils'.
 
 configured DUMPING/HAVE_PDUMPER:
 403:DUMPING=pdumper
