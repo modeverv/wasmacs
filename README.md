@@ -14,6 +14,7 @@ src/c/      Emacs C-side patch layer
 src/runtime/ host/runtime libraries used by tests and tools
 tools/      build, validation, probe, prototype, and inspection tools
 tools/probs/ prototype and exploratory probe code
+proxy/      optional self-hosted fetch proxy samples for package archives
 vendor/     pinned upstream GNU Emacs source, read-only
 build/      copied Emacs working trees, temporary state, and generated artifacts
 build/artifacts/ generated wasm, pdmp, and wasifs build products
@@ -94,6 +95,41 @@ After cloning, run:
 ```sh
 npm ci
 ```
+
+## Network Access
+
+wasmacs treats network access as an explicit browser-host capability. The Emacs
+core does not get raw sockets or `host.process` for package downloads. Instead,
+the checked-in `wasmacs-url-fetch` Lisp overlay routes `url.el` HTTP(S)
+requests through `host.network.fetch`, so `package-refresh-contents`,
+`package-install`, and `use-package :ensure` can use a request/response service
+without pretending that browser JavaScript is a POSIX network stack.
+
+Direct browser `fetch` works only when the remote package archive permits the
+page origin with CORS. Many package archive endpoints do not. Service Workers
+can help with app caching and COOP/COEP, but they cannot make an unreadable
+cross-origin response readable to JavaScript.
+
+When an archive is blocked by CORS, users can configure a self-hosted fetch
+proxy under their own control. wasmacs does not provide a central proxy service.
+The repository includes sample implementations in `proxy/` for Node, PHP, Go,
+Rust, Perl, Ruby, Python, and PowerShell. Each sample accepts the same JSON
+request shape as the local development `__wasmacs_network_fetch` route and
+returns status, headers, and base64 response bytes.
+
+The samples are intentionally allowlist-based. Set
+`WASMACS_PROXY_ALLOWED_ORIGINS` to the archive origins you are willing to fetch:
+
+```sh
+WASMACS_PROXY_ALLOWED_ORIGINS=https://elpa.gnu.org,https://melpa.org
+```
+
+This is a user-operated network gateway, not a hidden project service. The
+operator is responsible for hosting policy, access control, logging, and the
+set of allowed archive origins. See `proxy/README.md` for the runnable examples.
+The Python and PowerShell samples are the most likely cross-platform local
+fallbacks: Python 3 is common on macOS/Linux developer machines, while
+PowerShell is the native Windows path.
 
 ## Common Commands
 

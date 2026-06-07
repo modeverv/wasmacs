@@ -2065,6 +2065,9 @@ Package install / network Phase 1 slice:
   C patch wiring so the Lisp loader can call the browser host network backend.
 - [x] Add a pasteable `use-package` smoke sample at
   `doc/use-package-fetch-sample.el`.
+- [x] Document network access in `README.md` and add optional self-hosted fetch
+  proxy samples for Node, PHP, Go, Rust, Perl, Ruby, Python, and PowerShell under
+  `proxy/`.
 
 Validation notes:
 
@@ -2167,6 +2170,18 @@ Validation notes:
   now patches the generated `loadup.el` copy to preload `json`, `url-methods`,
   `url-parse`, `url-vars`, and `wasmacs-url-fetch` into the `pbootstrap` pdmp
   before dump, leaving runtime `require` shallow after restore.
+- 2026-06-07: documented network access in `README.md`, recorded the
+  self-hosted fetch proxy boundary in `ARCHITECTURE.md`, and added runnable
+  `proxy/node`, `proxy/php`, `proxy/go`, `proxy/rust`, `proxy/perl`,
+  `proxy/ruby`, `proxy/python`, and `proxy/powershell` samples. The samples share the
+  `host.network.fetch` JSON contract, require
+  `WASMACS_PROXY_ALLOWED_ORIGINS`, strip browser/request-only headers, and
+  return `bodyBase64` response bytes. Validation: `node --test
+  tests/runtime/fetch-proxy-samples.test.js` passed for Node, PHP, Go, Rust,
+  Perl, Ruby, Python, and PowerShell against a local fake archive server;
+  `node --test tests/runtime/network-fetch.test.js
+  tests/runtime/wasmacs-url-fetch-lisp.test.js` passed 23 tests; `npm test`
+  passed 118 tests plus artifact/plan validation scripts.
 
 ## Milestone 15: High-Performance Renderer
 
