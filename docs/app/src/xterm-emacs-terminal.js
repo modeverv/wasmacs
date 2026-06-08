@@ -226,11 +226,50 @@ export function controlKeyEventToBytes(event) {
   return [code - 96];
 }
 
-export function metaKeyEventToBytes(event) {
-  if (!event?.altKey || event.ctrlKey || event.metaKey) return null;
-  if (typeof event.key !== "string" || event.key.length !== 1) return null;
-  return [27, ...Array.from(new TextEncoder().encode(event.key))];
+//export function metaKeyEventToBytes(event) {
+//  if (!event?.altKey || event.ctrlKey || event.metaKey) return null;
+//  if (typeof event.key !== "string" || event.key.length !== 1) return null;
+//  return [27, ...Array.from(new TextEncoder().encode(event.key))];
+//}
+
+function printableAsciiFromCode(event) {
+  if (typeof event?.code !== "string") return null;
+
+  if (/^Key[A-Z]$/.test(event.code)) {
+    const ch = event.code.slice(3).toLowerCase();
+    return event.shiftKey ? ch.toUpperCase() : ch;
+  }
+
+  if (/^Digit[0-9]$/.test(event.code)) {
+    return event.code.slice(5);
+  }
+
+  return null;
 }
+
+export function metaKeyEventToBytes(event) {
+  if (!event?.altKey || event.ctrlKey || event.metaKey || event.isComposing) {
+    return null;
+  }
+
+  const ch = printableAsciiFromCode(event);
+
+  if (ch) {
+    return [27, ch.charCodeAt(0)];
+  }
+
+  // fallback: Optionで特殊文字化していない普通のASCIIだけ通す
+  if (
+    typeof event.key === "string" &&
+    event.key.length === 1 &&
+    event.key.charCodeAt(0) < 128
+  ) {
+    return [27, event.key.charCodeAt(0)];
+  }
+
+  return null;
+}
+
 
 export function terminalKeyEventToBytes(event) {
   const controlBytes = controlKeyEventToBytes(event);
