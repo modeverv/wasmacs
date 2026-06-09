@@ -1,5 +1,62 @@
 # LOG.md
 
+## 2026-06-09
+
+### Task: Atomics terminal input wait — scheduler-aware timer integration (Phases 1–5)
+
+**Problem reproduced:**
+- In wasmacs Atomics/pdump/xterm mode, Emacs timers (`run-at-time`, `M-x tetris`)
+  only updated after keyboard input because `Atomics.wait()` blocked forever and
+  C never returned to the higher Emacs scheduler/timer path.
+
+**Root cause:**
+- `Atomics.wait(signal, 0, lastSeen)` had no timeout — JS blocked forever.
+- The C-side waitpoint discarded the JS return value and re-entered the same
+  low-level read loop on every iteration, never bubbling up to `kbd_buffer_get_event`.
+
+**Fix — Phase 1 (JS return codes):**
+- Changed `wasmacs_host_wait_for_input` in `tools/scripts/wasmacs-atomics-host-library.js`
+  to return explicit reason codes: `0`=timeout, `1`=input, `2`=resize, `-1`=no SAB.
+- Added 50ms diagnostic fixed timeout for initial confirmation.
+
+**Fix — Phase 2 (C timeout propagation):**
+- Patched `kbd_buffer_get_event` in `keyboard.c` (via
+  `tools/scripts/patch-emacs-host-entrypoint-spike.sh` and
+  `build/emacs-pdump-configure-probe/src/src/keyboard.c`).
+- On `WASMACS_WAIT_TIMEOUT` (return 0), C now calls `timer_check()` and
+  `redisplay_preserve_echo_area(9)` instead of re-entering the low-level wait,
+  allowing timers to fire and buffers to redisplay.
+
+**Phase 3 smoke test results:**
+- `(run-at-time 0 0.1 ...)` tick message updated without keyboard input — PASS.
+- `M-x tetris` pieces did not fall without keypresses — needed Phase 2 redisplay fix.
+  After adding `redisplay_preserve_echo_area(9)` post-`timer_check()`: PASS.
+
+**Fix — Phase 4 (Emacs-derived timeout):**
+- Replaced fixed 50ms poll with `timer_check()` return value (`struct timespec`).
+- Added `wasmacs_timespec_to_timeout_ms()` C helper (clamps to [1, 1000]ms).
+- JS `wasmacs_host_wait_for_input(timeout_ms)` now receives the real next-timer
+  deadline so `Atomics.wait` sleeps exactly until the next timer, not every 50ms.
+- Accepted by user: both `run-at-time` and `M-x tetris` noticeably smoother.
+
+**Fix — Phase 5 (independent flush):**
+- Extracted `wasmacs_host_flush_terminal_output` as an independent JS function
+  (also callable as a C extern).
+- `wasmacs_host_wait_for_input` delegates its section-1 flush to
+  `_wasmacs_host_flush_terminal_output()`.
+- C `keyboard.c` now calls `wasmacs_host_flush_terminal_output()` after the
+  post-wait `redisplay_preserve_echo_area(9)` in both call sites, eliminating
+  the 1-iteration output delivery delay after timer wakes.
+- All three files kept in sync: `wasmacs-atomics-host-library.js`,
+  `keyboard.c`, and `patch-emacs-host-entrypoint-spike.sh`.
+
+**Validation (Phase 5, 2026-06-09):**
+- `M-x tetris` — pieces fall automatically, no keypress needed: PASS.
+- `(run-at-time 1 1 (lambda () (message "tick %s" (float-time))))` — ticks
+  continue without input: PASS.
+
+**vendor/emacs unchanged.**
+
 ## 2026-06-01
 
 ### Milestone 1: Emacs 30.2 Source Inventory

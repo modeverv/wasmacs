@@ -270,7 +270,6 @@ export function metaKeyEventToBytes(event) {
   return null;
 }
 
-
 export function terminalKeyEventToBytes(event) {
   const controlBytes = controlKeyEventToBytes(event);
   if (controlBytes) return controlBytes;

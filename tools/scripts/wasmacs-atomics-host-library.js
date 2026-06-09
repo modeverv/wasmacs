@@ -124,18 +124,11 @@ mergeInto(LibraryManager.library, {
   ].join("\n"),
   $wasmacs_atomics_env: {},
 
-  // ── wasmacs_host_wait_for_input ────────────────────────────────
-  // Called from kbd_buffer_get_event (keyboard.c patch).
-  // Flushes terminal output, then blocks via Atomics.wait.
-  // Includes timing diagnostics via postMessage for latency analysis.
-  wasmacs_host_wait_for_input__deps: ["$wasmacs_atomics_env", "$FS"],
-  wasmacs_host_wait_for_input: function () {
-    var tEnter = Date.now();
-    globalThis.__wasmacsHostWaitForInputCount =
-      (globalThis.__wasmacsHostWaitForInputCount || 0) + 1;
-    var waitNum = globalThis.__wasmacsHostWaitForInputCount;
-
-    // ── 1. Flush pending terminal output ────────────────────────
+  // ── wasmacs_host_flush_terminal_output ───────────────────────
+  // Sends any accumulated terminal output bytes to the main thread.
+  // Called independently after redisplay, and at the start of the input wait.
+  wasmacs_host_flush_terminal_output__deps: [],
+  wasmacs_host_flush_terminal_output: function () {
     var outBytes = globalThis.__wasmacsTerminalOutputBytes || [];
     var sentCount = globalThis.__wasmacsSentOutputCount || 0;
     if (outBytes.length > sentCount) {
@@ -145,11 +138,31 @@ mergeInto(LibraryManager.library, {
         self.postMessage({ type: "terminal-output-bytes", bytes: newBytes });
       }
     }
+  },
+
+  // ── wasmacs_host_wait_for_input ────────────────────────────────
+  // Called from kbd_buffer_get_event (keyboard.c patch).
+  // Flushes terminal output, then blocks via Atomics.wait.
+  // Includes timing diagnostics via postMessage for latency analysis.
+  wasmacs_host_wait_for_input__deps: ["$wasmacs_atomics_env", "$FS", "wasmacs_host_flush_terminal_output"],
+  wasmacs_host_wait_for_input: function (timeout_ms) {
+    var tEnter = Date.now();
+    globalThis.__wasmacsHostWaitForInputCount =
+      (globalThis.__wasmacsHostWaitForInputCount || 0) + 1;
+    var waitNum = globalThis.__wasmacsHostWaitForInputCount;
+
+    // ── 1. Flush pending terminal output ────────────────────────
+    _wasmacs_host_flush_terminal_output();
 
     // ── 2. Block via Atomics.wait ────────────────────────────────
+    // Return codes: 0=timeout (scheduler wake), 1=input, 2=resize, -1=no SAB
     var sab = globalThis.__wasmacsInputSAB;
-    if (!sab) return;
+    if (!sab) return -1;
     var signal = new Int32Array(sab, 0, 2);
+
+    // timeout_ms is derived from Emacs timer_check() in keyboard.c.
+    // Fall back to 50ms if not provided (e.g. diagnostic callers).
+    var timeoutMs = (timeout_ms > 0) ? timeout_ms : 50;
 
     for (;;) {
       var lastSeen = Atomics.load(signal, 0);
@@ -166,12 +179,15 @@ mergeInto(LibraryManager.library, {
           });
         } catch(e) {}
       }
-      var result = Atomics.wait(signal, 0, lastSeen);
+      var result = Atomics.wait(signal, 0, lastSeen, timeoutMs);
+      if (result === "timed-out") {
+        return 0; // WASMACS_WAIT_TIMEOUT — let C run timer_check()
+      }
       if (globalThis.__wasmacsTerminalSizeSAB) {
         try {
           var sizeSignal = new Int32Array(globalThis.__wasmacsTerminalSizeSAB);
           if (Atomics.load(sizeSignal, 0) !== (globalThis.__wasmacsTerminalResizeSeen || 0))
-            return;
+            return 2; // WASMACS_WAIT_RESIZE
         } catch(e) {}
       }
       if (result === "ok" || Atomics.load(signal, 1) > 0) break;
@@ -202,6 +218,7 @@ mergeInto(LibraryManager.library, {
         });
       } catch(e) {}
     }
+    return 1; // WASMACS_WAIT_INPUT
   },
 
   // ── wasmacs_host_terminal_read_byte ───────────────────────────

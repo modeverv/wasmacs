@@ -1639,7 +1639,8 @@ EOF
 	      #   → TTY get_char → kbd_buffer_store_event
 	      perl -0pi -e 's~/\* wasmacs os-compat terminal input injection spike\. \*/.*?/\* Read a character from the keyboard; call the redisplay if needed\.  \*/~/* Read a character from the keyboard; call the redisplay if needed.  */~sg' "${keyboard_file}"
 	      export WASMACS_KBD_OSCOMPAT_HEADER='/* wasmacs os-compat terminal input injection spike. */
-extern int wasmacs_host_wait_for_input (void);
+extern void wasmacs_host_flush_terminal_output (void);
+extern int wasmacs_host_wait_for_input (int timeout_ms);
 extern int wasmacs_host_terminal_input_available (void);
 extern int wasmacs_host_terminal_read_byte (void);
 extern int wasmacs_host_scheduler_checkpoint (int code);
@@ -1649,6 +1650,13 @@ extern int wasmacs_host_terminal_resize_rows (void);
 extern int wasmacs_host_terminal_resize_ack (void);
 extern int wasmacs_os_apply_terminal_resize (int width, int height);
 extern void wasmacs_os_timing_checkpoint (int code);
+
+static int wasmacs_timespec_to_timeout_ms (struct timespec delay) {
+  if (!timespec_valid_p (delay)) return 1000;
+  if (delay.tv_sec < 0 || (delay.tv_sec == 0 && delay.tv_nsec <= 0)) return 1;
+  long long ms = (long long) delay.tv_sec * 1000 + delay.tv_nsec / 1000000;
+  if (ms <= 0) return 1; if (ms > 1000) return 1000; return (int) ms;
+}
 
 static void
 wasmacs_os_maybe_apply_terminal_resize (void)
@@ -1672,7 +1680,21 @@ wasmacs_os_maybe_apply_terminal_resize (void)
 	      export WASMACS_KBD_TIMED_WAIT_OSCOMPAT_PATCH='#ifdef __EMSCRIPTEN__
 	      if (kbd_fetch_ptr == kbd_store_ptr)
 		{
-		  wasmacs_host_wait_for_input ();
+		  unsigned pre_timers_ = timers_run;
+		  struct timespec next_timer_ = timer_check ();
+		  if (pre_timers_ != timers_run)
+		    redisplay_preserve_echo_area (9);
+		  int timeout_ms_ = wasmacs_timespec_to_timeout_ms (next_timer_);
+		  if (wasmacs_host_wait_for_input (timeout_ms_) == 0)
+		    {
+		      unsigned post_timers_ = timers_run;
+		      timer_check ();
+		      if (post_timers_ != timers_run)
+			{
+			  redisplay_preserve_echo_area (9);
+			  wasmacs_host_flush_terminal_output ();
+			}
+		    }
 		  wasmacs_os_maybe_apply_terminal_resize ();
 		  wasmacs_os_timing_checkpoint (11);
 		  gobble_input ();
@@ -1689,7 +1711,21 @@ wasmacs_os_maybe_apply_terminal_resize (void)
 	      export WASMACS_KBD_WAIT_OSCOMPAT_PATCH='#ifdef __EMSCRIPTEN__
 	  if (kbd_fetch_ptr == kbd_store_ptr)
 	    {
-	      wasmacs_host_wait_for_input ();
+	      unsigned pre_timers_ = timers_run;
+	      struct timespec next_timer_ = timer_check ();
+	      if (pre_timers_ != timers_run)
+		redisplay_preserve_echo_area (9);
+	      int timeout_ms_ = wasmacs_timespec_to_timeout_ms (next_timer_);
+	      if (wasmacs_host_wait_for_input (timeout_ms_) == 0)
+		{
+		  unsigned post_timers_ = timers_run;
+		  timer_check ();
+		  if (post_timers_ != timers_run)
+		    {
+		      redisplay_preserve_echo_area (9);
+		      wasmacs_host_flush_terminal_output ();
+		    }
+		}
 	      wasmacs_os_maybe_apply_terminal_resize ();
 	      wasmacs_os_timing_checkpoint (10);
 	      gobble_input ();

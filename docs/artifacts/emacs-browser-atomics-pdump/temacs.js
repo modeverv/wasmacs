@@ -71,7 +71,7 @@ var ENVIRONMENT_IS_SHELL = !ENVIRONMENT_IS_WEB && !ENVIRONMENT_IS_NODE && !ENVIR
 
 // --pre-jses are emitted after the Module integration code, so that they can
 // refer to Module (if they choose; they can also define Module)
-// include: /var/folders/l2/fl54zpqn0h52frtq4vglk4c80000gn/T/tmpgon6dmzn.js
+// include: /var/folders/l2/fl54zpqn0h52frtq4vglk4c80000gn/T/tmpw7mehhru.js
 
   if (!Module['expectedDataFileDownloads']) Module['expectedDataFileDownloads'] = 0;
   Module['expectedDataFileDownloads']++;
@@ -293,21 +293,21 @@ Module['FS_createPath']("/usr/local/share/emacs/30.2/lisp", "vc", true, true);
 
   })();
 
-// end include: /var/folders/l2/fl54zpqn0h52frtq4vglk4c80000gn/T/tmpgon6dmzn.js
-// include: /var/folders/l2/fl54zpqn0h52frtq4vglk4c80000gn/T/tmpzy8ty5n1.js
+// end include: /var/folders/l2/fl54zpqn0h52frtq4vglk4c80000gn/T/tmpw7mehhru.js
+// include: /var/folders/l2/fl54zpqn0h52frtq4vglk4c80000gn/T/tmpblww7bgm.js
 
     // All the pre-js content up to here must remain later on, we need to run
     // it.
     if ((typeof ENVIRONMENT_IS_WASM_WORKER != 'undefined' && ENVIRONMENT_IS_WASM_WORKER) || (typeof ENVIRONMENT_IS_PTHREAD != 'undefined' && ENVIRONMENT_IS_PTHREAD) || (typeof ENVIRONMENT_IS_AUDIO_WORKLET != 'undefined' && ENVIRONMENT_IS_AUDIO_WORKLET)) Module['preRun'] = [];
     var necessaryPreJSTasks = Module['preRun'].slice();
-  // end include: /var/folders/l2/fl54zpqn0h52frtq4vglk4c80000gn/T/tmpzy8ty5n1.js
-// include: /var/folders/l2/fl54zpqn0h52frtq4vglk4c80000gn/T/tmp4gg5sece.js
+  // end include: /var/folders/l2/fl54zpqn0h52frtq4vglk4c80000gn/T/tmpblww7bgm.js
+// include: /var/folders/l2/fl54zpqn0h52frtq4vglk4c80000gn/T/tmp8mam17i9.js
 
     if (!Module['preRun']) throw 'Module.preRun should exist because file support used it; did a pre-js delete it?';
     necessaryPreJSTasks.forEach((task) => {
       if (Module['preRun'].indexOf(task) < 0) throw 'All preRun tasks that exist before user pre-js code should remain after; did you replace Module or modify Module.preRun?';
     });
-  // end include: /var/folders/l2/fl54zpqn0h52frtq4vglk4c80000gn/T/tmp4gg5sece.js
+  // end include: /var/folders/l2/fl54zpqn0h52frtq4vglk4c80000gn/T/tmp8mam17i9.js
 
 
 var arguments_ = [];
@@ -6603,6 +6603,18 @@ var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
     };
 
 
+  function _wasmacs_host_flush_terminal_output() {
+      var outBytes = globalThis.__wasmacsTerminalOutputBytes || [];
+      var sentCount = globalThis.__wasmacsSentOutputCount || 0;
+      if (outBytes.length > sentCount) {
+        var newBytes = Array.prototype.slice.call(outBytes, sentCount);
+        globalThis.__wasmacsSentOutputCount = outBytes.length;
+        if (typeof self !== "undefined" && typeof self.postMessage === "function") {
+          self.postMessage({ type: "terminal-output-bytes", bytes: newBytes });
+        }
+      }
+    }
+
   
   var wasmacs_atomics_env = {
   };
@@ -6648,27 +6660,25 @@ var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
     }
 
   
-  function _wasmacs_host_wait_for_input() {
+  
+  function _wasmacs_host_wait_for_input(timeout_ms) {
       var tEnter = Date.now();
       globalThis.__wasmacsHostWaitForInputCount =
         (globalThis.__wasmacsHostWaitForInputCount || 0) + 1;
       var waitNum = globalThis.__wasmacsHostWaitForInputCount;
   
       // ── 1. Flush pending terminal output ────────────────────────
-      var outBytes = globalThis.__wasmacsTerminalOutputBytes || [];
-      var sentCount = globalThis.__wasmacsSentOutputCount || 0;
-      if (outBytes.length > sentCount) {
-        var newBytes = Array.prototype.slice.call(outBytes, sentCount);
-        globalThis.__wasmacsSentOutputCount = outBytes.length;
-        if (typeof self !== "undefined" && typeof self.postMessage === "function") {
-          self.postMessage({ type: "terminal-output-bytes", bytes: newBytes });
-        }
-      }
+      _wasmacs_host_flush_terminal_output();
   
       // ── 2. Block via Atomics.wait ────────────────────────────────
+      // Return codes: 0=timeout (scheduler wake), 1=input, 2=resize, -1=no SAB
       var sab = globalThis.__wasmacsInputSAB;
-      if (!sab) return;
+      if (!sab) return -1;
       var signal = new Int32Array(sab, 0, 2);
+  
+      // timeout_ms is derived from Emacs timer_check() in keyboard.c.
+      // Fall back to 50ms if not provided (e.g. diagnostic callers).
+      var timeoutMs = (timeout_ms > 0) ? timeout_ms : 50;
   
       for (;;) {
         var lastSeen = Atomics.load(signal, 0);
@@ -6685,12 +6695,15 @@ var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
             });
           } catch(e) {}
         }
-        var result = Atomics.wait(signal, 0, lastSeen);
+        var result = Atomics.wait(signal, 0, lastSeen, timeoutMs);
+        if (result === "timed-out") {
+          return 0; // WASMACS_WAIT_TIMEOUT — let C run timer_check()
+        }
         if (globalThis.__wasmacsTerminalSizeSAB) {
           try {
             var sizeSignal = new Int32Array(globalThis.__wasmacsTerminalSizeSAB);
             if (Atomics.load(sizeSignal, 0) !== (globalThis.__wasmacsTerminalResizeSeen || 0))
-              return;
+              return 2; // WASMACS_WAIT_RESIZE
           } catch(e) {}
         }
         if (result === "ok" || Atomics.load(signal, 1) > 0) break;
@@ -6721,6 +6734,7 @@ var findStringEnd = (heapOrArray, idx, maxBytesToRead, ignoreNul) => {
           });
         } catch(e) {}
       }
+      return 1; // WASMACS_WAIT_INPUT
     }
 
   function _wasmacs_os_timing_checkpoint(code) {
@@ -7826,6 +7840,8 @@ var wasmImports = {
   invoke_vjjjj,
   /** @export */
   proc_exit: _proc_exit,
+  /** @export */
+  wasmacs_host_flush_terminal_output: _wasmacs_host_flush_terminal_output,
   /** @export */
   wasmacs_host_network_fetch_json,
   /** @export */
