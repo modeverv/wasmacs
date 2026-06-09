@@ -113,7 +113,7 @@ test("Atomics pdump browser builder can strip link debug info separately", async
     "utf8",
   );
 
-  assert.match(source, /EMACS_WASM_CFLAGS:--g3 -O0/);
+  assert.match(source, /EMACS_WASM_CFLAGS:--O3 -g0/);
   assert.match(source, /EMACS_WASM_LINKFLAGS:-\$\{emacs_wasm_cflags\}/);
   assert.match(source, /emacs_atomics_pdump_ldflags="\$\{emacs_wasm_linkflags\}/);
 });
