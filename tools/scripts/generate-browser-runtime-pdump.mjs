@@ -32,6 +32,7 @@ async function makeModule(extraSetup) {
   const mod = {
     noInitialRun: true,
     thisProgram: "temacs",
+    ENV: {},  // Pre-initialize for -O2 builds where Module.ENV may not be auto-created
     locateFile: (f) => `${artifactDir}/${f}`,
     print:    (t) => { lines.push(`OUT:${t}`); },
     printErr: (t) => { if (!/syscall|arch-dep|prlimit/.test(t)) lines.push(`ERR:${t}`); },
@@ -56,7 +57,7 @@ async function makeModule(extraSetup) {
   vm.createContext(ctx);
   vm.runInContext(code, ctx, { filename: "temacs" });
   await ready;
-  return { mod, lines };
+  return { mod, lines, ctx };
 }
 
 // --- Step 1: Run pbootstrap ---
@@ -97,12 +98,21 @@ process.stderr.write(`pdmp written: ${outputPdmpPath} (${pdmpBytes.byteLength} b
 
 // --- Step 2: Verify pdmp load ---
 process.stderr.write("verifying pdmp load...\n");
-const { mod: M2, lines: l2 } = await makeModule((m) => {
-  // Inject pdmp into MEMFS before callMain
+const ttyOut2 = [];
+const { mod: M2, lines: l2, ctx: ctx2 } = await makeModule((m) => {
+  // /temacs (with slash) is required so load_pdump takes the strchr branch and
+  // honours --dump-file; without the slash find_emacs_executable returns NULL
+  // which nullifies dump_file and falls through to cold boot.
+  m.thisProgram = "/temacs";
   m.preRun.push(() => {
     m.FS.writeFile("/bootstrap-emacs.pdmp", pdmpBytes);
   });
 });
+
+// The Atomics host library routes Emacs stdout through __wasmacsTerminalOutputBytes
+// (a global array in the vm context) rather than Module.print.  Set it now,
+// before callMain, so the host library flushes bytes into our capture array.
+ctx2.__wasmacsTerminalOutputBytes = ttyOut2;
 
 M2.callMain([
   "--dump-file=/bootstrap-emacs.pdmp",
@@ -112,7 +122,10 @@ M2.callMain([
   "--eval", '(princ "GC:PASS\\n")',
 ]);
 
-const passed = l2.some((l) => l.includes("VERSION:30.2")) && l2.some((l) => l.includes("GC:PASS"));
+const ttyText2 = new TextDecoder().decode(new Uint8Array(ttyOut2));
+// Check both Module.print lines (l2) and tty-routed output for expected markers.
+const allOutput = [...l2, ...ttyText2.split("\n").map(t => "TTY:" + t)];
+const passed = allOutput.some((l) => l.includes("VERSION:30.2")) && allOutput.some((l) => l.includes("GC:PASS"));
 if (passed) {
   process.stderr.write("pdmp load verification: PASS\n");
   console.log("STATUS:PASS");
@@ -120,6 +133,6 @@ if (passed) {
   console.log(`SIZE:${pdmpBytes.byteLength}`);
 } else {
   process.stderr.write("pdmp load verification: FAIL\n");
-  l2.forEach((l) => process.stderr.write(l + "\n"));
+  allOutput.forEach((l) => process.stderr.write(l + "\n"));
   process.exit(1);
 }

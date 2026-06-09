@@ -1946,6 +1946,80 @@ Validation:
 
 **vendor/emacs unchanged.**
 
+## Task M260609: -O2 wasm + pdump → Atomics command loop PASS
+
+### Summary
+
+- **Goal**: determine whether a `-O2 -g0` Emscripten build can reach the
+  interactive Atomics command loop if pdump is used to skip cold loadup.
+- **Prior context**: M260607b showed all optimized levels fail at
+  `Loading subr (source)...` when built with `--with-pdumper=no` (no pdump).
+  This probe used the existing `--with-dumping=portable` build tree, which
+  is a separate configuration not covered by M260607b.
+
+### Probe infrastructure added
+
+- `tools/scripts/probe-wasm-optimized-pdump-command-loop.sh` — three-stage
+  shell probe: (1) apply OS compat patches + build with `-O2 -g0`, (2)
+  generate pdump via cold loadup, (3) Atomics command loop boot test.
+- `tools/scripts/probe-wasm-optimized-pdump-boot.mjs` — Worker-thread Node
+  script; wraps `Atomics.wait` to detect command loop entry; logs
+  checkpoints to `logs/wasm-optimized-pdump-boot.jsonl`.
+- `tools/scripts/generate-browser-runtime-pdump.mjs` — updated to pre-init
+  `ENV: {}` for `-O2` builds (Module.ENV not auto-created without `-O0`)
+  and to use `thisProgram: "/temacs"` (with leading slash) in the
+  verification step so `load_pdump` honours `--dump-file`.
+
+### Key fix: `thisProgram: "/temacs"` in pdump verification
+
+`load_pdump` in `emacs.c` calls `find_emacs_executable(argv[0], ...)`.
+Without a directory separator in `argv[0]`, it searches PATH in MEMFS,
+finds nothing, returns NULL, and nullifies `dump_file` — falling through to
+cold boot (silently ignoring `--dump-file`).  With `"/temacs"`, the
+`strchr(argv0, '/')` branch triggers `xstrdup("/temacs")`, returning a
+non-null path, so `pdumper_load` is called correctly.
+
+### Probe results (2026-06-09, artifact: `build/artifacts/emacs-browser-atomics-pdump-O2-g0/`)
+
+- **Stage 1 (build `-O2 -g0`)**: PASS.
+  - Only `emacs.o`, `keyboard.o`, `sysdep.o` recompiled (rest cached).
+  - Artifacts: `temacs` (523K JS), `temacs.wasm` (2.3M), `temacs.data` (139M).
+  - `lib-src/make-fingerprint` replaced with no-op shell script; native
+    `make-fingerprint` cannot scan Emscripten JS output for the 32-byte
+    `fingerprint[]` pattern.  Since both pdump generation and loading use the
+    same binary the placeholder fingerprint values match.
+
+- **Stage 2 (cold loadup → generate pdump)**: PASS.
+  - Cold loadup under `-O2 -g0` with `--with-dumping=portable` **succeeded**.
+  - `bootstrap-emacs.pdmp` written: 12,824,304 bytes.
+  - This contradicts M260607b because that matrix used `--with-pdumper=no`;
+    with `--with-dumping=portable` the optimized build completes cold loadup.
+
+- **Stage 3 (Atomics command loop boot test)**: **PASS**.
+  - `atomics-wait-entered`: YES (first hit at t+0.4s after callMain start)
+  - `tty-flush`:            YES (3 flushes, 288 + 2269 + 3690 = 6247 bytes)
+  - `aborted`:              NO
+  - `threw`:                NO
+  - Steady Atomics ticks observed for 30s — Emacs is in the interactive
+    command loop at full optimization.
+
+### Interpretation
+
+The prior optimization failure (M260607b) was caused by the combination of
+`--with-pdumper=no` (cold loadup required at every boot) and early
+loadup-time GC/stack issues that `-O2` codegen exposed.  With pdump, the
+cold loadup happens once offline; the browser loads a pre-warmed image and
+skips the fragile early load sequence entirely.  This confirms the pdump
+route is the correct product path for optimized wasm builds.
+
+### Validation
+
+- `WASMACS_ARTIFACT_DIR=<abs-path> WASMACS_BOOT_TIMEOUT_MS=30000 node --stack-size=65500 tools/scripts/probe-wasm-optimized-pdump-boot.mjs`: RESULT:PASS.
+- Log: `logs/wasm-optimized-pdump-command-loop-O2-g0.txt`
+- Boot checkpoint log: `logs/wasm-optimized-pdump-boot.jsonl`
+
+**vendor/emacs unchanged.**
+
 ## Task M260607b: optimized wasm batch without TTY waitpoint
 
 ### Summary

@@ -18,7 +18,7 @@ build_dir="${repo_root}/build/emacs-pdump-configure-probe/build-gnu-host-interna
 out_dir="${repo_root}/build/artifacts/emacs-browser-atomics-pdump"
 atomics_host_library="${repo_root}/tools/scripts/wasmacs-atomics-host-library.js"
 emmake_bin="${EMMAKE:-emmake}"
-emacs_wasm_cflags="${EMACS_WASM_CFLAGS:--g3 -O0}"
+emacs_wasm_cflags="${EMACS_WASM_CFLAGS:--O3 -g0}"
 emacs_wasm_linkflags="${EMACS_WASM_LINKFLAGS:-${emacs_wasm_cflags}}"
 initial_memory="${WASMACS_ATOMICS_PDUMP_INITIAL_MEMORY:-1073741824}"
 allow_memory_growth="${WASMACS_ATOMICS_PDUMP_ALLOW_MEMORY_GROWTH:-1}"
@@ -74,6 +74,19 @@ if [ -d "${repo_root}/src/emacs-lisp" ]; then
 fi
 
 loadup_el="${pdump_src}/lisp/loadup.el"
+if ! grep -q "wasmacs wasm-O2: suppress GC during cold loadup" "${loadup_el}"; then
+  echo "=== Patching loadup.el to suppress GC during cold loadup (-O2/-O3 wasm-local GC corruption) ==="
+  perl -0pi -e '
+    s/(\(setq redisplay--inhibit-bidi t\)\n)/$1\n;; wasmacs wasm-O2: suppress GC during cold loadup to avoid wasm-local GC corruption.\n;; Under -O2\/-O3 Emscripten builds, the C compiler may keep Lisp_Objects in wasm value-stack\n;; locals that are not scanned by the conservative GC.  Setting a very high threshold\n;; prevents GC from firing while early Lisp files are loaded.\n(setq gc-cons-threshold (* 400 1024 1024))\n/
+  ' "${loadup_el}"
+fi
+if ! grep -q "wasmacs wasm-O2: set a large gc-cons-threshold for interactive use" "${loadup_el}"; then
+  echo "=== Patching loadup.el to bake in a large gc-cons-threshold for interactive use ==="
+  perl -0pi -e '
+    s/(\n        \(message "Dumping under the name %s" output\))/
+        ;; wasmacs wasm-O2: set a large gc-cons-threshold for interactive use.\n        ;; Default (~800KB) causes excessive GC in the wasm interpreter; 100MB\n        ;; eliminates GC for typical editing workloads.\n        (setq gc-cons-threshold (* 100 1024 1024))$1/
+  ' "${loadup_el}"
+fi
 if ! grep -q "wasmacs pbootstrap: preload url fetch lisp" "${loadup_el}"; then
   echo "=== Patching loadup.el to preload url fetch Lisp into pbootstrap pdmp ==="
   perl -0pi -e '

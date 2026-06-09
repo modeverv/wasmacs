@@ -57,13 +57,23 @@ async function splitLargeDataFile(filePath, chunkSize = 32 * 1024 * 1024) {
 async function patchTemacsJsForAsyncPreload(filePath) {
   if (!existsSync(filePath)) return;
   const source = await readFile(filePath, "utf8");
-  const patched = source.replace(
+  // Emscripten emits this snippet pretty-printed for -O0/-g3 builds and
+  // minified (no whitespace) for -O2/-O3 builds; handle both forms.
+  let patched = source.replace(
     "      if (!fetched) {\n        fetched = await fetchPromise;\n      }\n      processPackageData(fetched);",
     "      if (!fetched) {\n        fetched = await fetchPromise;\n      } else {\n        fetched = await fetched;\n      }\n      processPackageData(fetched);",
   );
-  const awaited = patched.replace(
+  patched = patched.replace(
+    "if(!fetched){fetched=await fetchPromise}processPackageData(fetched)",
+    "if(!fetched){fetched=await fetchPromise}else{fetched=await fetched}processPackageData(fetched)",
+  );
+  let awaited = patched.replace(
     "      processPackageData(fetched);",
     "      await processPackageData(fetched);",
+  );
+  awaited = awaited.replace(
+    "}processPackageData(fetched)}",
+    "}await processPackageData(fetched)}",
   );
   if (awaited !== source) await writeFile(filePath, awaited);
 }
