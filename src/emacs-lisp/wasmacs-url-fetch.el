@@ -67,7 +67,12 @@ local value is \"http://127.0.0.1:8787/\".")
    (t (error "Unsupported wasmacs fetch body: %S" (type-of value)))))
 
 (defun wasmacs-url-fetch--header-lines (headers)
-  "Return HEADERS as CRLF-terminated HTTP header lines."
+  "Return HEADERS as newline-terminated HTTP header lines.
+
+Lines use a bare LF rather than CRLF: `mm-copy-to-buffer' (used by
+`url-insert' to split the header/body of a `url-retrieve' buffer)
+locates the body via the regexp \"^\\n\", which only matches a blank
+line made of a lone LF, not a CRLF pair."
   (mapconcat
    (lambda (header)
      (let ((name (cond
@@ -80,7 +85,7 @@ local value is \"http://127.0.0.1:8787/\".")
                    (t ""))))
        (format "%s: %s" name value)))
    headers
-   "\r\n"))
+   "\n"))
 
 (defun wasmacs-url-fetch--host-fetch (request)
   "Fetch REQUEST through the wasm host network primitive."
@@ -142,11 +147,11 @@ so an alist here would fail to serialize."
       (set-buffer-multibyte nil)
       (setq-local url-current-object url)
       (setq-local url-http-response-status status)
-      (insert (format "HTTP/1.1 %d %s\r\n" status status-text))
+      (insert (format "HTTP/1.1 %d %s\n" status status-text))
       (let ((header-lines (wasmacs-url-fetch--header-lines headers)))
         (unless (string-empty-p header-lines)
-          (insert header-lines "\r\n")))
-      (insert "\r\n")
+          (insert header-lines "\n")))
+      (insert "\n")
       (insert body)
       (goto-char (point-min)))
     buffer))

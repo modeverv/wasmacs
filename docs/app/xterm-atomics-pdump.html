@@ -92,8 +92,12 @@ const WASIFS_IDB_ST  = "snapshots";
 
 function openWasifsIDB() {
   return new Promise((res, rej) => {
-    const r = indexedDB.open(WASIFS_IDB_DB, 1);
-    r.onupgradeneeded = () => r.result.createObjectStore(WASIFS_IDB_ST);
+    const r = indexedDB.open(WASIFS_IDB_DB, 2);
+    r.onupgradeneeded = () => {
+      if (!r.result.objectStoreNames.contains(WASIFS_IDB_ST)) {
+        r.result.createObjectStore(WASIFS_IDB_ST);
+      }
+    };
     r.onsuccess = () => res(r.result);
     r.onerror   = () => rej(r.error);
   });

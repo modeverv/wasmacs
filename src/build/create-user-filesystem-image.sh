@@ -31,7 +31,11 @@ EOF
 
 : >"$staging_root/home/user/.local/share/wasmacs/journal.jsonl"
 
-tar -C "$staging_root" -cf "$image_path" home
+# COPYFILE_DISABLE avoids macOS AppleDouble "._*" sidecar entries, and
+# --no-xattrs/--no-mac-metadata avoid "PaxHeader/*" extended-attribute
+# entries. Either of these would otherwise be mounted as bogus files/
+# directories under /home/user.
+COPYFILE_DISABLE=1 tar -C "$staging_root" --no-xattrs --no-mac-metadata -cf "$image_path" home
 content_hash="$(shasum -a 256 "$image_path" | awk '{print $1}')"
 created_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 file_count="$(find "$staging_root/home" -type f | wc -l | tr -d ' ')"

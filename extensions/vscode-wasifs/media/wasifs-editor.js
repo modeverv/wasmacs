@@ -274,6 +274,12 @@ function handleRuntimeWorkerMessage(message) {
     writeTerminalBytes(message.bytes ?? []);
     return;
   }
+  if (message.type === "wasifs-snapshot") {
+    const bytes = new Uint8Array(message.bytes);
+    currentBytes = bytes;
+    vscode.postMessage({ type: "wasifs.save", bytes });
+    return;
+  }
   if (message.type === "runtime-configured") {
     appendTerminalLine(`[wasmacs] runtime configured: ${message.xtermArtifactDir}`);
     return;

@@ -23,6 +23,15 @@ BLOCKED_HEADERS = %w[
   transfer-encoding
 ].freeze
 
+# Net::HTTP transparently decodes gzip/deflate response bodies, so headers
+# describing the original (encoded) representation no longer match
+# `bodyBase64` and would cause url.el to misread the response.
+STALE_RESPONSE_HEADERS = %w[
+  content-encoding
+  content-length
+  transfer-encoding
+].freeze
+
 def allowed_origins
   raw = ENV.fetch('WASMACS_PROXY_ALLOWED_ORIGINS', '')
   values = raw.strip.empty? ? DEFAULT_ALLOWED_ORIGINS : raw.split(',')
@@ -103,7 +112,8 @@ def fetch_upstream(payload)
     url: target.to_s,
     status: response.code.to_i,
     statusText: response.message.to_s,
-    headers: response.each_header.map { |name, value| { name: name.downcase, value: value } },
+    headers: response.each_header.reject { |name, _| STALE_RESPONSE_HEADERS.include?(name.downcase) }
+                     .map { |name, value| { name: name.downcase, value: value } },
     bodyBase64: Base64.strict_encode64(response.body || '')
   }
 end

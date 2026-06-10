@@ -82,6 +82,38 @@ const BLOCK = 512;
 const td = new TextDecoder();
 const te = new TextEncoder();
 
+// ── IndexedDB wasifs store (Workers can use IDB; localStorage is unavailable) ──
+const WASIFS_IDB_DB    = "wasmacs-wasifs";
+const WASIFS_IDB_STORE = "snapshots";
+
+function openWasifsIDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(WASIFS_IDB_DB, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(WASIFS_IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror   = () => reject(req.error);
+  });
+}
+function saveWasifsToIDB(bytes) {
+  openWasifsIDB().then(db => {
+    const tx = db.transaction(WASIFS_IDB_STORE, "readwrite");
+    tx.objectStore(WASIFS_IDB_STORE).put(bytes, USER_WASIFS_KEY);
+    tx.oncomplete = () => db.close();
+    tx.onerror    = () => db.close();
+  }).catch(() => {});
+}
+async function loadWasifsFromIDB() {
+  try {
+    const db = await openWasifsIDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(WASIFS_IDB_STORE, "readonly");
+      const req = tx.objectStore(WASIFS_IDB_STORE).get(USER_WASIFS_KEY);
+      req.onsuccess = () => { db.close(); resolve(req.result ?? null); };
+      req.onerror   = () => { db.close(); resolve(null); };
+    });
+  } catch (_) { return null; }
+}
+
 function trimNulls(bytes) {
   const zero = bytes.indexOf(0);
   return td.decode(bytes.subarray(0, zero === -1 ? bytes.length : zero)).trim();
@@ -91,15 +123,9 @@ function parseOctal(bytes) {
   return text.length === 0 ? 0 : Number.parseInt(text, 8);
 }
 function padLen(n) { return Math.ceil(n / BLOCK) * BLOCK; }
-function loadBase64(key) {
-  try { return localStorage.getItem(key); } catch (_) { return null; }
-}
-function saveToLocalStorage(bytes) {
-  saveBase64(USER_WASIFS_KEY, b64encode(bytes));
-}
-function saveBase64(key, val) {
-  try { localStorage.setItem(key, val); } catch (_) {}
-}
+function loadBase64(_key) { return null; } // localStorage unavailable in workers
+function saveToLocalStorage(bytes) { saveWasifsToIDB(bytes); }
+function saveBase64(__key, __val) { /* no-op: use IDB instead */ }
 function b64decode(text) {
   const bin = atob(text);
   const bytes = new Uint8Array(bin.length);
@@ -112,6 +138,16 @@ function b64encode(bytes) {
   for (let o = 0; o < bytes.length; o += sz)
     bin += String.fromCharCode(...bytes.subarray(o, o + sz));
   return btoa(bin);
+}
+
+// macOS `tar` embeds extended-attribute metadata as `PaxHeader/<name>` (PAX
+// extended header) and `._<name>` (AppleDouble resource fork) entries. These
+// are not real user files/directories and must not be mounted, or a bogus
+// "PaxHeader" directory shows up in /home/user.
+function isMacTarMetadata(cleanEntry) {
+  const base = cleanEntry.slice(cleanEntry.lastIndexOf("/") + 1);
+  return cleanEntry === "PaxHeader" || cleanEntry.startsWith("PaxHeader/")
+    || cleanEntry.includes("/PaxHeader/") || base.startsWith("._");
 }
 
 /** Parse tar bytes, return Map of "/home/user/..." → Uint8Array */
@@ -130,7 +166,7 @@ function parseUserTar(bytes) {
 
     // Map "home/user/xxx" → "/home/user/xxx"
     const cleanEntry = entry.replace(/\/$/, "");
-    if (cleanEntry === "home/user" || cleanEntry.startsWith("home/user/")) {
+    if ((cleanEntry === "home/user" || cleanEntry.startsWith("home/user/")) && !isMacTarMetadata(cleanEntry)) {
       const isDir = type === "5" || entry.endsWith("/");
       const path = cleanEntry === "home/user" ? "/home/user" : "/" + cleanEntry;
       nodes.set(path, {
@@ -143,12 +179,12 @@ function parseUserTar(bytes) {
   return nodes;
 }
 
-/** Load user .wasifs from localStorage, fallback to empty image */
+/** Load user .wasifs from IDB, fallback to empty image */
 async function loadUserImage() {
-  const stored = loadBase64(USER_WASIFS_KEY);
+  const stored = await loadWasifsFromIDB();
   if (stored) {
-    post("status", { text: "loading user image from storage..." });
-    return parseUserTar(b64decode(stored));
+    post("status", { text: "loading user image from IDB..." });
+    return parseUserTar(stored instanceof Uint8Array ? stored : new Uint8Array(stored));
   }
   // Load empty image from server
   post("status", { text: "fetching empty user image..." });
@@ -204,9 +240,7 @@ function walkFS(FS, dir, nodes) {
         const stat = FS.stat(path);
         if (FS.isDir(stat.mode)) {
           nodes.set(path, { isDir: true, data: null });
-          // Skip internal state dirs
-          if (!path.includes("/.local/"))
-            walkFS(FS, path, nodes);
+          walkFS(FS, path, nodes);
         } else {
           const data = FS.readFile(path, { encoding: "binary" });
           nodes.set(path, { isDir: false, data: new Uint8Array(data) });
@@ -360,7 +394,7 @@ async function startEmacs(args) {
       const bytes = exportUserImage(Module.FS);
       if (bytes.length !== lastSaveBytes) {
         lastSaveBytes = bytes.length;
-        saveBase64(USER_WASIFS_KEY, b64encode(bytes));
+        saveWasifsToIDB(bytes);
         userImageDirty = false;
         post("status", { text: `saved user image (${bytes.length} bytes)` });
       }

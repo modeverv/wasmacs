@@ -76,6 +76,12 @@ async function startXtermSession() {
         setXtermStatus("running");
       }
     }
+    if (msg.type === "wasifs-snapshot") {
+      const bytes = new Uint8Array(msg.bytes);
+      userImage = BrowserUserImage.fromBytes(bytes);
+      saveUserImageState();
+      renderUserFileList();
+    }
     if (msg.type === "status") setXtermStatus(msg.text);
     if (msg.type === "ready") setXtermStatus("runtime ready");
     if (msg.type === "pdmp-materialized") setXtermStatus("starting Emacs");
@@ -123,6 +129,28 @@ if (startXtermSessionButton) {
 
 const defaultBufferPath = "/home/user/notes.txt";
 const storageKey = "wasmacs:user-filesystem.wasifs:v1";
+
+const WASIFS_IDB_DB = "wasmacs-wasifs";
+const WASIFS_IDB_STORE = "snapshots";
+
+function saveUserImageState() {
+  localStorage.setItem(storageKey, userImage.toBase64());
+  const bytes = userImage.toBytes();
+  const req = indexedDB.open(WASIFS_IDB_DB, 2);
+  req.onupgradeneeded = () => {
+    if (!req.result.objectStoreNames.contains(WASIFS_IDB_STORE)) {
+      req.result.createObjectStore(WASIFS_IDB_STORE);
+    }
+  };
+  req.onsuccess = () => {
+    const db = req.result;
+    const tx = db.transaction(WASIFS_IDB_STORE, "readwrite");
+    tx.objectStore(WASIFS_IDB_STORE).put(bytes, storageKey);
+    tx.oncomplete = () => db.close();
+    tx.onerror = () => db.close();
+  };
+}
+
 const defaultText = [
   "Welcome to wasmacs.",
   "",
@@ -214,7 +242,7 @@ async function loadBuffer(path = bufferPath) {
 function persistEditorIfModified() {
   if (!userImage || !isEditorModified(savedText, editor.value)) return false;
   userImage.writeText(bufferPath, editor.value);
-  localStorage.setItem(storageKey, userImage.toBase64());
+  saveUserImageState();
   savedText = editor.value;
   pointIndex = Math.min(pointIndex, savedText.length);
   renderUserFileList();
@@ -241,7 +269,7 @@ async function openBufferFromInput() {
 
 function saveBuffer() {
   userImage.writeText(bufferPath, editor.value);
-  localStorage.setItem(storageKey, userImage.toBase64());
+  saveUserImageState();
   savedText = editor.value;
   pointIndex = Math.min(pointIndex, savedText.length);
   renderTextGrid(textToGridDrawMessage({ path: bufferPath, pointIndex, text: savedText }));
@@ -262,7 +290,7 @@ function exportUserImage() {
 
 async function importUserImage(file) {
   userImage = BrowserUserImage.fromBytes(new Uint8Array(await file.arrayBuffer()));
-  localStorage.setItem(storageKey, userImage.toBase64());
+  saveUserImageState();
   await loadBuffer(bufferPath);
 }
 
@@ -464,7 +492,7 @@ function handlePendingCommandMessage(message) {
 function applyWorkerSyncFile(message) {
   smallOs.assertReverseSyncAllowed();
   userImage.writeText(message.path, message.text);
-  localStorage.setItem(storageKey, userImage.toBase64());
+  saveUserImageState();
   if (message.path === bufferPath) {
     savedText = message.text;
     editor.value = message.text;
@@ -547,7 +575,7 @@ window.__wasmacsSmoke = {
     if (!userImage) userImage = await loadUserImage();
     const normalizedPath = normalizeUserPath(path);
     userImage.writeText(normalizedPath, text);
-    localStorage.setItem(storageKey, userImage.toBase64());
+    saveUserImageState();
     await loadBuffer(normalizedPath);
     return this.state();
   },
@@ -556,7 +584,7 @@ window.__wasmacsSmoke = {
     commandQueue = [];
     await loadBuffer(path);
     userImage.writeText(bufferPath, savedText);
-    localStorage.setItem(storageKey, userImage.toBase64());
+    saveUserImageState();
     renderUserFileList();
     return this.state();
   },

@@ -261,8 +261,12 @@ const WASIFS_IDB_STORE = "snapshots";
 
 function openWasifsIDB() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(WASIFS_IDB_DB, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(WASIFS_IDB_STORE);
+    const req = indexedDB.open(WASIFS_IDB_DB, 2);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(WASIFS_IDB_STORE)) {
+        req.result.createObjectStore(WASIFS_IDB_STORE);
+      }
+    };
     req.onsuccess = () => resolve(req.result);
     req.onerror   = () => reject(req.error);
   });
@@ -313,6 +317,16 @@ function b64encode(bytes) {
   return btoa(bin);
 }
 
+// macOS `tar` embeds extended-attribute metadata as `PaxHeader/<name>` (PAX
+// extended header) and `._<name>` (AppleDouble resource fork) entries. These
+// are not real user files/directories and must not be mounted, or a bogus
+// "PaxHeader" directory shows up in /home/user.
+function isMacTarMetadata(cleanEntry) {
+  const base = cleanEntry.slice(cleanEntry.lastIndexOf("/") + 1);
+  return cleanEntry === "PaxHeader" || cleanEntry.startsWith("PaxHeader/")
+    || cleanEntry.includes("/PaxHeader/") || base.startsWith("._");
+}
+
 function parseUserTar(bytes) {
   const nodes = new Map();
   let off = 0;
@@ -326,7 +340,7 @@ function parseUserTar(bytes) {
     const type = String.fromCharCode(h[156] || 48);
     const dstart = off + BLOCK;
     const cleanEntry = entry.replace(/\/$/, "");
-    if (cleanEntry === "home/user" || cleanEntry.startsWith("home/user/")) {
+    if ((cleanEntry === "home/user" || cleanEntry.startsWith("home/user/")) && !isMacTarMetadata(cleanEntry)) {
       const isDir = type === "5" || entry.endsWith("/");
       const path = cleanEntry === "home/user" ? "/home/user" : "/" + cleanEntry;
       nodes.set(path, { isDir, data: isDir ? null : bytes.slice(dstart, dstart + size) });
@@ -382,7 +396,10 @@ function postUserImageSnapshot(FS, reason) {
   if (!FS || globalThis.__wasmacsExportingUserImage) return;
   globalThis.__wasmacsExportingUserImage = true;
   try {
-    const bytes = exportUserImage(FS);
+    const nodes = new Map();
+    nodes.set("/home/user", { isDir: true, data: null });
+    walkFS(FS, "/home/user", nodes);
+    const bytes = createUserTar(nodes);
     self.postMessage(
       { type: "wasifs-snapshot", bytes: bytes.buffer, reason },
       [bytes.buffer],
@@ -393,6 +410,7 @@ function postUserImageSnapshot(FS, reason) {
     globalThis.__wasmacsExportingUserImage = false;
   }
 }
+
 function walkFS(FS, startDir, nodes) {
   const queue = [startDir];
   while (queue.length > 0) {
@@ -404,7 +422,7 @@ function walkFS(FS, startDir, nodes) {
           const stat = FS.stat(path);
           if (FS.isDir(stat.mode)) {
             nodes.set(path, { isDir: true, data: null });
-            if (!path.includes("/.local/")) queue.push(path);
+            queue.push(path);
           } else {
             nodes.set(path, { isDir: false, data: new Uint8Array(FS.readFile(path, { encoding: "binary" })) });
           }

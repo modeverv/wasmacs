@@ -19,8 +19,19 @@ function parentPath(path) {
   return index === 0 ? "/" : normalized.slice(0, index);
 }
 
+// macOS `tar` embeds extended-attribute metadata as `PaxHeader/<name>` (PAX
+// extended header) and `._<name>` (AppleDouble resource fork) entries. These
+// are not real user files/directories and must not be mounted, or a bogus
+// "PaxHeader" directory shows up in /home/user.
+function isMacTarMetadata(cleanEntry) {
+  const base = cleanEntry.slice(cleanEntry.lastIndexOf("/") + 1);
+  return cleanEntry === "PaxHeader" || cleanEntry.startsWith("PaxHeader/")
+    || cleanEntry.includes("/PaxHeader/") || base.startsWith("._");
+}
+
 function entryToMountPath(entryPath) {
   const clean = entryPath.replace(/\/$/, "");
+  if (isMacTarMetadata(clean)) return null;
   if (clean === "system") return "/system";
   if (clean.startsWith("system/")) return `/${clean}`;
   if (clean === "home/user") return "/home/user";
