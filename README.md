@@ -17,6 +17,7 @@ The current main route is the browser runtime built on `SharedArrayBuffer`, `Ato
 - Boot from static hosting on GitHub Pages
 - Route `url.el` / `package.el` HTTP(S) requests through `host.network.fetch`
 - Use a user-operated self-hosted proxy for package archives that cannot be fetched directly because of CORS
+- Copy yanked text to the browser clipboard
 
 ## Current Limitations
 

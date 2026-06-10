@@ -17,7 +17,7 @@
 - GitHub Pages 上の静的配信でも起動する
 - `url.el` / `package.el` 系の HTTP(S) リクエストを `host.network.fetch` 経由に流す
 - CORS で直接 fetch できない package archive については、ユーザー管理の self-hosted proxy を使える
-
+- emacsでのヤンクをブラウザ clipboard に流す
 
 ## まだ制限があること
 
@@ -28,7 +28,7 @@
 - GUI Emacs の native frame を移植しているわけではなく、現状は xterm.js 上の terminal Emacs です
 - `docs/` に置く Pages 用 artifact は、GitHub Pages で扱える形に分割・制限しています
 - VS Code `.wasifs` extension 用の別ビルドルートを生成できる
-- 
+
 ## リポジトリ構成
 
 ```text
