@@ -85,7 +85,12 @@ async function startXtermSession() {
     if (msg.type === "status") setXtermStatus(msg.text);
     if (msg.type === "ready") setXtermStatus("runtime ready");
     if (msg.type === "pdmp-materialized") setXtermStatus("starting Emacs");
-    if (msg.type === "timing-wait-enter") setXtermStatus("interactive");
+    if (msg.type === "timing-wait-enter") {
+      setXtermStatus("interactive");
+      if (xtermTerminal && xtermWorker) {
+        xtermWorker.postMessage({ type: "terminal-resize", ...xtermTerminal.getDimensions() });
+      }
+    }
     if (msg.type === "stderr" && /^Loading /.test(msg.text ?? "")) {
       setXtermStatus(`loadup: ${(msg.text ?? "").slice(8, 60)}`);
     }

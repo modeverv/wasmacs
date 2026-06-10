@@ -38,6 +38,11 @@ function updateTerminalSize(size = {}) {
 self.onmessage = async (event) => {
   if (event.data?.type === "terminal-resize") {
     updateTerminalSize(event.data);
+    try {
+      const signal = new Int32Array(INPUT_SAB, 0, 2);
+      Atomics.add(signal, 0, 1);
+      Atomics.notify(signal, 0, 1);
+    } catch (_) {}
     post("terminal-resized", {
       rows: globalThis.__wasmacsTerminalRows,
       cols: globalThis.__wasmacsTerminalCols,

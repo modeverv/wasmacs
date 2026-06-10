@@ -540,12 +540,23 @@ function startEmacsWithPdmp(pdmpBytes) {
       flushInputToEmacs();
       emacsInteractive = true;
       setStatus("interactive wait ✓", "interactive");
+      if (terminal && lastTerminalSize) {
+        publishTerminalSize(lastTerminalSize);
+      }
     }
 
     if (debugBootOptions.debugLog && msg.type === "timing-wait-enter") {
       addLog("cp", `wait-enter#${msg.waitNum} queue=${msg.queueLen} out=${msg.outLen} fio=${msg.fioCalls}`);
       emacsInteractive = true;
       setStatus("interactive wait ✓", "interactive");
+    }
+
+    if (msg.type === "timing-wait-enter") {
+      emacsInteractive = true;
+      setStatus("interactive wait ✓", "interactive");
+      if (terminal && lastTerminalSize) {
+        publishTerminalSize(lastTerminalSize);
+      }
     }
 
     if (msg.type === "terminal-resized") {

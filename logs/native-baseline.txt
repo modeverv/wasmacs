@@ -1,5 +1,5 @@
 # Native Emacs 30.2 baseline
-date: 2026-06-10T04:31:00Z
+date: 2026-06-10T06:51:37Z
 source: vendor/emacs
 commit: 636f166cfc86aa90d63f592fd99f3fdd9ef95ebd
 tag: emacs-30.2
@@ -593,10 +593,10 @@ echo '#include "mini-gmp.h"' > gmp.h-t
   GEN      limits.h
   GEN      signal.h
   GEN      stdbit.h
+mv gmp.h-t gmp.h
   GEN      stdint.h
   GEN      stdio.h
   GEN      stdlib.h
-mv gmp.h-t gmp.h
   GEN      string.h
   GEN      sys/random.h
   GEN      sys/select.h
@@ -637,6 +637,7 @@ mv gmp.h-t gmp.h
   CC       filevercmp.o
   CC       fpending.o
   CC       free.o
+  CC       fstatat.o
 dtotimespec.c:34:27: warning: implicit conversion from 'time_t' (aka 'long') to 'double' changes value from 9223372036854775807 to 9223372036854775808 [-Wimplicit-const-int-float-conversion]
    34 |   else if (! (sec < 1.0 + TYPE_MAXIMUM (time_t)))
       |                         ~ ^~~~~~~~~~~~~~~~~~~~~
@@ -647,9 +648,8 @@ dtotimespec.c:34:27: warning: implicit conversion from 'time_t' (aka 'long') to 
       |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    50 |         : ((((t) 1 << (TYPE_WIDTH (t) - 2)) - 1) * 2 + 1)))
       |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  CC       fstatat.o
-1 warning generated.
   CC       fsusage.o
+1 warning generated.
   CC       futimens.o
   CC       getopt.o
   CC       getopt1.o
@@ -716,8 +716,8 @@ dtotimespec.c:34:27: warning: implicit conversion from 'time_t' (aka 'long') to 
 /Library/Developer/CommandLineTools/usr/bin/make -C ../admin/charsets eucjp-ms.el
 make[3]: Nothing to be done for `cp51932.el'.
 make[3]: Nothing to be done for `eucjp-ms.el'.
-make[3]: Nothing to be done for `emoji-zwj.el'.
 make[3]: Nothing to be done for `charscript.el'.
+make[3]: Nothing to be done for `emoji-zwj.el'.
 make[3]: Nothing to be done for `all'.
   CC       dispnew.o
   CC       frame.o
@@ -752,6 +752,8 @@ make[3]: Nothing to be done for `all'.
   CC       cmds.o
   CC       casetab.o
   CC       casefiddle.o
+  CC       indent.o
+  CC       search.o
 fileio.c:3954:31: warning: implicit conversion from 'off_t' (aka 'long long') to 'double' changes value from 9223372036854775807 to 9223372036854775808 [-Wimplicit-const-int-float-conversion]
  3954 |       if (0 <= v && v < 1.0 + TYPE_MAXIMUM (off_t))
       |                             ~ ^~~~~~~~~~~~~~~~~~~~
@@ -762,8 +764,6 @@ fileio.c:3954:31: warning: implicit conversion from 'off_t' (aka 'long long') to
       |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
    50 |         : ((((t) 1 << (TYPE_WIDTH (t) - 2)) - 1) * 2 + 1)))
       |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  CC       indent.o
-  CC       search.o
   CC       regex-emacs.o
   CC       undo.o
   CC       alloc.o
@@ -781,9 +781,6 @@ alloc.c:348:37: note: expanded from macro 'HI_THRESHOLD'
   CC       eval.o
   CC       floatfns.o
   CC       fns.o
-  CC       sort.o
-  CC       font.o
-  CC       print.o
 editfns.c:3976:21: warning: implicit conversion from 'unsigned long' to 'double' changes value from 18446744073709551615 to 18446744073709551616 [-Wimplicit-const-int-float-conversion]
  3976 |                       if (abs_d < UINTMAX_MAX + 1.0)
       |                                   ^~~~~~~~~~~ ~
@@ -796,25 +793,28 @@ editfns.c:3976:21: warning: implicit conversion from 'unsigned long' to 'double'
 <scratch space>:264:1: note: expanded from here
   264 | 18446744073709551615UL
       | ^~~~~~~~~~~~~~~~~~~~~~
+  CC       sort.o
+  CC       font.o
+  CC       print.o
   CC       lread.o
-1 warning generated.
   CC       syntax.o
   CC       bytecode.o
+1 warning generated.
   CC       comp.o
   CC       process.o
   CC       gnutls.o
   CC       callproc.o
+1 warning generated.
   CC       region-cache.o
   CC       timefns.o
-1 warning generated.
   CC       atimer.o
   CC       doprnt.o
   CC       intervals.o
   CC       textprop.o
   CC       composite.o
-1 warning generated.
   CC       xml.o
   CC       profiler.o
+1 warning generated.
   CC       thread.o
   CC       systhread.o
   CC       sqlite.o
