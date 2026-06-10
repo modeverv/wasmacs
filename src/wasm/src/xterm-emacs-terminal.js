@@ -125,9 +125,7 @@ export function createXtermEmacsTerminal(container, options = {}) {
   const oscClipboardHandler = term.parser?.registerOscHandler?.(52, (data) => {
     const payload = decodeOsc52ClipboardPayload(data);
     if (payload === null) return false;
-    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(payload).catch(() => {});
-    }
+    writeClipboardText(payload);
     return true;
   });
 
@@ -238,6 +236,27 @@ export function decodeOsc52ClipboardPayload(data) {
   } catch {
     return null;
   }
+}
+
+// Write text to the system clipboard via navigator.clipboard.writeText().
+// Chrome rejects this call with NotAllowedError when the document doesn't
+// have focus at call time — which can happen here because the OSC 52
+// payload arrives asynchronously (worker -> postMessage -> term.write() ->
+// OSC parser callback), not synchronously inside a key event handler. In
+// that case, retry once when the window regains focus.
+export function writeClipboardText(text, { clipboard = globalThis.navigator?.clipboard, doc = globalThis.document, win = globalThis } = {}) {
+  if (!clipboard?.writeText) {
+    console.warn("wasmacs: navigator.clipboard.writeText unavailable; OSC 52 clipboard payload dropped");
+    return;
+  }
+  const attempt = (isRetry) => clipboard.writeText(text).catch((error) => {
+    if (!isRetry && error?.name === "NotAllowedError" && doc && !doc.hasFocus() && win?.addEventListener) {
+      win.addEventListener("focus", () => attempt(true), { once: true });
+      return;
+    }
+    console.error("wasmacs: clipboard.writeText failed", error);
+  });
+  attempt(false);
 }
 
 export function controlKeyEventToBytes(event) {

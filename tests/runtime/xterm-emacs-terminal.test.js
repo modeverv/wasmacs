@@ -9,6 +9,7 @@ import {
   metaKeyEventToBytes,
   stripBracketedPasteMarkers,
   terminalKeyEventToBytes,
+  writeClipboardText,
   xtermDataToBytes,
 } from "../../src/wasm/src/xterm-emacs-terminal.js";
 
@@ -168,4 +169,66 @@ test("OSC 52 clipboard payload rejects malformed input", () => {
   assert.equal(decodeOsc52ClipboardPayload("nosep"), null);
   assert.equal(decodeOsc52ClipboardPayload("c;not-base64!!"), null);
   assert.equal(decodeOsc52ClipboardPayload(123), null);
+});
+
+test("writeClipboardText writes directly when the document has focus", async () => {
+  const writes = [];
+  const clipboard = { writeText: (text) => { writes.push(text); return Promise.resolve(); } };
+  const doc = { hasFocus: () => true };
+  const win = { addEventListener() { throw new Error("should not retry when focused"); } };
+
+  writeClipboardText("abc", { clipboard, doc, win });
+  await Promise.resolve();
+
+  assert.deepEqual(writes, ["abc"]);
+});
+
+test("writeClipboardText retries once on focus after a NotAllowedError while unfocused", async () => {
+  const writes = [];
+  let calls = 0;
+  const clipboard = {
+    writeText: (text) => {
+      calls += 1;
+      if (calls === 1) {
+        const error = new Error("Document is not focused.");
+        error.name = "NotAllowedError";
+        return Promise.reject(error);
+      }
+      writes.push(text);
+      return Promise.resolve();
+    },
+  };
+  const doc = { hasFocus: () => false };
+  let focusHandler;
+  const win = {
+    addEventListener(type, handler) {
+      assert.equal(type, "focus");
+      focusHandler = handler;
+    },
+  };
+
+  writeClipboardText("abc", { clipboard, doc, win });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.deepEqual(writes, []);
+  assert.equal(typeof focusHandler, "function");
+
+  focusHandler();
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.deepEqual(writes, ["abc"]);
+});
+
+test("writeClipboardText warns when the Clipboard API is unavailable", () => {
+  const originalWarn = console.warn;
+  let warned = null;
+  console.warn = (...args) => { warned = args; };
+  try {
+    writeClipboardText("abc", { clipboard: undefined, doc: { hasFocus: () => true }, win: globalThis });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.match(warned[0], /clipboard\.writeText unavailable/);
 });
