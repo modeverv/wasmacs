@@ -421,6 +421,31 @@ const WASMACS_XTERM_TERM_SHIM = `
 ;; installed cursor-key sequences from ku/kd/kr/kl in src/term.c.
 
 (require 'term/tty-colors)
+(require 'cl-lib)
+
+(defcustom xterm-max-cut-length 100000
+  \"Maximum number of bytes to cut into xterm using the OSC 52 sequence.\"
+  :type 'natnum
+  :group 'xterm)
+
+(defun xterm--selection-char (type)
+  (pcase type
+    ('PRIMARY \"p\")
+    ('CLIPBOARD \"c\")
+    (_ (error \"Invalid selection type: %S\" type))))
+
+(cl-defmethod gui-backend-set-selection
+    (type data
+     &context (window-system nil)
+              ((terminal-parameter nil 'xterm--set-selection) (eql t)))
+  \"Copy DATA to the system clipboard using the OSC 52 escape sequence.\"
+  (let* ((bytes (encode-coding-string data 'utf-8-unix))
+         (base-64 (base64-encode-string bytes :no-line-break))
+         (length (length base-64)))
+    (if (> length xterm-max-cut-length)
+        (warn \"Selection too long to send to terminal: %d bytes\" length)
+      (send-string-to-terminal
+       (concat \"\\e]52;\" (xterm--selection-char type) \";\" base-64 \"\\a\")))))
 
 (defvar xterm-standard-colors
   '((\"black\"          0 (  0   0   0))
@@ -482,6 +507,7 @@ const WASMACS_XTERM_TERM_SHIM = `
   (wasmacs-xterm-register-colors)
   (when (fboundp 'tty-set-up-initial-frame-faces)
     (tty-set-up-initial-frame-faces))
+  (set-terminal-parameter nil 'xterm--set-selection t)
   (run-hooks 'terminal-init-xterm-hook))
 
 (provide 'term/xterm)

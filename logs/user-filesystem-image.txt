@@ -1,8 +1,8 @@
 # User Filesystem Image
 
-date: 2026-06-09T23:07:40Z
+date: 2026-06-10T00:31:24Z
 image: build/artifacts/user-filesystem-empty.wasifs
 manifest: build/artifacts/user-filesystem-empty.manifest.json
 files: 2
 directories: 10
-sha256: f1817e0c72430b2407f11b3acbcf8763fbe47810279906f0f98c8f3b6df3b3bb
+sha256: 7e841568b1c25222a42faa5089ff0985c2513a55422b1d4f12165e904e0fe3f0

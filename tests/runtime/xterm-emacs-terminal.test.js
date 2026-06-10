@@ -5,6 +5,7 @@ import {
   controlKeyEventToBytes,
   DEFAULT_XTERM_FONT_SIZE,
   createXtermEmacsTerminal,
+  decodeOsc52ClipboardPayload,
   metaKeyEventToBytes,
   stripBracketedPasteMarkers,
   terminalKeyEventToBytes,
@@ -146,4 +147,25 @@ test("terminal key fallback leaves modified arrows to xterm or browser", () => {
 test("xterm input strips bracketed paste wrappers before Emacs tty injection", () => {
   assert.equal(stripBracketedPasteMarkers("\x1b[200~kkkk\r\x1b[201~"), "kkkk\r");
   assert.deepEqual(xtermDataToBytes("\x1b[200~kkkk\r"), [107, 107, 107, 107, 13]);
+});
+
+test("OSC 52 clipboard payload decodes base64 CLIPBOARD selections to text", () => {
+  // "abc" base64-encoded, as gui-backend-set-selection would emit for M-w.
+  assert.equal(decodeOsc52ClipboardPayload("c;YWJj"), "abc");
+});
+
+test("OSC 52 clipboard payload decodes multibyte UTF-8 text", () => {
+  // "日本語" UTF-8 base64-encoded.
+  assert.equal(decodeOsc52ClipboardPayload("c;5pel5pys6Kqe"), "日本語");
+});
+
+test("OSC 52 clipboard payload ignores PRIMARY selections and paste queries", () => {
+  assert.equal(decodeOsc52ClipboardPayload("p;YWJj"), null);
+  assert.equal(decodeOsc52ClipboardPayload("c;?"), null);
+});
+
+test("OSC 52 clipboard payload rejects malformed input", () => {
+  assert.equal(decodeOsc52ClipboardPayload("nosep"), null);
+  assert.equal(decodeOsc52ClipboardPayload("c;not-base64!!"), null);
+  assert.equal(decodeOsc52ClipboardPayload(123), null);
 });

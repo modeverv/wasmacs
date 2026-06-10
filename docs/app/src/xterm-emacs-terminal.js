@@ -120,6 +120,17 @@ export function createXtermEmacsTerminal(container, options = {}) {
   // Auto-focus so keyboard input works immediately after terminal is shown.
   term.focus();
 
+  // Bridge Emacs gui-set-selection (OSC 52, see term/xterm.el shim) to the
+  // browser clipboard. Emacs writes "\e]52;c;<base64>\a" on M-w/C-w.
+  const oscClipboardHandler = term.parser?.registerOscHandler?.(52, (data) => {
+    const payload = decodeOsc52ClipboardPayload(data);
+    if (payload === null) return false;
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(payload).catch(() => {});
+    }
+    return true;
+  });
+
   let currentDimensions = initialDimensions;
   const notifyResize = (dimensions) => {
     const next = normalizeTerminalDimensions(dimensions);
@@ -194,6 +205,7 @@ export function createXtermEmacsTerminal(container, options = {}) {
       }
       if (resizeObserver) resizeObserver.disconnect();
       else window.removeEventListener("resize", fit);
+      oscClipboardHandler?.dispose();
       term.dispose();
     },
   };
@@ -209,6 +221,23 @@ export function xtermDataToBytes(data) {
 export function stripBracketedPasteMarkers(data) {
   if (typeof data !== "string" || data === "") return data;
   return data.replaceAll("\x1b[200~", "").replaceAll("\x1b[201~", "");
+}
+
+// Decode an OSC 52 payload ("c;<base64>") emitted by gui-backend-set-selection
+// into the clipboard text it carries. Returns null for selection types other
+// than CLIPBOARD ("c"), paste queries ("?"), or malformed payloads.
+export function decodeOsc52ClipboardPayload(data) {
+  if (typeof data !== "string") return null;
+  const sep = data.indexOf(";");
+  if (sep === -1) return null;
+  const kind = data.slice(0, sep);
+  const base64 = data.slice(sep + 1);
+  if (kind !== "c" || base64 === "?") return null;
+  try {
+    return new TextDecoder("utf-8").decode(Uint8Array.from(atob(base64), (c) => c.charCodeAt(0)));
+  } catch {
+    return null;
+  }
 }
 
 export function controlKeyEventToBytes(event) {
