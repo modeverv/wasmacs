@@ -5317,3 +5317,45 @@ Python validation and integration evidence:
 - Parallel work on networking was detected and confirmed by the user. Python
   changes were isolated on `feature/python-repl`; unrelated edits are excluded.
   `vendor/emacs` content and pin remain unchanged.
+
+## Implementation: Companion as the only network transport (2026-11-13)
+
+Status: done. The user asked to move the proxy mechanism to `archive/` and make
+the Chrome companion extension the only network path, and to maintain
+`README.md`.
+
+- `proxy/` (Node, PHP, Rust, Perl, Ruby, Python, PowerShell samples) and
+  `tests/runtime/fetch-proxy-samples.test.js` moved to
+  `archive/retired/self-hosted-fetch-proxy/`; indexed in `archive/README.md`.
+- Page `hostNetworkFetch` now only calls the companion, for url.el and Git
+  alike. Removed: direct page `fetch`, proxy fallbacks, the `network-proxy`,
+  `wasmacs-network-proxy` and `network-transport` parameters and the
+  `wasmacs.networkProxyUrl` localStorage key. Only a positive companion
+  detection is cached, so a missed ping does not disable the network until a
+  reload. Package requests now pass the relay's abort signal too.
+- Worker: `wasmacsNetworkProxyUrl` removed. Dev server:
+  `/__wasmacs_network_fetch` removed. Lisp: `wasmacs-url-fetch-proxy-url`
+  removed.
+- C side: `wasmacs_host_network_fetch_json` in `0001` and in the VS Code lane
+  patcher is a relay-only stub (error unless the page relay replaces it); the
+  direct sync XHR and proxy fallback are gone. Pages `temacs.js` was already
+  replaced by `build-site.mjs`, so the checked-in artifacts behave the same.
+  The `.el` and C changes take effect in artifacts at the next `make build`;
+  the dumped `wasmacs-url-fetch` still defines the old variable, which the page
+  now ignores.
+- README.md / README.ja.md network sections rewritten; ARCHITECTURE.md,
+  `extension/README.md` and CHROME_EXTENSION_PLAN.md updated.
+
+Validation:
+
+- `src/build/apply-emacs-patches.sh --check`: 7 patches ok.
+- `node --test tests/runtime/*.test.js`: 123/125; the 2 failures were in the
+  CPython tests of parallel work that was not committed yet.
+- `node --test extension/tests/*.test.js`: 24/24.
+- `node tools/scripts/probe-git-http.mjs`: all PASS in headless Chrome with the
+  real extension; audit shows no direct page fetch.
+- Ad-hoc headless Chrome check of url.el: with the extension
+  `url-retrieve-synchronously` read a local target; without it the request
+  failed with "wasmacs companion extension is unavailable ..." and the target
+  received no request. The dev server answers 404 at
+  `/__wasmacs_network_fetch`.

@@ -34,14 +34,6 @@ unibyte string or a byte vector.")
 (defvar wasmacs-url-fetch-allowed-schemes '("http" "https")
   "URL schemes handled by the wasmacs fetch-backed loader.")
 
-(defvar wasmacs-url-fetch-proxy-url nil
-  "Optional self-hosted fetch proxy endpoint for wasmacs HTTP(S) requests.
-
-When non-nil, `wasmacs-url-fetch' includes this URL in the host request as
-`proxyUrl'.  The wasm host still tries direct browser fetch first, then this
-proxy when CORS or browser fetch policy blocks the direct request.  A typical
-local value is \"http://127.0.0.1:8787/\".")
-
 (defconst wasmacs-url-http-asynchronous-p nil
   "wasmacs fetch-backed HTTP(S) retrievals complete before returning.")
 
@@ -129,10 +121,7 @@ so an alist here would fail to serialize."
                         :headers (wasmacs-url-fetch--request-headers))))
     (unless (member (upcase method) '("GET" "HEAD"))
       (setq request (plist-put request :body url-request-data)))
-    (if (and (stringp wasmacs-url-fetch-proxy-url)
-             (not (string-empty-p wasmacs-url-fetch-proxy-url)))
-        (plist-put request :proxyUrl wasmacs-url-fetch-proxy-url)
-      request)))
+    request))
 
 (defun wasmacs-url-fetch--response-buffer (url response)
   "Create a url.el response buffer for URL from RESPONSE plist."

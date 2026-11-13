@@ -16,7 +16,7 @@ The current main route is the browser runtime built on `SharedArrayBuffer`, `Ato
 - Load Elisp from the user-side `.wasifs` image with `load-file`
 - Boot from static hosting on GitHub Pages
 - Route `url.el` / `package.el` HTTP(S) requests through `host.network.fetch`
-- Use a user-operated self-hosted proxy for package archives that cannot be fetched directly because of CORS
+- Reach package archives and Git remotes through the Chrome companion extension, the only network transport
 - Copy yanked text to the browser clipboard
 - Start subprocesses from Emacs: `call-process`, `make-process`, `shell-command`, `M-x shell`, eshell with external commands and pipelines
 - Run a POSIX shell (BusyBox `ash`) and about 150 command line tools, git 2.52, GNU grep 3.12, GNU diffutils 3.12 and CPython 3.14 as real processes with pipes, signals, `fork` and `exec`
@@ -27,7 +27,7 @@ The current main route is the browser runtime built on `SharedArrayBuffer`, `Ato
 - Processes are provided by wasmacs's own process service, not by the host: only the bundled programs (BusyBox tools, git, GNU grep, GNU diffutils, CPython) can run. See [Subprocesses](#subprocesses-shell-git-grep).
 - There are no pseudoterminals or raw sockets. `M-x term` / `ansi-term` do not work; `M-x shell` and eshell do. Git `clone`, `fetch` and `push` support Smart HTTP(S) through the Chrome companion, as well as local repositories.
 - Scheduling is cooperative on one thread. Computation without system calls or explicit polling points delays interruption. CPython's interpreter includes polling points for Python loops.
-- Network features such as `package-refresh-contents` are constrained by browser fetch, CORS, and proxy configuration.
+- Network access requires the Chrome companion extension (`extension/`) and is limited to the hosts it allows. Without it, `package-refresh-contents`, `git clone` and other network features fail. See [Network Access](#network-access).
 - This is not a port of native GUI Emacs frames. The current route is terminal Emacs running on xterm.js.
 - Pages artifacts under `docs/` are split and constrained so they can be hosted by GitHub Pages.
 - A separate build route can generate the VS Code `.wasifs` extension.
@@ -43,7 +43,7 @@ src/runtime/ host/runtime libraries used by tests and tools
 src/runtime/process/ process service: kernel, per-process runtime, filesystem layout of the userland
 src/userland/ builds of the programs that run as processes (BusyBox, git, GNU grep, GNU diffutils, CPython)
 tools/      build / validation / probe / inspection tools
-proxy/      self-hosted fetch proxy samples for package archives
+extension/  Chrome companion extension: the only network transport
 vendor/     pinned upstream GNU Emacs source; read-only
 build/      copied Emacs working tree, temporary state, and generated artifacts
 build/artifacts/ generated wasm / pdmp / wasifs build products
@@ -58,7 +58,7 @@ archive/    retired mechanisms (archive/retired/, indexed in archive/README.md) 
 
 `vendor/emacs` is the pinned upstream GNU Emacs source tree. Do not edit it directly. The product's changes to Emacs are the numbered patches in `src/c/patches/`, applied to a copied build tree (see `src/c/README.md`).
 
-The product route is one page, one worker and one build: `src/wasm/xterm-atomics-pdump.html`, `src/wasm/src/emacs-atomics-pdump-worker.js`, and `src/build/build-emacs-browser-atomics-pdump-profile.sh`. Earlier mechanisms (the textarea app with its command bridge, the Asyncify command protocol, early build spikes) live under `archive/retired/`; `tests/runtime/canonical-route.test.js` keeps live files from depending on them.
+The product route is one page, one worker and one build: `src/wasm/xterm-atomics-pdump.html`, `src/wasm/src/emacs-atomics-pdump-worker.js`, and `src/build/build-emacs-browser-atomics-pdump-profile.sh`. Earlier mechanisms (the textarea app with its command bridge, the Asyncify command protocol, early build spikes, the self-hosted fetch proxies) live under `archive/retired/`; `tests/runtime/canonical-route.test.js` keeps live files from depending on them.
 
 ## Browser App
 
@@ -217,82 +217,48 @@ The design is described in `doc/process-service.md`.
 
 ## Network Access
 
-wasmacs treats network access as an explicit browser host capability.
+wasmacs treats network access as an explicit browser host capability, and the
+Chrome companion extension in `extension/` is its only transport. The page
+never fetches remote URLs itself and there is no proxy fallback. Without the
+extension, `package-refresh-contents`, `git clone` and other network features
+fail with an error that names the extension; browsers that cannot load it have
+no network access.
 
 The Emacs core does not receive raw sockets. The checked-in `wasmacs-url-fetch` Lisp overlay routes `url.el` HTTP(S) requests through `host.network.fetch`. This lets `package-refresh-contents`, `package-install`, `use-package :ensure`, and similar features run as request/response services. Git's HTTP helper uses the same request/response boundary through a restartable process import.
 
-However, direct browser `fetch` is constrained by CORS. If the remote package archive does not allow the page origin, JavaScript cannot read the response body. Service Workers can help with app caching and COOP/COEP, but they cannot make an unreadable cross-origin response readable.
-
-When an archive is blocked by CORS, users can configure a self-hosted fetch proxy under their own control. wasmacs does not provide a central proxy service.
-
-### Git clone, fetch and push
-
-Load or reload the unpacked extension from `extension/`, then reload the wasmacs
-page. In `M-x shell` or eshell, use ordinary Smart HTTP(S) remotes:
-
-```sh
-git clone https://github.com/OWNER/REPOSITORY.git
-cd REPOSITORY
-git fetch origin
-git push origin main
-```
-
-Git HTTP uses the companion by default. The target must have both Chrome host
-permission and an extension allowlist entry; GitHub is already included.
-For private repositories and authenticated pushes, enable **Allow credentials**
-in the extension's options and use an exact HTTPS host in the allowlist. Supply
-authentication using Git credentials or a URL-scoped `http.extraHeader` inside
-wasmacs. The extension does not import credentials from the host machine or
-store tokens. Credentials saved under `/home/user` are part of the portable
-user image. Use the canonical remote URL: authenticated requests and POST do
-not follow redirects.
-
-The helper is built from pinned Git's original `remote-curl.c`; Git still owns
-negotiation, pack validation and ref updates. It supports protocol v0/v2. HTTP
-bodies are buffered and limited to **25 MiB per request and response**, with a
-**30 second request timeout**. Large repositories may exceed these limits.
-SSH, `git://`, dumb HTTP/WebDAV and cross-origin packfile downloads are not
-provided. `C-g`/process termination cancels pending requests; a cancelled or
-failed push can have reached the server, so inspect the remote before retrying.
-
-For CORS-enabled servers, `?network-transport=direct` explicitly selects direct
-fetch. `?network-transport=proxy&network-proxy=...` selects one configured HTTP
-proxy (it must support Git POST and authentication). Process HTTP never falls
-back to another transport after a failure, so a push is not silently replayed.
-Package downloads keep their existing fallback behavior.
-
-Run `npm run test:git-http` for real Chrome/extension clone, fetch and push
-against a disposable HTTPS repository, or `npm run test:git-http:transport`
-for the wasm Git transport test. Neither test pushes to a user's remote.
-Implementation details: [Git HTTP adapter](src/userland/git/README.md).
-
-### Chrome companion extension
-
-For Chrome-based local/dev use, wasmacs also includes an unpacked companion
-extension in `extension/`. The extension provides the same explicit
-`host.network.fetch` capability without disabling CORS globally:
+Every request takes the same path:
 
 ```text
-wasmacs page
-  -> content-script bridge
+Emacs (url.el / git-remote-http)
+  -> host.network.fetch in the Emacs worker
+  -> page relay (the worker waits on a SharedArrayBuffer result slot)
+  -> content-script bridge (WASMACS_PROXY_* messages)
   -> extension service worker
   -> allowlisted fetch
   -> status / filtered headers / base64 body
 ```
 
-Load it from `chrome://extensions` with Developer mode enabled, then choose
-`extension/` with Load unpacked. The default extension policy allows local
-wasmacs pages at `http://localhost/*` and `http://127.0.0.1/*`, plus the
-published Pages app at `https://modeverv.github.io/wasmacs/*`. It allows target
-fetches for GNU ELPA, MELPA, raw GitHub files, and GitHub. It rejects
-private-network targets and credentialed requests by default.
+The extension's own `fetch` is not limited by the page's CORS rules, so package
+archives such as GNU ELPA can be read, but it reaches only targets that are in
+both the manifest's host permissions and the extension's allowlist. It does not
+disable CORS for the rest of the browser.
 
-On the Atomics/pdump page, `host.network.fetch` detects the companion with
-`WASMACS_PROXY_PING`. When the extension is available, package archive requests
-use `WASMACS_PROXY_REQUEST` / `WASMACS_PROXY_RESPONSE` before falling back to
-direct browser fetch or a configured self-hosted proxy. This path has been
-manually verified with `package-refresh-contents` reaching the GNU ELPA package
-menu from:
+### Installing the Chrome companion extension
+
+Open `chrome://extensions`, enable Developer mode, choose Load unpacked and
+select `extension/`. Then reload the wasmacs page; the page detects the
+extension when it makes its first request.
+
+The default extension policy allows local wasmacs pages at `http://localhost/*`
+and `http://127.0.0.1/*`, plus the published Pages app at
+`https://modeverv.github.io/wasmacs/*`. It allows target fetches for GNU ELPA,
+MELPA, raw GitHub files, and GitHub. It rejects private-network targets and
+credentialed requests by default. To reach another host, add it to
+`host_permissions` in `extension/manifest.json` and to the allowlist on the
+extension's options page.
+
+`package-refresh-contents` has been manually verified reaching the GNU ELPA
+package menu from:
 
 ```text
 http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart
@@ -303,7 +269,6 @@ An Emacs-side smoke expression:
 ```elisp
 (progn
   (require 'wasmacs-url-fetch)
-  (setq wasmacs-url-fetch-proxy-url nil)
   (wasmacs-url-fetch-enable)
 
   (require 'package)
@@ -324,39 +289,50 @@ An Emacs-side smoke expression:
 See `extension/README.md` for the ping test, safe GET test, options page, and
 audit log notes.
 
-### Self-hosted proxy samples
+### Git clone, fetch and push
 
-The `proxy/` directory includes sample implementations in Node, PHP, Rust, Perl, Ruby, Python, and PowerShell. Each sample accepts the same JSON request shape as the local development `__wasmacs_network_fetch` route and returns the response status, headers, and base64-encoded response bytes.
-
-The proxy samples are allowlist-based by default. The Ruby sample is the exception: it defaults to `*` for localhost-only development.
-
-Specify allowed archive origins as follows:
+With the extension installed, use ordinary Smart HTTP(S) remotes in
+`M-x shell` or eshell:
 
 ```sh
-WASMACS_PROXY_ALLOWED_ORIGINS=https://elpa.gnu.org,https://melpa.org
+git clone https://github.com/OWNER/REPOSITORY.git
+cd REPOSITORY
+git fetch origin
+git push origin main
 ```
 
-When a local proxy is running, pass it to the browser runtime with `network-proxy`:
+The target must have both Chrome host permission and an extension allowlist
+entry; GitHub is already included.
+For private repositories and authenticated pushes, enable **Allow credentials**
+in the extension's options and use an exact HTTPS host in the allowlist. Supply
+authentication using Git credentials or a URL-scoped `http.extraHeader` inside
+wasmacs. The extension does not import credentials from the host machine or
+store tokens. Credentials saved under `/home/user` are part of the portable
+user image. Use the canonical remote URL: authenticated requests and POST do
+not follow redirects.
 
-```text
-http://127.0.0.1:5173/app/xterm-atomics-pdump.html?network-proxy=http%3A%2F%2F127.0.0.1%3A8787%2F
-```
+The helper is built from pinned Git's original `remote-curl.c`; Git still owns
+negotiation, pack validation and ref updates. It supports protocol v0/v2. HTTP
+bodies are buffered and limited to **25 MiB per request and response**, with a
+**30 second request timeout**. Large repositories may exceed these limits.
+SSH, `git://`, dumb HTTP/WebDAV and cross-origin packfile downloads are not
+provided. `C-g`/process termination cancels pending requests; a failed request
+is reported and never retried, and a cancelled or failed push can have reached
+the server, so inspect the remote before retrying.
 
-The runtime first tries direct browser fetch. If CORS prevents reading the archive, it falls back to the configured proxy endpoint. On localhost development pages, it can also use the same-origin `__wasmacs_network_fetch` route provided by `make dev`. Static hosts such as GitHub Pages do not provide that route.
+Run `npm run test:git-http` for real Chrome/extension clone, fetch and push
+against a disposable HTTPS repository, or `npm run test:git-http:transport`
+for the wasm Git transport test. Neither test pushes to a user's remote.
+Implementation details: [Git HTTP adapter](src/userland/git/README.md).
 
-On the Atomics/pdump route, the worker relays `host.network.fetch` to the main page. The actual direct/proxy `fetch` runs on the main page thread, not as worker-local synchronous XHR, and the result is returned through a SharedArrayBuffer result slot.
+### Retired: direct fetch and self-hosted proxies
 
-When a public HTTPS page calls a localhost proxy, modern browsers may send a Private Network Access preflight. For that reason, the bundled proxy samples return `Access-Control-Allow-Private-Network: true` and echo the requesting `Origin` instead of using wildcard CORS.
-
-A proxy can also be configured from Emacs Lisp for a specific user image or init flow:
-
-```elisp
-(require 'wasmacs-url-fetch)
-(setq wasmacs-url-fetch-proxy-url "http://127.0.0.1:8787/")
-(wasmacs-url-fetch-enable)
-```
-
-The Emacs-side `wasmacs-url-fetch-proxy-url` value is sent with each `url.el` / `package.el` request and takes precedence over the page-level `network-proxy` default.
+Earlier versions also tried a direct page `fetch` and self-hosted fetch
+proxies: the samples in `proxy/`, the development server's
+`__wasmacs_network_fetch` route, the `network-proxy` and `network-transport`
+page parameters, and the `wasmacs-url-fetch-proxy-url` Lisp variable. They were
+retired on 2026-11-13. The proxy samples and their test are kept in
+`archive/retired/self-hosted-fetch-proxy/`; see `archive/README.md`.
 
 ## `.wasifs` Images
 

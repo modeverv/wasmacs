@@ -164,7 +164,6 @@ try {
     const port = await availablePort();
     const appUrl = new URL(process.env.WASMACS_BROWSER_URL || `http://127.0.0.1:${port}/app/xterm-atomics-pdump.html`);
     appUrl.searchParams.set("clear-storage", "1");
-    appUrl.searchParams.set("network-transport", "extension");
     if (!process.env.WASMACS_BROWSER_URL) {
       appServer = spawn(process.execPath, ["tools/scripts/serve-app.mjs"], {
         cwd: repoRoot, env: { ...process.env, PORT: String(port) }, stdio: ["ignore", "ignore", "pipe"],
@@ -210,16 +209,16 @@ try {
         evidence.push(`BROWSER_EXCEPTION ${event.params.exceptionDetails.exception?.description || event.params.exceptionDetails.text}`);
       }
     };
-    // Fail closed in the test even if the page selector regresses: direct fetch
-    // and the development proxy cannot silently replace the extension path.
+    // Fail closed in the test even if the page regresses: a direct page fetch
+    // cannot silently replace the extension path.
     await client.send("Page.addScriptToEvaluateOnNewDocument", { source: `{
       const nativeFetch = globalThis.fetch.bind(globalThis);
       globalThis.__gitHttpFallbackAttempts = 0;
       globalThis.fetch = (input, init) => {
         const url = new URL(typeof input === "string" || input instanceof URL ? input : input.url, location.href);
-        if (url.origin === ${JSON.stringify(fixture.origin)} || url.pathname === '/__wasmacs_network_fetch') {
+        if (url.origin === ${JSON.stringify(fixture.origin)}) {
           globalThis.__gitHttpFallbackAttempts++;
-          return Promise.reject(new Error('Git HTTP test forbids page/proxy fallback'));
+          return Promise.reject(new Error('Git HTTP test forbids a direct page fetch'));
         }
         return nativeFetch(input, init);
       };
@@ -327,9 +326,9 @@ try {
       assert.ok(audit.some((entry) => entry.method === "POST" && entry.url?.endsWith("/git-receive-pack") && entry.result === "ok"), "extension audit proves the push POST");
       if (publicClone) assert.ok(audit.some((entry) => entry.url?.startsWith("https://github.com/octocat/Hello-World.git/") && entry.method === "POST" && entry.result === "ok"), "extension audit proves the public GitHub clone");
     }
-    assert.equal(await evaluate(client, sessionId, "window.__gitHttpFallbackAttempts"), 0, "no page or proxy fallback was attempted");
+    assert.equal(await evaluate(client, sessionId, "window.__gitHttpFallbackAttempts"), 0, "no direct page fetch was attempted");
     if (!plainHttp) assert.ok(fixture.requests.filter((request) => request.status === 200).every((request) => request.authenticated), "every successful request used the disposable credential");
-    pass(`extension audit confirms ${audit.length} requests, with no direct/proxy fallback`);
+    pass(`extension audit confirms ${audit.length} requests, with no direct page fetch`);
   }
 } catch (error) {
   // Redact the generated credential even if a browser/minibuffer error happens

@@ -6,6 +6,18 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 
+// The Chrome companion extension, reached through the page relay, is the only
+// network transport.  The C-side host fetch must not reach the network itself.
+function assertRelayOnlyHostFetch(source) {
+  const start = source.indexOf("EM_JS (const char *, wasmacs_host_network_fetch_json");
+  const end = source.indexOf("#else", start);
+  assert.ok(start >= 0 && end > start, "wasmacs_host_network_fetch_json EM_JS block");
+  const hostFetch = source.slice(start, end);
+  assert.match(hostFetch, /requires the page relay to the wasmacs Chrome companion extension/);
+  assert.doesNotMatch(hostFetch, /XMLHttpRequest|fetch\(|proxyFetch|proxyUrl/i);
+  assert.doesNotMatch(source, /__wasmacs_network_fetch|NetworkProxyUrl/);
+}
+
 test("wasmacs url.el loader is an overlay, not a vendor/emacs patch", async () => {
   const source = await readFile(join(repoRoot, "src/emacs-lisp/wasmacs-url-fetch.el"), "utf8");
 
@@ -16,8 +28,7 @@ test("wasmacs url.el loader is an overlay, not a vendor/emacs patch", async () =
   assert.match(source, /'loader 'wasmacs-url-fetch/);
   assert.doesNotMatch(source, /'loader #'wasmacs-url-fetch/);
   assert.match(source, /wasmacs-url-fetch-function/);
-  assert.match(source, /wasmacs-url-fetch-proxy-url/);
-  assert.match(source, /:proxyUrl wasmacs-url-fetch-proxy-url/);
+  assert.doesNotMatch(source, /proxy/i);
   assert.match(source, /wasmacs-os-network-fetch-json/);
   assert.match(source, /body-base64/);
   assert.match(source, /bodyBase64/);
@@ -27,7 +38,7 @@ test("wasmacs url.el loader is an overlay, not a vendor/emacs patch", async () =
   assert.doesNotMatch(source, /\(open-network-stream\b/);
 });
 
-test("VS Code lane Emacs patch script registers the host network fetch primitive", async () => {
+test("VS Code lane Emacs patch script registers the relay-only host network fetch primitive", async () => {
   const source = await readFile(join(repoRoot, "tools/scripts/patch-emacs-host-entrypoint-spike.sh"), "utf8");
 
   assert.match(source, /EM_JS \(const char \*, wasmacs_host_network_fetch_json/);
@@ -37,21 +48,12 @@ test("VS Code lane Emacs patch script registers the host network fetch primitive
   assert.match(source, /function returnJson/);
   assert.match(source, /_malloc\(size\)/);
   assert.match(source, /stringToUTF8\(json, ptr, size\)/);
-  assert.match(source, /function proxyFetch/);
-  assert.match(source, /function configuredProxyUrls\(request\)/);
-  assert.match(source, /function isLocalHostName\(name\)/);
-  assert.match(source, /request && request\.proxyUrl/);
-  assert.match(source, /wasmacsNetworkProxyUrl/);
-  assert.match(source, /__wasmacsNetworkProxyUrl/);
-  assert.match(source, /__wasmacs_network_fetch/);
-  assert.match(source, /returned invalid JSON/);
-  assert.match(source, /continue;/);
-  assert.doesNotMatch(source, /proxy\.setRequestHeader\("content-type"/);
+  assertRelayOnlyHostFetch(source);
   assert.match(source, /xfree \(\(void \*\) response\)/);
   assert.doesNotMatch(source, /stringToNewUTF8/);
 });
 
-test("product Emacs patch layer carries the host network fetch primitive", async () => {
+test("product Emacs patch layer carries the relay-only host network fetch primitive", async () => {
   const source = await readFile(
     join(repoRoot, "src/c/patches/0001-emacs-host-entrypoints-and-os-services.patch"),
     "utf8",
@@ -64,16 +66,7 @@ test("product Emacs patch layer carries the host network fetch primitive", async
   assert.match(source, /function returnJson/);
   assert.match(source, /_malloc\(size\)/);
   assert.match(source, /stringToUTF8\(json, ptr, size\)/);
-  assert.match(source, /function proxyFetch/);
-  assert.match(source, /function configuredProxyUrls\(request\)/);
-  assert.match(source, /function isLocalHostName\(name\)/);
-  assert.match(source, /request && request\.proxyUrl/);
-  assert.match(source, /wasmacsNetworkProxyUrl/);
-  assert.match(source, /__wasmacsNetworkProxyUrl/);
-  assert.match(source, /__wasmacs_network_fetch/);
-  assert.match(source, /returned invalid JSON/);
-  assert.match(source, /continue;/);
-  assert.doesNotMatch(source, /proxy\.setRequestHeader\("content-type"/);
+  assertRelayOnlyHostFetch(source);
   assert.match(source, /xfree \(\(void \*\) response\)/);
   assert.doesNotMatch(source, /stringToNewUTF8/);
 });
@@ -156,19 +149,23 @@ test("Atomics pdump browser runtime enables fetch-backed url.el by default", asy
   assert.match(source, /debugOptions\.extraEvals/);
 });
 
-test("Atomics pdump browser runtime forwards configured local network proxy to wasm host fetch", async () => {
+test("Atomics pdump browser runtime has no proxy or direct network transport", async () => {
   const page = await readFile(join(repoRoot, "src/wasm/xterm-atomics-pdump.html"), "utf8");
   const worker = await readFile(
     join(repoRoot, "src/wasm/src/emacs-atomics-pdump-worker.js"),
     "utf8",
   );
+  const start = page.indexOf("async function hostNetworkFetch(");
+  const end = page.indexOf("const pendingNetworkRequests", start);
+  assert.ok(start >= 0 && end > start, "hostNetworkFetch");
+  const hostFetch = page.slice(start, end);
 
-  assert.match(page, /pageParams\.get\("network-proxy"\)/);
-  assert.match(page, /pageParams\.get\("wasmacs-network-proxy"\)/);
-  assert.match(page, /wasmacs\.networkProxyUrl/);
-  assert.match(page, /debugBootOptions\.networkProxyUrl/);
-  assert.match(worker, /__wasmacsNetworkProxyUrl = typeof debugOptions\.networkProxyUrl/);
-  assert.match(worker, /wasmacsNetworkProxyUrl: globalThis\.__wasmacsNetworkProxyUrl/);
+  assert.match(hostFetch, /return companionNetworkFetch\(/);
+  assert.doesNotMatch(hostFetch, /(^|[^A-Za-z])fetch\(/);
+  for (const source of [page, worker]) {
+    assert.doesNotMatch(source, /network-proxy|networkProxyUrl|NetworkProxyUrl|network-transport/);
+    assert.doesNotMatch(source, /__wasmacs_network_fetch|configuredProxyUrls/);
+  }
 });
 
 test("Atomics pdump host network fetch relays through the main page", async () => {
@@ -184,11 +181,10 @@ test("Atomics pdump host network fetch relays through the main page", async () =
   assert.match(worker, /Atomics\.wait\(signal,\s*0,\s*1,\s*120000\)/);
   assert.match(page, /async function handleHostNetworkFetch/);
   assert.match(page, /async function hostNetworkFetch/);
-  assert.match(page, /configuredProxyUrls\(request\)/);
   assert.match(page, /Atomics\.notify\(signal,\s*0,\s*1\)/);
 });
 
-test("Atomics pdump host network fetch can use the Chrome companion extension", async () => {
+test("Atomics pdump host network fetch goes through the Chrome companion extension", async () => {
   const page = await readFile(join(repoRoot, "src/wasm/xterm-atomics-pdump.html"), "utf8");
 
   assert.match(page, /async function companionNetworkFetch/);
@@ -199,7 +195,7 @@ test("Atomics pdump host network fetch can use the Chrome companion extension", 
   assert.match(page, /WASMACS_PROXY_RESPONSE/);
   assert.match(page, /window\.postMessage\(/);
   assert.match(page, /normalizeCompanionResponse/);
-  assert.match(page, /companion extension failed/);
+  assert.match(page, /companion extension is unavailable; install the Chrome extension/);
   assert.match(page, /bodyBase64: response\?\.bodyBase64/);
   assert.match(page, /Object\.entries\(headersObject\)\.map/);
 });
@@ -273,14 +269,10 @@ test("Pages builder splits temacs.data and patches async preload hook", async ()
   assert.match(source, /await rm\(filePath, \{ force: true \}\)/);
 });
 
-test("dev server exposes the local host network fetch proxy", async () => {
+test("dev server serves the Pages artifacts and no network fetch proxy", async () => {
   const source = await readFile(join(repoRoot, "tools/scripts/serve-app.mjs"), "utf8");
 
-  assert.match(source, /__wasmacs_network_fetch/);
-  assert.match(source, /handleNetworkFetchProxy/);
-  assert.match(source, /normalizeProxyHeaders/);
-  assert.match(source, /bodyBase64/);
-  assert.match(source, /unsupported URL scheme/);
+  assert.doesNotMatch(source, /__wasmacs_network_fetch|NetworkFetchProxy|fetch\(/);
   assert.match(source, /docs", "artifacts"/);
   assert.match(source, /existsSync\(docsArtifact\)/);
 });

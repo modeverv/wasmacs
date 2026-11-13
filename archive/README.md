@@ -29,7 +29,8 @@ untracked.
   `tools/scripts/build-emacs-browser-asyncify-spike.sh` (with the perl patcher
   `tools/scripts/patch-emacs-host-entrypoint-spike.sh` and
   `tools/scripts/wasmacs-asyncify-host-library.js`), artifacts under `build2/`.
-- Chrome companion extension (`extension/`) and fetch proxy samples (`proxy/`).
+- **Network: the Chrome companion extension** (`extension/`), the only network
+  transport. The page relays `host.network.fetch` to it and has no fallback.
 
 ## retired/
 
@@ -46,6 +47,7 @@ restore its `package.json` script from the history of that file.
 | `retired/atomics-without-pdump` | The first Atomics route that booted by cold `loadup.el`: `xterm-atomics.html`, the timing test page, its build script and probes. | Superseded by Atomics + pdump (boot from `bootstrap-emacs.pdmp`). `src/wasm/src/emacs-atomics-worker.js` stays in place because the VS Code extension still lists it as a preflight asset. |
 | `retired/pdump-bringup-experiments` | Probes and alternative builds used to get pdumper working under wasm (purecopy tracing, `bindings.el` bisects, `-O2` experiments, Asyncify pdump profiles, the assertions build, the diagnostic page). | pdump works and is part of the product build. Several of these scripts rewrite the live product build tree, so they must not be run casually. |
 | `retired/early-build-spikes` | Milestone 2/7 core and batch spikes and the milestone validators that still assumed the pre-`tools/` layout. | Superseded by the canonical build chain in `src/build/`. |
+| `retired/self-hosted-fetch-proxy` | `proxy/`: user-operated fetch proxy samples (Node, PHP, Rust, Perl, Ruby with an mkcert HTTPS variant, Python, PowerShell) and their test. With them went inline parts of live files: the page's direct `fetch` and proxy fallbacks with the `network-proxy` / `wasmacs-network-proxy` / `network-transport` parameters and the `wasmacs.networkProxyUrl` localStorage key, the worker's `wasmacsNetworkProxyUrl`, the dev server's `/__wasmacs_network_fetch` route, the `wasmacs-url-fetch-proxy-url` Lisp variable, and the direct XHR + proxy fallback in the C-side `wasmacs_host_network_fetch_json` (product patch and VS Code lane patcher). Recover those from the history of `src/wasm/xterm-atomics-pdump.html`, `src/wasm/src/emacs-atomics-pdump-worker.js`, `tools/scripts/serve-app.mjs`, `src/emacs-lisp/wasmacs-url-fetch.el`, `src/c/patches/0001-emacs-host-entrypoints-and-os-services.patch` and `tools/scripts/patch-emacs-host-entrypoint-spike.sh`. | Decided on 2026-11-13: the Chrome companion extension is the only network transport, so requests no longer fall back to a direct page fetch or a proxy. |
 | `retired/stale-c-patch-layer` | `src/c/patches/0001-wasmacs-host-entrypoint-and-terminal.patch` and `src/build/prepare-emacs-source.sh`. | The patch had drifted from the product (the build patched Emacs with a perl script instead) and the prepared tree was consumed by nothing. Replaced by `src/c/patches/000*.patch` + `src/build/apply-emacs-patches.sh`, which the product build applies. |
 
 The npm scripts that drove these mechanisms (`test:asyncify`, `test:persistent`,

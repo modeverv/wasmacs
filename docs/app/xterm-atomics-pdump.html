@@ -241,59 +241,8 @@ if (pageParams.get("process-kernel") && /^(localhost|127\.0\.0\.1|\[::1\])$/.tes
   const kernelUrl = new URL(pageParams.get("process-kernel"), location.href);
   if (kernelUrl.origin === location.origin) debugBootOptions.processKernelUrl = kernelUrl.href;
 }
-function getStoredNetworkProxyUrl() {
-  try { return localStorage.getItem("wasmacs.networkProxyUrl") || ""; }
-  catch (_) { return ""; }
-}
-const configuredNetworkProxyUrl =
-  pageParams.get("network-proxy")
-  || pageParams.get("wasmacs-network-proxy")
-  || getStoredNetworkProxyUrl()
-  || "";
-if (configuredNetworkProxyUrl) {
-  debugBootOptions.networkProxyUrl = configuredNetworkProxyUrl;
-  try { localStorage.setItem("wasmacs.networkProxyUrl", configuredNetworkProxyUrl); } catch (_) {}
-}
-
-function isLocalHostName(name) {
-  const normalized = String(name || "").toLowerCase();
-  return normalized === "localhost"
-    || normalized === "127.0.0.1"
-    || normalized === "::1"
-    || normalized === "[::1]";
-}
-
-function configuredProxyUrls(request = {}) {
-  const urls = [];
-  const configured = String(request.proxyUrl || configuredNetworkProxyUrl || "");
-  if (configured) {
-    try {
-      const parsed = new URL(configured, location.href);
-      if (parsed.protocol === "http:" || parsed.protocol === "https:") urls.push(parsed.href);
-    } catch (_) {}
-  }
-  if (isLocalHostName(location.hostname)) {
-    urls.push(new URL("/__wasmacs_network_fetch", location.href).href);
-  }
-  return urls;
-}
-
-function responseHeadersArray(headers) {
-  return Array.from(headers.entries()).map(([name, value]) => ({
-    name: name.toLowerCase(),
-    value,
-  }));
-}
-
-function bytesToBase64(bytes) {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
-  }
-  return btoa(binary);
-}
-
+// Network access has exactly one transport: the Chrome companion extension
+// (extension/).  There is no direct page fetch and no proxy fallback.
 let companionFetchAvailable = "unknown";
 let companionDetectionPromise = null;
 
@@ -335,9 +284,9 @@ function requestHeadersObject(headers) {
 }
 
 function detectCompanionExtension(timeoutMs = 750) {
-  if (companionFetchAvailable !== "unknown") {
-    return Promise.resolve(companionFetchAvailable === true);
-  }
+  // Only a positive answer is cached.  With no fallback transport, a missed
+  // ping must not disable the network until the page is reloaded.
+  if (companionFetchAvailable === true) return Promise.resolve(true);
   if (companionDetectionPromise) return companionDetectionPromise;
 
   const requestId = nextCompanionRequestId();
@@ -377,7 +326,7 @@ function detectCompanionExtension(timeoutMs = 750) {
 
 async function companionNetworkFetch(request, signal) {
   if (!(await detectCompanionExtension())) {
-    throw new Error("wasmacs companion extension is unavailable");
+    throw new Error("wasmacs companion extension is unavailable; install the Chrome extension from extension/ and reload this page");
   }
 
   const requestId = nextCompanionRequestId();
@@ -440,114 +389,18 @@ async function companionNetworkFetch(request, signal) {
 }
 
 async function hostNetworkFetch(request, signal) {
-  const url = String(request.url || "");
-  const parsed = new URL(url, location.href);
+  const parsed = new URL(String(request.url || ""), location.href);
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new Error(`unsupported URL scheme: ${parsed.protocol}`);
   }
-  const method = String(request.method || "GET").toUpperCase();
-  const headers = requestHeadersObject(request.headers);
-
-  // A Git POST may already have updated the remote when a reply is lost.
-  // Select ONE transport for process HTTP; never replay it through a fallback.
-  // The companion is the default. Direct/proxy are explicit alternatives.
-  if (request.processHttp) {
-    const transport = pageParams.get("network-transport") || "extension";
-    if (transport === "extension") return companionNetworkFetch(request, signal);
-    if (transport === "proxy") {
-      const proxyUrl = configuredProxyUrls(request)[0];
-      if (!proxyUrl) throw new Error("No HTTP proxy is configured");
-      const response = await fetch(proxyUrl, { method: "POST", body: JSON.stringify(request),
-        credentials: "omit", redirect: "error", signal });
-      if (!response.ok) throw new Error(`HTTP proxy returned ${response.status}`);
-      return response.json();
-    }
-    if (transport !== "direct") throw new Error("Unknown network-transport; use extension, direct or proxy");
-    const binary = atob(request.bodyBase64 || "");
-    const body = Uint8Array.from(binary, (char) => char.charCodeAt(0));
-    const response = await fetch(parsed.href, { method, headers, credentials: "omit", signal,
-      redirect: method === "POST" || Object.keys(headers).some((key) => key.toLowerCase() === "authorization")
-        ? "error" : "follow",
-      body: method === "GET" || method === "HEAD" ? undefined : body });
-    const chunks = [];
-    let size = 0;
-    const reader = response.body?.getReader();
-    if (reader) {
-      try {
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          size += value.length;
-          if (size > 25 * 1024 * 1024) throw new Error("Git HTTP response exceeds 25 MiB");
-          chunks.push(value);
-        }
-      } catch (error) { await reader.cancel().catch(() => {}); throw error; }
-      finally { reader.releaseLock(); }
-    }
-    const bytes = new Uint8Array(size);
-    let offset = 0;
-    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-    return { url: response.url || parsed.href, status: response.status,
-      statusText: response.statusText, headers: responseHeadersArray(response.headers), bodyBase64: bytesToBase64(bytes) };
-  }
-
-  const errors = [];
-  if (await detectCompanionExtension()) {
-    try {
-      return await companionNetworkFetch({
-        ...request,
-        url: parsed.href,
-        method,
-        headers: request.headers || [],
-      });
-    } catch (companionError) {
-      errors.push(`companion extension failed${companionError?.message ? ": " + companionError.message : ""}`);
-    }
-  }
-
-  try {
-    const response = await fetch(parsed.href, {
-      method,
-      headers,
-      body: request.body || undefined,
-      redirect: "follow",
-    });
-    const body = new Uint8Array(await response.arrayBuffer());
-    return {
-      url: response.url || parsed.href,
-      status: response.status,
-      statusText: response.statusText || "",
-      headers: responseHeadersArray(response.headers),
-      bodyBase64: bytesToBase64(body),
-    };
-  } catch (directError) {
-    errors.push(`direct request failed${directError?.message ? ": " + directError.message : ""}`);
-    for (const proxyUrl of configuredProxyUrls(request)) {
-      try {
-        const proxyResponse = await fetch(proxyUrl, {
-          method: "POST",
-          body: JSON.stringify(request),
-          redirect: "follow",
-        });
-        const text = await proxyResponse.text();
-        if (!text) {
-          errors.push(`${proxyUrl} status ${proxyResponse.status}`);
-          continue;
-        }
-        try {
-          return JSON.parse(text);
-        } catch (parseError) {
-          errors.push(`${proxyUrl} returned invalid JSON: ${parseError.message}`);
-        }
-      } catch (proxyError) {
-        errors.push(`${proxyUrl} failed${proxyError?.message ? ": " + proxyError.message : ""}`);
-      }
-    }
-    throw new Error(
-      `host.network.fetch request failed`
-      + `; proxy attempts: ${errors.join("; ")}`,
-    );
-  }
+  // A Git POST may already have updated the remote when a reply is lost, so a
+  // failed request is reported, never replayed.
+  return companionNetworkFetch({
+    ...request,
+    url: parsed.href,
+    method: String(request.method || "GET").toUpperCase(),
+    headers: request.headers || [],
+  }, signal);
 }
 
 const pendingNetworkRequests = new Map();

@@ -2,6 +2,8 @@
 
 This is an unpacked Manifest V3 Chrome extension that gives wasmacs a user-granted network capability for package archives, raw files, and Git smart HTTP requests that normal page `fetch()` cannot read because of CORS.
 
+It is wasmacs's only network transport: the page never fetches remote URLs itself and has no proxy fallback, so without this extension wasmacs has no network access.
+
 It is not a global CORS disable switch. It does not intercept all browser traffic, rewrite arbitrary response headers, read cookies, or forward credentials by default.
 
 ## Load Unpacked

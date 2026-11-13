@@ -680,6 +680,10 @@ Validation notes:
   response headers back to the Elisp-friendly list shape, and then falls back to
   direct browser fetch / configured proxies if the companion is unavailable.
   Validation passed with `node --test tests/runtime/wasmacs-url-fetch-lisp.test.js`.
+* 2026-11-13: the direct-fetch and proxy fallbacks were removed. The companion
+  is now the only network transport; without it a request fails with an error
+  that names the extension. The proxy samples moved to
+  `archive/retired/self-hosted-fetch-proxy/`.
 
 ## Milestone 6 — Optional Direct Page Messaging
 

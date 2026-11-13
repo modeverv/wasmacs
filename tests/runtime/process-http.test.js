@@ -207,14 +207,12 @@ function pageFunction(start, end, context) {
   vm.runInContext(pageSource.slice(first, last), context);
 }
 
-test("Git POST never falls back after extension failure or an ambiguous response", async () => {
+test("Git POST is not replayed after an extension failure or an ambiguous response", async () => {
   let companionCalls = 0;
   const context = vm.createContext({ URL,
-    location: { href: "https://wasmacs.example/app" }, pageParams: new URLSearchParams(),
-    requestHeadersObject: (headers) => Object.fromEntries(headers || []),
+    location: { href: "https://wasmacs.example/app" },
     companionNetworkFetch: async () => { companionCalls++; throw new Error("reply lost after push"); },
-    fetch: () => assert.fail("POST must not be replayed through direct/proxy transport"),
-    configuredProxyUrls: () => ["https://proxy.example"],
+    fetch: () => assert.fail("the page must not fetch directly; the companion is the only transport"),
   });
   pageFunction("async function hostNetworkFetch(", "const pendingNetworkRequests", context);
   await assert.rejects(context.hostNetworkFetch({

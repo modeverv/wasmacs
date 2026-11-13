@@ -16,7 +16,7 @@
 - `load-file` によってユーザー側 `.wasifs` 内の Elisp を読み込む
 - GitHub Pages 上の静的配信でも起動する
 - `url.el` / `package.el` 系の HTTP(S) リクエストを `host.network.fetch` 経由に流す
-- CORS で直接 fetch できない package archive については、ユーザー管理の self-hosted proxy を使える
+- package archive と Git remote に、唯一のネットワーク経路である Chrome companion 拡張を通じてアクセスする
 - emacsでのヤンクをブラウザ clipboard に流す
 - Emacs からサブプロセスを起動する（`call-process`、`make-process`、`shell-command`、`M-x shell`、外部コマンドとパイプを使う eshell）
 - POSIX シェル（BusyBox の `ash`）と約150個のコマンド、git 2.52、GNU grep 3.12、GNU diffutils 3.12、CPython 3.14 を、パイプ・シグナル・`fork`・`exec` を備えた本物のプロセスとして動かす
@@ -27,7 +27,7 @@
 - プロセスは host のものではなく、wasmacs 自身の process service が提供します。動かせるのは同梱したプログラム（BusyBox のコマンド群、git、GNU grep、GNU diffutils、CPython）だけです。[サブプロセス](#サブプロセス-shellgitgrep) を参照してください
 - 擬似端末（pty）と socket はありません。`M-x term` / `ansi-term` は動きません（`M-x shell` と eshell は動きます）。Git の `clone` / `fetch` / `push` は Chrome 拡張経由の Smart HTTP(S) とローカルリポジトリに対応します
 - スケジューリングは1スレッド上の協調型です。システムコールや定期チェックを行わない長時間の計算では中断が遅れます。CPython のインタープリターには Python のループ用の定期チェックを追加しています
-- `package-refresh-contents` などのネットワーク機能は、ブラウザ fetch / CORS / proxy の制約を受けます
+- ネットワークアクセスには Chrome companion 拡張（`extension/`）が必要で、接続先は拡張が許可する host に限られます。拡張がなければ `package-refresh-contents` や `git clone` などのネットワーク機能は失敗します。[ネットワークアクセス](#ネットワークアクセス) を参照してください
 - GUI Emacs の native frame を移植しているわけではなく、現状は xterm.js 上の terminal Emacs です
 - `docs/` に置く Pages 用 artifact は、GitHub Pages で扱える形に分割・制限しています
 - VS Code `.wasifs` extension 用の別ビルドルートを生成できる
@@ -43,7 +43,7 @@ src/runtime/ host/runtime libraries used by tests and tools
 src/runtime/process/ process service（kernel、プロセスごとの runtime、userland のファイル配置）
 src/userland/ プロセスとして動くプログラム（BusyBox、git、GNU grep）のビルド
 tools/      build / validation / probe / inspection tools
-proxy/      package archive 用の self-hosted fetch proxy サンプル
+extension/  Chrome companion 拡張（唯一のネットワーク経路）
 vendor/     pinned upstream GNU Emacs source。read-only
 build/      copied Emacs working tree、temporary state、generated artifacts
 build/artifacts/ generated wasm / pdmp / wasifs build products
@@ -58,7 +58,7 @@ archive/    退役した仕組み（archive/retired/、索引は archive/README.
 
 `vendor/emacs` は pinned upstream GNU Emacs source です。直接編集しません。製品が Emacs に加える変更は `src/c/patches/` の番号付き patch で、copied build tree に適用します（`src/c/README.md` を参照）。
 
-製品ルートは、ページ1つ・worker 1つ・ビルド1つです。`src/wasm/xterm-atomics-pdump.html`、`src/wasm/src/emacs-atomics-pdump-worker.js`、`src/build/build-emacs-browser-atomics-pdump-profile.sh` がそれにあたります。以前の仕組み（command bridge を使う textarea アプリ、Asyncify の command protocol、初期の build spike）は `archive/retired/` に移してあり、`tests/runtime/canonical-route.test.js` が、現役のファイルがそれらに依存しないことを確認します。
+製品ルートは、ページ1つ・worker 1つ・ビルド1つです。`src/wasm/xterm-atomics-pdump.html`、`src/wasm/src/emacs-atomics-pdump-worker.js`、`src/build/build-emacs-browser-atomics-pdump-profile.sh` がそれにあたります。以前の仕組み（command bridge を使う textarea アプリ、Asyncify の command protocol、初期の build spike、self-hosted fetch proxy）は `archive/retired/` に移してあり、`tests/runtime/canonical-route.test.js` が、現役のファイルがそれらに依存しないことを確認します。
 
 ## ブラウザアプリ
 
@@ -210,45 +210,80 @@ GNU diffutils 3.12 の `diff` と `diff3` を wasm として同梱していま�
 
 ## ネットワークアクセス
 
-wasmacs では、ネットワークアクセスをブラウザ host capability として明示的に扱います。
+wasmacs では、ネットワークアクセスをブラウザ host capability として明示的に扱います。その唯一の経路が `extension/` の Chrome companion 拡張です。ページ自身が remote URL を fetch することはなく、proxy への fallback もありません。拡張がなければ `package-refresh-contents`、`git clone` などのネットワーク機能は、拡張の名前を示すエラーで失敗します。拡張を読み込めないブラウザではネットワークは使えません。
 
-Emacs core に raw socket を渡して package download をさせるのではありません。Git の HTTP helper も同じ request/response の境界を使用します。代わりに、checked-in の `wasmacs-url-fetch` Lisp overlay が `url.el` の HTTP(S) リクエストを `host.network.fetch` に流します。これにより、`package-refresh-contents`、`package-install`、`use-package :ensure` などは request/response service として実行できます。
+Emacs core に raw socket を渡して package download をさせるのではありません。代わりに、checked-in の `wasmacs-url-fetch` Lisp overlay が `url.el` の HTTP(S) リクエストを `host.network.fetch` に流します。これにより、`package-refresh-contents`、`package-install`、`use-package :ensure` などは request/response service として実行できます。Git の HTTP helper も、再開可能な process import を通じて同じ request/response の境界を使用します。
 
-ただし、ブラウザの直接 `fetch` は CORS の制約を受けます。remote package archive が page origin を許可していない場合、JavaScript から response body を読むことはできません。Service Worker は app cache や COOP/COEP には使えますが、CORS で読めない cross-origin response を読めるようにはできません。
-
-CORS で archive が読めない場合、ユーザー自身が管理する self-hosted fetch proxy を設定できます。wasmacs は中央 proxy service を提供しません。
-
-`proxy/` には Node、PHP、Rust、Perl、Ruby、Python、PowerShell のサンプルがあります。各サンプルは、local development の `__wasmacs_network_fetch` route と同じ JSON request shape を受け取り、status、headers、base64 response bytes を返します。
-
-proxy sample は基本的に allowlist-based です。ただし Ruby sample は localhost-only development 向けに `*` を default とします。
-
-許可する archive origin は次のように指定します。
-
-```sh
-WASMACS_PROXY_ALLOWED_ORIGINS=https://elpa.gnu.org,https://melpa.org
-```
-
-local proxy を起動したら、browser runtime に `network-proxy` を渡します。
+すべてのリクエストは同じ経路を通ります。
 
 ```text
-http://127.0.0.1:5173/app/xterm-atomics-pdump.html?network-proxy=http%3A%2F%2F127.0.0.1%3A8787%2F
+Emacs (url.el / git-remote-http)
+  -> Emacs worker の host.network.fetch
+  -> page relay（worker は SharedArrayBuffer の result slot で待つ）
+  -> content-script bridge（WASMACS_PROXY_* メッセージ）
+  -> 拡張の service worker
+  -> allowlist に従った fetch
+  -> status / フィルタ済み headers / base64 body
 ```
 
-runtime はまず direct browser fetch を試します。CORS で archive が読めない場合、設定された proxy endpoint に fallback します。localhost development pages では `make dev` が提供する same-origin `__wasmacs_network_fetch` route も使えます。GitHub Pages のような静的 host にはこの route はありません。
+拡張自身の `fetch` はページの CORS 制約を受けないため、GNU ELPA のような package archive も読めます。ただし到達できるのは、manifest の host permissions と拡張の allowlist の両方に含まれる target だけです。ブラウザ全体の CORS を無効にするものではありません。
 
-Atomics/pdump route では、worker が `host.network.fetch` を main page に relay します。実際の direct/proxy `fetch` は worker-local synchronous XHR ではなく、main page thread 側で実行され、結果は SharedArrayBuffer result slot 経由で返されます。
+### Chrome companion 拡張のインストール
 
-public HTTPS page から localhost proxy を呼ぶ場合、modern browser は Private Network Access preflight を送ることがあります。そのため bundled proxy sample は `Access-Control-Allow-Private-Network: true` を返し、wildcard CORS ではなく requesting `Origin` を echo します。
+`chrome://extensions` を開き、Developer mode を有効にして Load unpacked から `extension/` を選びます。その後 wasmacs のページを再読み込みしてください。ページは最初のリクエスト時に拡張を検出します。
 
-Emacs Lisp 側から user image や init flow ごとに proxy を設定することもできます。
+既定の拡張ポリシーでは、呼び出し元として `http://localhost/*`、`http://127.0.0.1/*` のローカルページと、公開 Pages アプリ `https://modeverv.github.io/wasmacs/*` を許可します。fetch 先として許可するのは GNU ELPA、MELPA、raw GitHub files、GitHub です。private network の target と credential 付きリクエストは既定で拒否します。他の host に接続するには、`extension/manifest.json` の `host_permissions` と、拡張の options ページの allowlist の両方に追加します。
+
+`package-refresh-contents` が GNU ELPA の package menu まで到達することを、次の URL で手動確認済みです。
+
+```text
+http://127.0.0.1:5173/app/xterm-atomics-pdump.html?autostart
+```
+
+Emacs 側の smoke 式:
 
 ```elisp
-(require 'wasmacs-url-fetch)
-(setq wasmacs-url-fetch-proxy-url "http://127.0.0.1:8787/")
-(wasmacs-url-fetch-enable)
+(progn
+  (require 'wasmacs-url-fetch)
+  (wasmacs-url-fetch-enable)
+
+  (require 'package)
+  (setq package-user-dir "/home/user/.emacs.d/elpa"
+        package-check-signature nil
+        package-archives '(("gnu" . "https://elpa.gnu.org/packages/")))
+  (package-initialize)
+  (unless package-archive-contents
+    (package-refresh-contents))
+
+  (require 'use-package)
+  (setq use-package-always-ensure t)
+  (use-package rainbow-mode
+    :ensure t
+    :demand t))
 ```
 
-Emacs 側の `wasmacs-url-fetch-proxy-url` は各 `url.el` / `package.el` request と一緒に送られ、page-level の `network-proxy` default より優先されます。
+ping テスト、安全な GET テスト、options ページ、audit log については `extension/README.md` を参照してください。
+
+### Git の clone / fetch / push
+
+拡張をインストールしたら、`M-x shell` や eshell で通常の Smart HTTP(S) remote を使います。
+
+```sh
+git clone https://github.com/OWNER/REPOSITORY.git
+cd REPOSITORY
+git fetch origin
+git push origin main
+```
+
+target には Chrome の host permission と拡張の allowlist エントリの両方が必要です。GitHub は最初から含まれています。private リポジトリや認証付き push では、拡張の options で **Allow credentials** を有効にし、allowlist には HTTPS の host を完全一致で書きます。認証情報は wasmacs の中で Git credentials か URL を限定した `http.extraHeader` として与えます。拡張はホストマシンの認証情報を取り込まず、token も保存しません。`/home/user` に保存した認証情報は可搬 user image の一部になります。認証付きリクエストと POST は redirect を追わないので、正規の remote URL を使ってください。
+
+helper は pin した Git の `remote-curl.c` をそのまま使ってビルドしており、negotiation、pack の検証、ref の更新は Git 自身が行います。protocol v0/v2 に対応します。HTTP body はバッファされ、**リクエスト・レスポンスそれぞれ 25 MiB**、**タイムアウト 30 秒** の上限があります。大きなリポジトリはこの上限を超えることがあります。SSH、`git://`、dumb HTTP/WebDAV、cross-origin の packfile ダウンロードは提供しません。`C-g` やプロセス終了で処理中のリクエストは取り消されます。失敗したリクエストはエラーとして報告され、再送はしません。取り消しや失敗に終わった push もサーバーに届いている可能性があるので、再実行の前に remote を確認してください。
+
+実際の Chrome と拡張による clone / fetch / push の検証は `npm run test:git-http`（使い捨ての HTTPS リポジトリが相手）、wasm の Git transport の検証は `npm run test:git-http:transport` で実行します。どちらもユーザーの remote には push しません。実装の詳細は [Git HTTP adapter](src/userland/git/README.md) を参照してください。
+
+### 廃止: 直接 fetch と self-hosted proxy
+
+以前は、ページからの直接 `fetch` と self-hosted fetch proxy も試していました。`proxy/` のサンプル、開発サーバーの `__wasmacs_network_fetch` route、ページパラメータ `network-proxy` と `network-transport`、Lisp 変数 `wasmacs-url-fetch-proxy-url` がそれにあたります。これらは 2026-11-13 に廃止しました。proxy サンプルとそのテストは `archive/retired/self-hosted-fetch-proxy/` に残してあります。`archive/README.md` を参照してください。
 
 ## `.wasifs` イメージ
 

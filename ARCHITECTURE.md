@@ -730,25 +730,18 @@ Elisp は強力であり、ユーザー設定や package は任意コードに�
 
 Network access is a host capability, not an Emacs raw socket in the MVP.
 `wasmacs-url-fetch` presents HTTP(S) archive downloads to `url.el` through
-`host.network.fetch`. Browser direct fetch is used when CORS permits it. When an
-archive does not expose readable cross-origin responses, users may configure a
-self-hosted fetch proxy under their own control. The project must not operate a
-central proxy by default; sample proxies are allowlist-based and preserve the
-same request/response contract as `host.network.fetch`. Browser entrypoints pass
-an optional `network-proxy` endpoint into the worker; the wasm host bridge tries
-direct fetch first, then the configured proxy, then the same-origin development
-proxy only on local development origins. Static public hosts such as GitHub
-Pages do not provide `__wasmacs_network_fetch`, so they must not be treated as a
-same-origin development proxy. Localhost proxy samples must answer CORS
-preflight because they are usually a different origin from the wasmacs page.
-When a public HTTPS origin calls `127.0.0.1`, modern browsers can also require a
-Private Network Access preflight, so local proxy samples answer
-`Access-Control-Allow-Private-Network: true` and echo the requesting `Origin`
-instead of wildcard CORS.
+`host.network.fetch`. The Chrome companion extension under `extension/` is the
+only transport for that capability: the page never fetches remote URLs itself
+and there is no fallback. Without the extension a request fails with an error
+that names it. The project must not operate a central proxy. Direct page fetch
+and user-operated fetch proxies (the `proxy/` samples, the development server's
+`__wasmacs_network_fetch` route and the `network-proxy` / `network-transport`
+page parameters) were retired on 2026-11-13; the samples are kept in
+`archive/retired/self-hosted-fetch-proxy/`.
 
-The Chrome companion extension lane under `extension/` is another transport
-for the same explicit network capability. It is not a global CORS-disable
-mechanism and must not rewrite arbitrary web responses. The wasmacs page talks
+The companion extension is the transport for this explicit network capability.
+It is not a global CORS-disable mechanism and must not rewrite arbitrary web
+responses. The wasmacs page talks
 to a content-script bridge with versioned `WASMACS_PROXY_*` messages, the
 extension service worker validates caller origins and target allowlists, and the
 response is copied back as status, filtered headers, and base64 bytes. This
@@ -758,9 +751,10 @@ C/wasm still observes only the `host.network.fetch` request/response boundary.
 On the Atomics pdump route, C/wasm still observes `host.network.fetch` as a
 synchronous primitive, but the browser transport is owned by the main page. The
 worker posts a `host-network-fetch` request and waits on a SharedArrayBuffer
-result slot; the page performs direct `fetch` or localhost proxy `fetch` and
-wakes the worker. This avoids worker-local synchronous XHR being blocked before
-Chrome sends a request to `127.0.0.1`.
+result slot; the page forwards the request to the companion extension and wakes
+the worker. The `wasmacs_host_network_fetch_json` import linked into Emacs has
+no transport of its own: unless the page relay replaces it, it returns an
+error.
 
 Git Smart HTTP uses the same host capability through a separate `git-http`
 process image (`src/userland/git/`). It compiles the release-pinned upstream
@@ -777,9 +771,9 @@ At most four requests are in flight per kernel. Each request has a unique ID
 and its own bounded SAB; termination cancels it and drops process references.
 The host allocates the completed response in the calling process's memory.
 
-Git requests select one transport (companion by default, or explicitly direct
-fetch/configured proxy). There is no retry through a different transport after
-a failure because a POST may already have updated the remote. The companion
+Git requests go through the companion like every other request. A failed request
+is reported and never retried, because a POST may already have updated the
+remote. The companion
 permits binary POST only at Git RPC endpoints with matching content types;
 Authorization requires explicit permission and an exact HTTPS target origin.
 Authenticated requests and POST reject redirects. Request/response bodies are
