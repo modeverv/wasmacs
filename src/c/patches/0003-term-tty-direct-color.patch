@@ -1,0 +1,71 @@
+--- a/src/term.c
++++ b/src/term.c
+@@ -1980,7 +1980,26 @@
+ /* Turn appearances of face FACE_ID on tty frame F on.
+    FACE_ID is a realized face ID number, in the face cache.  */
+ 
++/* wasmacs tty direct-color output: the browser build uses internal
++   termcap rather than terminfo, so Emacs' terminfo RGB/Tc fallback is not
++   available.  When the inline TERMCAP advertises 24-bit color cells, emit
++   xterm direct-color SGR from the already translated tty pixel. */
++#ifdef __EMSCRIPTEN__
+ static void
++wasmacs_tty_output_direct_color (struct tty_display_info *tty,
++                                 bool background, unsigned long pixel)
++{
++  char sequence[32];
++  int red = (pixel >> 16) & 0xff;
++  int green = (pixel >> 8) & 0xff;
++  int blue = pixel & 0xff;
++  snprintf (sequence, sizeof sequence, "\033[%d;2;%d;%d;%dm",
++            background ? 48 : 38, red, green, blue);
++  OUTPUT1 (tty, sequence);
++}
++#endif
++
++static void
+ turn_on_face (struct frame *f, int face_id)
+ {
+   struct face *face = FACE_FROM_ID (f, face_id);
+@@ -2034,20 +2053,34 @@
+       const char *ts;
+       char *p;
+ 
+-      ts = tty->standout_mode ? tty->TS_set_background : tty->TS_set_foreground;
++ts = tty->standout_mode ? tty->TS_set_background : tty->TS_set_foreground;
+       if (face_tty_specified_color (fg) && ts)
+ 	{
+-          p = tparam (ts, NULL, 0, fg, 0, 0, 0);
+-	  OUTPUT (tty, p);
+-	  xfree (p);
++#ifdef __EMSCRIPTEN__
++          if (tty->TN_max_colors == 16777216)
++            wasmacs_tty_output_direct_color (tty, tty->standout_mode, fg);
++          else
++#endif
++            {
++              p = tparam (ts, NULL, 0, fg, 0, 0, 0);
++	      OUTPUT (tty, p);
++	      xfree (p);
++            }
+ 	}
+ 
+       ts = tty->standout_mode ? tty->TS_set_foreground : tty->TS_set_background;
+       if (face_tty_specified_color (bg) && ts)
+ 	{
+-          p = tparam (ts, NULL, 0, bg, 0, 0, 0);
+-	  OUTPUT (tty, p);
+-	  xfree (p);
++#ifdef __EMSCRIPTEN__
++          if (tty->TN_max_colors == 16777216)
++            wasmacs_tty_output_direct_color (tty, !tty->standout_mode, bg);
++          else
++#endif
++            {
++              p = tparam (ts, NULL, 0, bg, 0, 0, 0);
++	      OUTPUT (tty, p);
++	      xfree (p);
++            }
+ 	}
+ 
+ 	ts = tty->TF_set_underline_color;

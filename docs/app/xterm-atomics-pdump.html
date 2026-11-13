@@ -235,6 +235,12 @@ const debugBootOptions = {
   debugLog: pageParams.get("debug-log") === "1",
   extraEvals: pageParams.getAll("extra-eval"),
 };
+// Development aid: try a changed process kernel without relinking Emacs
+// (?process-kernel=/src/runtime/process/wasmacs-kernel.js).  Local hosts only.
+if (pageParams.get("process-kernel") && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
+  const kernelUrl = new URL(pageParams.get("process-kernel"), location.href);
+  if (kernelUrl.origin === location.origin) debugBootOptions.processKernelUrl = kernelUrl.href;
+}
 function getStoredNetworkProxyUrl() {
   try { return localStorage.getItem("wasmacs.networkProxyUrl") || ""; }
   catch (_) { return ""; }
@@ -369,7 +375,7 @@ function detectCompanionExtension(timeoutMs = 750) {
   return companionDetectionPromise;
 }
 
-async function companionNetworkFetch(request) {
+async function companionNetworkFetch(request, signal) {
   if (!(await detectCompanionExtension())) {
     throw new Error("wasmacs companion extension is unavailable");
   }
@@ -377,7 +383,16 @@ async function companionNetworkFetch(request) {
   const requestId = nextCompanionRequestId();
   const timeoutMs = Math.min(Number(request.timeoutMs || 30000), 30000);
   return new Promise((resolve, reject) => {
+    function cancelRequest() {
+      window.postMessage({ type: "WASMACS_PROXY_CANCEL", version: 1, requestId }, window.location.origin);
+    }
+    function onAbort() {
+      cancelRequest();
+      cleanup();
+      reject(new Error("HTTP request cancelled"));
+    }
     const timer = setTimeout(() => {
+      cancelRequest();
       cleanup();
       companionFetchAvailable = false;
       reject(new Error("wasmacs companion extension timed out"));
@@ -386,6 +401,7 @@ async function companionNetworkFetch(request) {
     function cleanup() {
       clearTimeout(timer);
       window.removeEventListener("message", onMessage);
+      signal?.removeEventListener("abort", onAbort);
     }
 
     function onMessage(event) {
@@ -404,6 +420,8 @@ async function companionNetworkFetch(request) {
     }
 
     window.addEventListener("message", onMessage);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) { onAbort(); return; }
     window.postMessage({
       type: "WASMACS_PROXY_REQUEST",
       version: 1,
@@ -412,7 +430,7 @@ async function companionNetworkFetch(request) {
         url: request.url,
         method: request.method || "GET",
         headers: requestHeadersObject(request.headers),
-        bodyBase64: request.bodyBase64 || null,
+        bodyBase64: request.bodyBase64 ?? null,
         responseType: "arrayBuffer",
         credentials: "omit",
         timeoutMs,
@@ -421,7 +439,7 @@ async function companionNetworkFetch(request) {
   });
 }
 
-async function hostNetworkFetch(request) {
+async function hostNetworkFetch(request, signal) {
   const url = String(request.url || "");
   const parsed = new URL(url, location.href);
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -429,6 +447,49 @@ async function hostNetworkFetch(request) {
   }
   const method = String(request.method || "GET").toUpperCase();
   const headers = requestHeadersObject(request.headers);
+
+  // A Git POST may already have updated the remote when a reply is lost.
+  // Select ONE transport for process HTTP; never replay it through a fallback.
+  // The companion is the default. Direct/proxy are explicit alternatives.
+  if (request.processHttp) {
+    const transport = pageParams.get("network-transport") || "extension";
+    if (transport === "extension") return companionNetworkFetch(request, signal);
+    if (transport === "proxy") {
+      const proxyUrl = configuredProxyUrls(request)[0];
+      if (!proxyUrl) throw new Error("No HTTP proxy is configured");
+      const response = await fetch(proxyUrl, { method: "POST", body: JSON.stringify(request),
+        credentials: "omit", redirect: "error", signal });
+      if (!response.ok) throw new Error(`HTTP proxy returned ${response.status}`);
+      return response.json();
+    }
+    if (transport !== "direct") throw new Error("Unknown network-transport; use extension, direct or proxy");
+    const binary = atob(request.bodyBase64 || "");
+    const body = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const response = await fetch(parsed.href, { method, headers, credentials: "omit", signal,
+      redirect: method === "POST" || Object.keys(headers).some((key) => key.toLowerCase() === "authorization")
+        ? "error" : "follow",
+      body: method === "GET" || method === "HEAD" ? undefined : body });
+    const chunks = [];
+    let size = 0;
+    const reader = response.body?.getReader();
+    if (reader) {
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          size += value.length;
+          if (size > 25 * 1024 * 1024) throw new Error("Git HTTP response exceeds 25 MiB");
+          chunks.push(value);
+        }
+      } catch (error) { await reader.cancel().catch(() => {}); throw error; }
+      finally { reader.releaseLock(); }
+    }
+    const bytes = new Uint8Array(size);
+    let offset = 0;
+    for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+    return { url: response.url || parsed.href, status: response.status,
+      statusText: response.statusText, headers: responseHeadersArray(response.headers), bodyBase64: bytesToBase64(bytes) };
+  }
 
   const errors = [];
   if (await detectCompanionExtension()) {
@@ -489,10 +550,20 @@ async function hostNetworkFetch(request) {
   }
 }
 
+const pendingNetworkRequests = new Map();
+function cancelNetworkRequests() {
+  for (const controller of pendingNetworkRequests.values()) controller.abort();
+  pendingNetworkRequests.clear();
+}
+window.addEventListener("pagehide", cancelNetworkRequests);
 async function handleHostNetworkFetch(message) {
   const signal = new Int32Array(message.responseSAB, 0, 4);
   const data = new Uint8Array(message.responseSAB, 16);
+  if (Atomics.load(signal, 0) !== 1) return;
+  const controller = new AbortController();
+  if (message.requestId) pendingNetworkRequests.set(message.requestId, controller);
   function write(value) {
+    if (Atomics.load(signal, 0) !== 1) return;
     const json = JSON.stringify(value);
     const bytes = new TextEncoder().encode(json);
     const payload = bytes.length <= data.length
@@ -504,25 +575,53 @@ async function handleHostNetworkFetch(message) {
     Atomics.store(signal, 1, finalBytes.length);
     Atomics.store(signal, 0, 2);
     Atomics.notify(signal, 0, 1);
+    if (message.wakeSAB) {
+      const wake = new Int32Array(message.wakeSAB, 0, 2);
+      Atomics.add(wake, 0, 1);
+      Atomics.notify(wake, 0, 1);
+    }
   }
   try {
-    addLog("info", "network relay: " + JSON.parse(message.requestJson).url);
-    write(await hostNetworkFetch(JSON.parse(message.requestJson)));
+    const request = JSON.parse(message.requestJson);
+    const target = new URL(request.url);
+    addLog("info", `network relay: ${request.method || "GET"} ${target.origin}${target.pathname}`);
+    write(await hostNetworkFetch(request, controller.signal));
   } catch (error) {
     write({ error: error?.message || String(error) });
+  } finally {
+    if (message.requestId && pendingNetworkRequests.get(message.requestId) === controller) {
+      pendingNetworkRequests.delete(message.requestId);
+    }
   }
+}
+
+// Emacs takes one chunk of keyboard bytes at a time from the shared buffer.
+// While it waits for a subprocess it still looks at the keyboard (C-g), but
+// may not produce any output, so a queued chunk must not wait for the next
+// worker message: retry on a short timer until the queue is empty.
+let inputFlushTimer = null;
+function scheduleInputFlush() {
+  if (inputFlushTimer !== null) return;
+  inputFlushTimer = setTimeout(() => {
+    inputFlushTimer = null;
+    flushInputToEmacs();
+  }, 10);
 }
 
 function flushInputToEmacs() {
   if (!inputSAB || pendingInputBytes.length === 0) return;
   const signal = new Int32Array(inputSAB, 0, 2);
-  if (Atomics.load(signal, 1) !== 0) return;
+  if (Atomics.load(signal, 1) !== 0) {
+    scheduleInputFlush();
+    return;
+  }
   const data   = new Uint8Array(inputSAB, 8);
   const count  = Math.min(pendingInputBytes.length, 256);
   for (let i = 0; i < count; i++) data[i] = pendingInputBytes.shift();
   Atomics.store(signal, 1, count);
   Atomics.add(signal, 0, 1);
   Atomics.notify(signal, 0, 1);
+  if (pendingInputBytes.length > 0) scheduleInputFlush();
 }
 
 function sendInputToEmacs(bytes) {
@@ -531,9 +630,22 @@ function sendInputToEmacs(bytes) {
   flushInputToEmacs();
 }
 window.__wasmacsDebugSendInputBytes = sendInputToEmacs;
+// Test hooks: what the terminal shows, and how often Emacs entered its idle
+// wait (an idle Emacs must not spin).
+window.__wasmacsDebugScreenText = () => (terminal ? terminal.screenText() : "");
+window.__wasmacsDebugIdleWaitCount = 0;
+
+// What Emacs was last told.  Publishing wakes Emacs from its idle wait and
+// Emacs reports every idle wait it enters, so publishing again without news
+// would keep both threads busy forever.
+let publishedTerminalSize = "";
 
 function publishTerminalSize(size) {
   lastTerminalSize = size;
+  const wakesEmacs = Boolean(inputSAB && emacsInteractive);
+  const published = `${size.cols}x${size.rows}${wakesEmacs ? " wake" : ""}`;
+  if (published === publishedTerminalSize) return;
+  publishedTerminalSize = published;
   if (terminalSizeSAB) {
     const signal = new Int32Array(terminalSizeSAB);
     Atomics.store(signal, 1, size.cols);
@@ -633,6 +745,7 @@ function generatePdmp() {
 // ── Phase 2: Run Emacs with pdmp ────────────────────────────────
 function startEmacsWithPdmp(pdmpBytes) {
   if (!sabOK) { setStatus("SAB not available", "error"); return; }
+  cancelNetworkRequests();
 
   initTerminal();
 
@@ -646,10 +759,15 @@ function startEmacsWithPdmp(pdmpBytes) {
       handleHostNetworkFetch(msg);
       return;
     }
+    if (msg.type === "host-network-cancel") {
+      pendingNetworkRequests.get(msg.requestId)?.abort();
+      return;
+    }
 
     if (msg.type === "ready") {
       inputSAB = msg.sab;
       terminalSizeSAB = msg.terminalSizeSAB;
+      publishedTerminalSize = "";
       publishTerminalSize(lastTerminalSize);
       setStatus("booting Emacs from pdmp…");
     }
@@ -693,6 +811,7 @@ function startEmacsWithPdmp(pdmpBytes) {
     }
 
     if (msg.type === "timing-wait-enter") {
+      window.__wasmacsDebugIdleWaitCount += 1;
       emacsInteractive = true;
       setStatus("interactive wait ✓", "interactive");
       if (terminal && lastTerminalSize) {
@@ -736,6 +855,7 @@ function startEmacsWithPdmp(pdmpBytes) {
     }
 
     if (msg.type === "session-ended") {
+      cancelNetworkRequests();
       const err = msg.error ? ` — ${msg.error.slice(0, 80)}` : "";
       addLogErr(`session-ended status=${msg.status ?? "?"} ${msg.error ?? ""}`);
       setStatus(`ended (${msg.status ?? "?"}${err})`, "error");

@@ -164,3 +164,30 @@ Remaining:
 
 Run the README ping test, then manually check MELPA, raw GitHub, blocked URL,
 options persistence, and audit log visibility in Chrome.
+
+## Milestone 5 - Git Smart HTTP Transport (2026-11-13)
+
+Status: [x] complete
+
+- [x] Accept byte-preserving Git RPC POST bodies via `bodyBase64`, restricted to
+  upload-pack/receive-pack endpoints and matching media types.
+- [x] Preserve Git-Protocol and WWW-Authenticate; gate explicit Authorization on
+  the existing credentials permission, exact target origin, and HTTPS.
+- [x] Reject redirects for POST and authenticated requests; preserve the final
+  URL for public discovery GET. Do not retry writes.
+- [x] Bound request bytes before decoding and response bytes while streaming.
+- [x] Add document-scoped cancellation, including cancellation during settings
+  loading, and keep timeout distinct from user cancellation.
+- [x] Omit credentials, query strings, headers, and bodies from audit records.
+- [x] Validate with `rtk npm --prefix extension test`: 24 tests passed, including
+  a real local HTTP 307 response proving a POST is sent only once.
+- [x] Real Chrome + extension + Emacs: HTTP and HTTPS+Basic clone/fetch/push,
+  SHA/binary/server-ref verification, non-fast-forward rejection, repeated fetch,
+  C-g/C-c C-c cancellation and recovery. Public GitHub shallow clone also passed.
+  Extension audit proved the route with no direct/proxy fallbacks.
+  Evidence: `logs/git-https-extension-e2e.txt` and `logs/git-http-extension-e2e.txt`
+  at the repository root.
+
+These extension tests establish the HTTP bridge contract. They do not alone
+establish that the wasm Git helper or the installed Chrome extension can clone,
+fetch, or push; the repository-level process/browser checks cover those layers.

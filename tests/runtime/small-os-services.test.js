@@ -150,6 +150,7 @@ test("current product scaffold facades are pending command and terminal tty", ()
   assert.deepEqual(productScaffolds.map((facade) => facade.id).sort(), [
     "dired-without-ls-facade",
     "pending-command-guard-facade",
+    "process-service-facade",
     "terminal-tty-facade",
     "url-fetch-facade",
   ]);
@@ -238,4 +239,29 @@ test("low-level lifecycle, memory, root, and GC ownership stays in C/wasm", () =
     [BoundaryRisk.ambiguousOwner, BoundaryRisk.diagnosticOnly].includes(OsCompatibilityBoundaryInventory.memoryRoot.risk),
     true,
   );
+});
+
+test("subprocesses are a product route owned by the process service", () => {
+  const subprocess = createSubstrateRecord(SmallOsOperations.subprocess.id);
+  assert.equal(subprocess.treatment, BehaviorTreatment.product);
+  assert.equal(subprocess.ownerServices.includes(SmallOsServices.process), true);
+  assert.equal(subprocess.crossServiceChecks.includes(CrossServiceChecks.processInputScheduler), true);
+  assert.equal(subprocess.crossServiceChecks.includes(CrossServiceChecks.processFilesystem), true);
+  assert.equal(subprocess.sourceSurfaces.includes("vendor/emacs/src/callproc.c"), true);
+  assert.match(subprocess.acceptance, /M-x shell/);
+
+  const facade = facadeContract("process-service-facade");
+  assert.equal(facade.jsRole, JsRoles.hostCapabilityProvider);
+  assert.equal(facade.ownerServices.includes(SmallOsServices.process), true);
+  assert.equal(facade.cWasmEntrypoints.includes("wasmacs_os_raise_signal"), true);
+
+  // The kernel's state is in JS on purpose; the inventory says so.
+  const inventory = OsCompatibilityBoundaryInventory.process;
+  assert.equal(inventory.risk, BoundaryRisk.jsOwnsLowLevelState);
+  assert.equal(inventory.currentStateOwners.includes(OwnershipLayers.jsWorker), true);
+
+  // What stays unavailable no longer includes processes.
+  const unavailable = createSubstrateRecord(SmallOsOperations.unavailableBrowserBoundary.id);
+  assert.doesNotMatch(unavailable.acceptance, /process/);
+  assert.match(unavailable.acceptance, /pty/);
 });

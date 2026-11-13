@@ -16,8 +16,16 @@ const types = new Map([
   [".wasm", "application/wasm"],
 ]);
 
+// The canonical app page.  "/" redirects here, like docs/index.html does on Pages.
+const appEntrypoint = "/app/xterm-atomics-pdump.html";
+
+// /artifacts/* is served from the Pages bundle (docs/artifacts: patched temacs.js
+// and split temacs.data, produced by src/build/build-site.mjs) and falls back to
+// build/artifacts for files that are not part of the bundle.  The two must not be
+// mixed for the same runtime, so rebuild the bundle (npm run build) after a wasm
+// rebuild.
 function resolvePath(urlPath) {
-  const decodedPath = urlPath === "/" ? "/src/wasm/index.html" : decodeURIComponent(urlPath);
+  const decodedPath = decodeURIComponent(urlPath);
   let sourcePath = decodedPath;
   if (decodedPath.startsWith("/artifacts/")) {
     const artifactPath = decodedPath.slice("/artifacts/".length);
@@ -141,6 +149,15 @@ const server = createServer(async (request, response) => {
     const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
     if (url.pathname === "/__wasmacs_network_fetch") {
       await handleNetworkFetchProxy(request, response);
+      return;
+    }
+
+    if (url.pathname === "/" || url.pathname === "/index.html") {
+      response.writeHead(302, {
+        "Cache-Control": "no-store",
+        Location: `${appEntrypoint}${url.search}`,
+      });
+      response.end();
       return;
     }
 

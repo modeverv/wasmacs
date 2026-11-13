@@ -6,6 +6,12 @@ solve pdump, purecopy, or Asyncify browser-worker boot. It makes those problems
 belong to explicit services before more probes or copied-source patches are
 added.
 
+> **Reading note (2026-11-13).** The registry now lives at
+> `src/wasm/src/small-os-services.js`. `small-os-runtime.js`, the
+> pending-command protocol and the other `app/src/...` modules named below were
+> moved to `archive/retired/` (index: `archive/README.md`). The registry gained
+> a Process Service (`doc/process-service.md`).
+
 ## Runtime Contract Module
 
 `app/src/small-os-services.js` is the current substrate registry.
@@ -66,6 +72,7 @@ implements them.
 | `preloaded-state-pdump-facade` | Preloaded-State Service, Lifecycle Service, Memory And Root Service | `vendor/emacs/src/pdumper.c`, `vendor/emacs/src/alloc.c`, `vendor/emacs/src/puresize.h`, `vendor/emacs/lisp/loadup.el`, `vendor/emacs/lisp/bindings.el`, `vendor/emacs/src/Makefile.in` | host capability provider | placeholder | Generated artifact loads before `initialized`, preserves pdumper-class relocation/static-root semantics, then simple eval and explicit GC pass. |
 | `segment-root-relocation-facade` | Memory And Root Service, Preloaded-State Service | `vendor/emacs/src/alloc.c`, `vendor/emacs/src/pdumper.c`, `vendor/emacs/src/puresize.h`, `vendor/emacs/src/lisp.h` | diagnostic harness | placeholder | Segment/root/relocation diagnostics explain purecopy or pdump failures without JS owning raw roots, pure space, or relocation tables. |
 | `dired-without-ls-facade` | Filesystem And Persistence Service, Host Capability Service | `vendor/emacs/src/dired.c`, `vendor/emacs/src/fileio.c`, `vendor/emacs/lisp/files.el`, `vendor/emacs/lisp/dired.el`, `vendor/emacs/lisp/ls-lisp.el`, `vendor/emacs/src/callproc.c` | host capability provider | product scaffold | `ls-lisp` is loaded, `ls-lisp-use-insert-directory-program` and `insert-directory-program` are nil, and `insert-directory` can list a mounted directory through Emacs file primitives without `host.process`. |
+| `process-service-facade` | Process Service, Blocking Input Scheduler, Filesystem And Persistence Service, Host Capability Service | `vendor/emacs/src/process.c`, `vendor/emacs/src/callproc.c`, `vendor/emacs/src/sysdep.c`, `vendor/emacs/src/keyboard.c` | host capability provider | product scaffold | `call-process` and `make-process` start programs of the bundled userland through `emacs_spawn`; exit statuses, signals, pipe EOF and `SIGCHLD` reach Emacs through its unchanged process code; `C-g` ends a blocking wait with a quit. |
 
 Suggested first C/wasm entrypoint names are also mirrored in
 `SmallOsFacades`: `wasmacs_os_lifecycle_phase`,
@@ -142,8 +149,17 @@ role. Persistent-profile evidence is in
 
 - Owner: Browser GUI Boundary and Host Capability Service
 - Treatment: product behavior
-- Purpose: surface unsupported process, pty, clipboard, and GUI features without
-  faking editor semantics
+- Purpose: surface unsupported pty, socket, clipboard, and GUI features without
+  faking editor semantics (processes are no longer among them: see the
+  `subprocess` operation and `process-service-facade`)
+
+`subprocess`
+
+- Owner: Process Service, Blocking Input Scheduler, Filesystem And Persistence
+  Service
+- Treatment: product behavior
+- Purpose: `M-x shell`, eshell, `vc-git`, Magit and `M-x grep` against the
+  bundled userland, through Emacs's unchanged process code
 
 ## Integration Points
 

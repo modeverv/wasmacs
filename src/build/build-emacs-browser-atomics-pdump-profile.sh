@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Build a pdumper-enabled Atomics profile for Level 5-6.
+# Build the product runtime: pdumper-enabled Emacs for the browser, blocking on
+# Atomics.wait (no Asyncify).  This is the canonical wasmacs build.
 #
-# Key differences from build-emacs-browser-atomics.sh:
-#   - Source tree: pdump-configure-probe (has HAVE_PDUMPER + alloc.c/pdumper.c fixes)
-#   - Generates bootstrap-emacs.pdmp with a stub-linked Node profile, then
-#     builds the browser Atomics profile from the same source tree.
-#   - Bundles pdmp alongside temacs.wasm
-#   - Same Atomics.wait blocking (NO Asyncify)
+#   - Source tree: build/emacs-pdump-configure-probe/src (a copy of vendor/emacs
+#     created by probe-emacs-pdump-configure.sh).
+#   - C/Lisp changes: src/c/patches/*.patch, applied by apply-emacs-patches.sh.
+#   - Host library: tools/scripts/wasmacs-atomics-host-library.js.
+#   - bootstrap-emacs.pdmp is generated with the final runtime under Node and
+#     bundled next to temacs.wasm.
 #
 # Boot: callMain(["--dump-file=/bootstrap-emacs.pdmp","--quick","--no-splash","-nw"])
 set -euo pipefail
@@ -17,6 +18,8 @@ pdump_src="${repo_root}/build/emacs-pdump-configure-probe/src"
 build_dir="${repo_root}/build/emacs-pdump-configure-probe/build-gnu-host-internal-termcap-pdump"
 out_dir="${repo_root}/build/artifacts/emacs-browser-atomics-pdump"
 atomics_host_library="${repo_root}/tools/scripts/wasmacs-atomics-host-library.js"
+# The process kernel is linked into the runtime (plain JS, no Emscripten macros).
+process_kernel="${repo_root}/src/runtime/process/wasmacs-kernel.js"
 emmake_bin="${EMMAKE:-emmake}"
 emacs_wasm_cflags="${EMACS_WASM_CFLAGS:--O3 -g0}"
 emacs_wasm_linkflags="${EMACS_WASM_LINKFLAGS:-${emacs_wasm_cflags}}"
@@ -73,71 +76,14 @@ if [ -d "${repo_root}/src/emacs-lisp" ]; then
     "${repo_root}/src/emacs-lisp/" "${pdump_src}/lisp/"
 fi
 
-loadup_el="${pdump_src}/lisp/loadup.el"
-if ! grep -q "wasmacs wasm-O2: suppress GC during cold loadup" "${loadup_el}"; then
-  echo "=== Patching loadup.el to suppress GC during cold loadup (-O2/-O3 wasm-local GC corruption) ==="
-  perl -0pi -e '
-    s/(\(setq redisplay--inhibit-bidi t\)\n)/$1\n;; wasmacs wasm-O2: suppress GC during cold loadup to avoid wasm-local GC corruption.\n;; Under -O2\/-O3 Emscripten builds, the C compiler may keep Lisp_Objects in wasm value-stack\n;; locals that are not scanned by the conservative GC.  Setting a very high threshold\n;; prevents GC from firing while early Lisp files are loaded.\n(setq gc-cons-threshold (* 400 1024 1024))\n/
-  ' "${loadup_el}"
-fi
-if ! grep -q "wasmacs wasm-O2: set a large gc-cons-threshold for interactive use" "${loadup_el}"; then
-  echo "=== Patching loadup.el to bake in a large gc-cons-threshold for interactive use ==="
-  perl -0pi -e '
-    s/(\n        \(message "Dumping under the name %s" output\))/
-        ;; wasmacs wasm-O2: set a large gc-cons-threshold for interactive use.\n        ;; Default (~800KB) causes excessive GC in the wasm interpreter; 100MB\n        ;; eliminates GC for typical editing workloads.\n        (setq gc-cons-threshold (* 100 1024 1024))$1/
-  ' "${loadup_el}"
-fi
-if ! grep -q "wasmacs pbootstrap: preload url fetch lisp" "${loadup_el}"; then
-  echo "=== Patching loadup.el to preload url fetch Lisp into pbootstrap pdmp ==="
-  perl -0pi -e '
-    s/(\n        \(message "Dumping under the name %s" output\))/
-        (when (equal dump-mode "pbootstrap")\n          ;; wasmacs pbootstrap: preload url fetch lisp before the portable dump.\n          ;; Browser\/CI pdmp startup can otherwise overflow the wasm JS call\n          ;; stack while loading these bytecode-heavy Lisp libraries after\n          ;; restore.  Keeping them in the dump makes runtime require shallow.\n          (add-to-list (quote load-path) \"\/usr\/local\/share\/emacs\/30.2\/lisp\/url\")\n          (add-to-list (quote load-path) \"\/usr\/local\/share\/emacs\/30.2\/lisp\/net\")\n          (require (quote json))\n          (require (quote url-methods))\n          (require (quote url-parse))\n          (require (quote url-vars))\n          (require (quote url))\n          (require (quote wasmacs-url-fetch)))$1/s
-  ' "${loadup_el}"
-fi
-if ! grep -q '/usr/local/share/emacs/30.2/lisp/url' "${loadup_el}"; then
-  echo "=== Patching loadup.el to add URL Lisp directory before pbootstrap preload ==="
-  perl -0pi -e '
-    s/(\n          \(require \(quote json\)\))/
-          (add-to-list (quote load-path) "\/usr\/local\/share\/emacs\/30.2\/lisp\/url")$1/s
-  ' "${loadup_el}"
-fi
-if ! grep -q '/usr/local/share/emacs/30.2/lisp/net' "${loadup_el}"; then
-  echo "=== Patching loadup.el to add net Lisp directory before pbootstrap preload ==="
-  perl -0pi -e '
-    s/(\n          \(require \(quote json\)\))/
-          (add-to-list (quote load-path) "\/usr\/local\/share\/emacs\/30.2\/lisp\/net")$1/s
-  ' "${loadup_el}"
-fi
-if ! grep -q '(require (quote url))' "${loadup_el}"; then
-  echo "=== Patching loadup.el to preload url.el before pbootstrap pdmp ==="
-  perl -0pi -e '
-    s/(\n          \(require \(quote wasmacs-url-fetch\)\))/
-          (require (quote url))$1/s
-  ' "${loadup_el}"
-fi
+echo "=== Applying the Emacs patch layer (src/c/patches) ==="
+"${repo_root}/src/build/apply-emacs-patches.sh" "${pdump_src}"
 
 echo "=== Byte-compiling lisp files for temacs.data preload ==="
 "${native_baseline}/src/emacs" --batch \
   --eval "(byte-recompile-directory \"${pdump_src}/lisp\" 0 t)" 2>&1 \
   | grep -E "^(Compiling|Done|Error)" | tail -5
 echo "byte-compile done"
-
-emacs_c="${pdump_src}/src/emacs.c"
-if ! grep -q "wasmacs pbootstrap: prepend virtual FS lisp path" "${emacs_c}"; then
-  echo "=== Applying emacs.c Vload_path fix for Emscripten pbootstrap ==="
-  perl -0pi -e '
-    s/(  init_lread \(\);)/$1\n\n#ifdef __EMSCRIPTEN__\n  \/* wasmacs pbootstrap: prepend virtual FS lisp path after init_lread so\n     pbootstrap finds loadup.el when getenv(EMACSLOADPATH) is not picked up. *\/\n  {\n    const char *memfs_lisp = "\/usr\/local\/share\/emacs\/30.2\/lisp";\n    Lisp_Object memfs_path = decode_env_path (0, memfs_lisp, 0);\n    if (!NILP (memfs_path))\n      Vload_path = nconc2 (memfs_path, Vload_path);\n  }\n#endif/
-  ' "${emacs_c}"
-fi
-
-pdumper_c="${pdump_src}/src/pdumper.c"
-if ! grep -q "wasmacs pdumper: use heap-backed contiguous dump mapping under Emscripten" "${pdumper_c}"; then
-  echo "=== Applying pdumper.c heap mapping fix for Emscripten ==="
-  perl -0pi -e '
-    s{\n  return \(VM_SUPPORTED \? dump_mmap_contiguous_vm : dump_mmap_contiguous_heap\)\n    \(maps, nr_maps, total_size\);}
-     {\n  return\n#ifdef __EMSCRIPTEN__\n    /* wasmacs pdumper: use heap-backed contiguous dump mapping under Emscripten.\n       Emscripten exposes POSIX-like mmap enough for configure, but wasm/browser\n       pdmp restore cannot rely on the VM reservation path used by native Emacs. */\n    dump_mmap_contiguous_heap\n#else\n    (VM_SUPPORTED ? dump_mmap_contiguous_vm : dump_mmap_contiguous_heap)\n#endif\n    (maps, nr_maps, total_size);}s
-  ' "${pdumper_c}"
-fi
 
 base_exports="_main,_malloc,_free"
 base_exports="${base_exports},_wasmacs_eval_string,_wasmacs_garbage_collect"
@@ -152,6 +98,8 @@ base_exports="${base_exports},_wasmacs_os_pin_backtrace_args,_wasmacs_os_release
 base_exports="${base_exports},_wasmacs_os_push_gc_guard,_wasmacs_os_pop_gc_guard"
 base_exports="${base_exports},_wasmacs_os_begin_command,_wasmacs_os_finish_command,_wasmacs_os_cancel_command,_wasmacs_os_configure_dired_without_ls,_wasmacs_os_dired_without_ls_probe,_wasmacs_os_filesystem_dired_state,_wasmacs_os_network_fetch_json,_wasmacs_os_url_fetch_loader_state,_wasmacs_os_apply_terminal_resize"
 base_exports="${base_exports},_wasmacs_input_text,_wasmacs_input_cancel,_wasmacs_os_timing_checkpoint"
+# Process service: entry points the host kernel calls into (callproc.c).
+base_exports="${base_exports},_wasmacs_os_request_quit,_wasmacs_os_raise_signal"
 
 # Atomics (no Asyncify)
 emacs_atomics_pdump_ldflags="${emacs_wasm_linkflags} \
@@ -163,6 +111,7 @@ emacs_atomics_pdump_ldflags="${emacs_wasm_linkflags} \
   -sINITIAL_MEMORY=${initial_memory} \
   -sALLOW_MEMORY_GROWTH=${allow_memory_growth} \
   --js-library ${atomics_host_library} \
+  --pre-js ${process_kernel} \
   --preload-file ${pdump_src}/lisp@/usr/local/share/emacs/30.2/lisp \
   --preload-file ${pdump_src}/etc@/usr/local/share/emacs/30.2/etc"
 
@@ -170,28 +119,6 @@ pdmp_file="${build_dir}/src/bootstrap-emacs.pdmp"
 
 echo "=== Deferring bootstrap-emacs.pdmp generation until final Atomics runtime ==="
 rm -f "${pdmp_file}" "${build_dir}/src/pdmp-probe-stubs.o"
-
-echo "=== Applying OS compat patches (Atomics waitpoint) ==="
-cp "${repo_root}/vendor/emacs/src/keyboard.c" "${pdump_src}/src/keyboard.c"
-cp "${repo_root}/vendor/emacs/src/sysdep.c" "${pdump_src}/src/sysdep.c"
-WASMACS_SPIKE_SRC="${pdump_src}" \
-WASMACS_ENABLE_ASYNCIFY_WAITPOINT=1 \
-WASMACS_ASYNCIFY_WAITPOINT_MODE="os-compat" \
-  "${repo_root}/tools/scripts/patch-emacs-host-entrypoint-spike.sh"
-
-# os-compat mode removes wasmacs_host_* externs from sysdep.c.
-# The atomics host library provides the implementations.  Add them back.
-SYSDEP="${pdump_src}/src/sysdep.c"
-if ! grep -q "wasmacs_host_scheduler_checkpoint (int code)" "${SYSDEP}"; then
-  perl -0pi -e 's|(extern void wasmacs_os_timing_checkpoint \(int code\);\nextern void wasmacs_os_timing_checkpoint \(int code\);\n\n/\* Read from FD)|/* wasmacs atomics host symbols. */\nextern int wasmacs_host_wait_for_input (void);\nextern int wasmacs_host_terminal_input_available (void);\nextern int wasmacs_host_terminal_read_byte (void);\nextern int wasmacs_host_is_tty_fd (int fd);\nextern int wasmacs_host_scheduler_checkpoint (int code);\nextern int wasmacs_host_terminal_resize_pending (void);\nextern int wasmacs_host_terminal_resize_cols (void);\nextern int wasmacs_host_terminal_resize_rows (void);\nextern int wasmacs_host_terminal_resize_ack (void);\nextern int wasmacs_os_apply_terminal_resize (int width, int height);\n$1|' "${SYSDEP}"
-  echo "  fixed: added wasmacs_host_* externs to sysdep.c"
-fi
-if ! grep -q "wasmacs_host_terminal_resize_pending" "${SYSDEP}"; then
-  perl -0pi -e 's|(extern int wasmacs_host_scheduler_checkpoint \(int code\);\n)|$1extern int wasmacs_host_terminal_resize_pending (void);\nextern int wasmacs_host_terminal_resize_cols (void);\nextern int wasmacs_host_terminal_resize_rows (void);\nextern int wasmacs_host_terminal_resize_ack (void);\nextern int wasmacs_os_apply_terminal_resize (int width, int height);\n|' "${SYSDEP}"
-fi
-if ! grep -q "wasmacs_os_apply_terminal_resize (wasmacs_host_terminal_resize_cols" "${SYSDEP}"; then
-  perl -0pi -e 's|(          wasmacs_host_scheduler_checkpoint \(100\);\n          wasmacs_host_wait_for_input \(\);\n          wasmacs_host_scheduler_checkpoint \(101\);\n)|$1          if (wasmacs_host_terminal_resize_pending ())\n            {\n              wasmacs_os_apply_terminal_resize (wasmacs_host_terminal_resize_cols (),\n                                                wasmacs_host_terminal_resize_rows ());\n              wasmacs_host_terminal_resize_ack ();\n            }\n|' "${SYSDEP}"
-fi
 
 echo "=== Building pdumper+Atomics profile (${initial_memory} bytes) ==="
 (

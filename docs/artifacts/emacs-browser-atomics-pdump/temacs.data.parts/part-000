@@ -728460,25 +728460,25 @@ is nil or omitted, and signal an error otherwise.
 (fn &optional ERROR-IF-NON-EXISTENT-P)
 (byte-code "\300\301\302\303#\210\304\301\302\305#\207" [defalias Buffer-menu-sort tabulated-list-sort nil make-obsolete "28.1"] 4)
 (defalias 'Buffer-menu-buffer #[256 "\300\301\206 `\302\"\262\211\204 \205& \303\304!\207\305!\204% \205& \303\306!\207\211\207" [nil get-text-property tabulated-list-id error "No buffer on this line" buffer-live-p "This buffer has been killed"] 5 (#$ . 18151)])
-(defalias 'Buffer-menu-no-header #[0 "\301 \210\204 `\302\303\304\206 e!\"\262\204 \305\207\306 \210\307y\310\207" [Buffer-menu-use-header-line beginning-of-line seq-find #[257 "\300\301\"\207" [overlay-get fake-header] 4 ("/Users/seijiro/by-llms/wasmacs/build/native-emacs-30.2/src/lisp/emacs-lisp/tabulated-list.elc" . 12603)] overlays-at t ding 1 nil] 6])
+(defalias 'Buffer-menu-no-header #[0 "\301 \210\204 `\302\303\304\206 e!\"\262\204 \305\207\306 \210\307y\310\207" [Buffer-menu-use-header-line beginning-of-line seq-find #[257 "\300\301\"\207" [overlay-get fake-header] 4 ("/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/native-emacs-30.2/src/lisp/emacs-lisp/tabulated-list.elc" . 12603)] overlays-at t ding 1 nil] 6])
 (defalias 'Buffer-menu-beginning #[0 "eb\210?\205\n \301y\207" [Buffer-menu-use-header-line nil] 1])#@268 Mark the Buffer menu entry at point for later display.
 It will be displayed by the \<Buffer-menu-mode-map>\[Buffer-menu-select] command.
 When `outline-minor-mode' is enabled and point is on the outline
 heading line, this command will mark all entries in the outline.
-(defalias 'Buffer-menu-mark #[0 "\302\303\206 `\304\"\262\203 \305\306\307!\310#\210\302y\207\311\301!\203A 	\203A \312 \203A \212\313 \210`)\302\211y\210`W\205? \314 \210\2023 )\207\302y\207" [Buffer-menu-marker-char outline-minor-mode nil get-text-property tabulated-list-id tabulated-list-set-col 0 char-to-string t boundp outline-on-heading-p outline-end-of-subtree Buffer-menu-mark] 5 (#$ . 19244) [nil (Buffer-menu-mode)]])#@261 Cancel all requested operations on buffer on this line and move down.
+(defalias 'Buffer-menu-mark #[0 "\302\303\206 `\304\"\262\203 \305\306\307!\310#\210\302y\207\311\301!\203A 	\203A \312 \203A \212\313 \210`)\302\211y\210`W\205? \314 \210\2023 )\207\302y\207" [Buffer-menu-marker-char outline-minor-mode nil get-text-property tabulated-list-id tabulated-list-set-col 0 char-to-string t boundp outline-on-heading-p outline-end-of-subtree Buffer-menu-mark] 5 (#$ . 19259) [nil (Buffer-menu-mode)]])#@261 Cancel all requested operations on buffer on this line and move down.
 Optional prefix arg means move up.
 When `outline-minor-mode' is enabled and point is on the outline
 heading line, this command will unmark all entries in the outline.
 
 (fn &optional BACKUP)
-(defalias 'Buffer-menu-unmark #[256 "\301\302\206 `\303\"\262\203 \304 \210\211\203 \305\202 \306y\207\307\300!\203N \203N \310 \203N `\212\311 \210`)\301\211y\210`W\203C \312 \210\2027 \205L b\210\313 )\207\211\203V \305\202W \306y\207" [outline-minor-mode nil get-text-property tabulated-list-id Buffer-menu--unmark -1 1 boundp outline-on-heading-p outline-end-of-subtree Buffer-menu-unmark outline-previous-heading] 6 (#$ . 19954) ["P" (Buffer-menu-mode)]])#@183 Cancel a requested operation on all buffers.
+(defalias 'Buffer-menu-unmark #[256 "\301\302\206 `\303\"\262\203 \304 \210\211\203 \305\202 \306y\207\307\300!\203N \203N \310 \203N `\212\311 \210`)\301\211y\210`W\203C \312 \210\2027 \205L b\210\313 )\207\211\203V \305\202W \306y\207" [outline-minor-mode nil get-text-property tabulated-list-id Buffer-menu--unmark -1 1 boundp outline-on-heading-p outline-end-of-subtree Buffer-menu-unmark outline-previous-heading] 6 (#$ . 19969) ["P" (Buffer-menu-mode)]])#@183 Cancel a requested operation on all buffers.
 MARK is the character to flag the operation on the buffers.
 When called interactively prompt for MARK;  RET remove all marks.
 
 (fn MARK)
-(defalias 'Buffer-menu-unmark-all-buffers #[257 "\212eb\210m?\2059 \300\301\206 `\302\"\262\211\2032 \211\303H\304HD\305\306\"\204. \307!\235\2031 \310 \210\210\210\300y\210\202 )\207" [nil get-text-property tabulated-list-entry 0 2 char-equal 13 char-to-string Buffer-menu--unmark] 6 (#$ . 20692) ["cRemove marks (RET means all):" (Buffer-menu-mode)]])#@45 Cancel all requested operations on buffers.
-(defalias 'Buffer-menu-unmark-all #[0 "\300\301!\207" [Buffer-menu-unmark-all-buffers 13] 2 (#$ . 21241) [nil (Buffer-menu-mode)]])#@70 Move up and cancel all requested operations on buffer on line above.
-(defalias 'Buffer-menu-backup-unmark #[0 "\300y\210\301\302\206\n `\303\"\262\204 o\204 \300y\210\202 o?\205\" \304 \207" [-1 nil get-text-property tabulated-list-id Buffer-menu--unmark] 4 (#$ . 21422) [nil (Buffer-menu-mode)]])
+(defalias 'Buffer-menu-unmark-all-buffers #[257 "\212eb\210m?\2059 \300\301\206 `\302\"\262\211\2032 \211\303H\304HD\305\306\"\204. \307!\235\2031 \310 \210\210\210\300y\210\202 )\207" [nil get-text-property tabulated-list-entry 0 2 char-equal 13 char-to-string Buffer-menu--unmark] 6 (#$ . 20707) ["cRemove marks (RET means all):" (Buffer-menu-mode)]])#@45 Cancel all requested operations on buffers.
+(defalias 'Buffer-menu-unmark-all #[0 "\300\301!\207" [Buffer-menu-unmark-all-buffers 13] 2 (#$ . 21256) [nil (Buffer-menu-mode)]])#@70 Move up and cancel all requested operations on buffer on line above.
+(defalias 'Buffer-menu-backup-unmark #[0 "\300y\210\301\302\206\n `\303\"\262\204 o\204 \300y\210\202 o?\205\" \304 \207" [-1 nil get-text-property tabulated-list-id Buffer-menu--unmark] 4 (#$ . 21437) [nil (Buffer-menu-mode)]])
 (defalias 'Buffer-menu--unmark #[0 "\300\301\302\303#\210\304 \211\205 \305!\203 \300\306\307\303#\207\300\306\302\303#\207" [tabulated-list-set-col 0 " " t Buffer-menu-buffer buffer-modified-p 2 "*"] 5])#@465 Mark the buffer on this Buffer Menu buffer line for deletion.
 A subsequent \<Buffer-menu-mode-map>\[Buffer-menu-execute] command will delete it.
 
@@ -728490,51 +728490,51 @@ heading line, this command will mark all entries in the outline.
 However, ARG is not supported in this case.
 
 (fn &optional ARG)
-(defalias 'Buffer-menu-delete #[256 "\302\300!\203( \203( \303 \203( \212\304 \210`)\305\211y\210`W\205& \306 \210\202 )\207\211\2032 \211\307U\2034 \210\310\211\307V\203N \311 \203G \312\307\313	!\314#\210\310y\210S\2024 \211\307W\205h \311 \203a \312\307\313	!\314#\210\315y\210T\202N \207" [outline-minor-mode Buffer-menu-del-char boundp outline-on-heading-p outline-end-of-subtree nil Buffer-menu-delete 0 1 Buffer-menu-buffer tabulated-list-set-col char-to-string t -1] 6 (#$ . 21939) ["p" (Buffer-menu-mode)]])#@228 Mark the buffer on this Buffer Menu line for deletion, and move up.
+(defalias 'Buffer-menu-delete #[256 "\302\300!\203( \203( \303 \203( \212\304 \210`)\305\211y\210`W\205& \306 \210\202 )\207\211\2032 \211\307U\2034 \210\310\211\307V\203N \311 \203G \312\307\313	!\314#\210\310y\210S\2024 \211\307W\205h \311 \203a \312\307\313	!\314#\210\315y\210T\202N \207" [outline-minor-mode Buffer-menu-del-char boundp outline-on-heading-p outline-end-of-subtree nil Buffer-menu-delete 0 1 Buffer-menu-buffer tabulated-list-set-col char-to-string t -1] 6 (#$ . 21954) ["p" (Buffer-menu-mode)]])#@228 Mark the buffer on this Buffer Menu line for deletion, and move up.
 A subsequent \<Buffer-menu-mode-map>\[Buffer-menu-execute] command will delete the marked buffer.  Prefix ARG
  means move that many lines.
 
 (fn &optional ARG)
-(defalias 'Buffer-menu-delete-backwards #[256 "\300\206 \301[!\207" [Buffer-menu-delete 1] 3 (#$ . 22930) ["p" (Buffer-menu-mode)]])#@265 Mark the buffer on this Buffer Menu line for saving.
+(defalias 'Buffer-menu-delete-backwards #[256 "\300\206 \301[!\207" [Buffer-menu-delete 1] 3 (#$ . 22945) ["p" (Buffer-menu-mode)]])#@265 Mark the buffer on this Buffer Menu line for saving.
 A subsequent \<Buffer-menu-mode-map>\[Buffer-menu-execute] command will save it.
 When `outline-minor-mode' is enabled and point is on the outline
 heading line, this command will mark all entries in the outline.
-(defalias 'Buffer-menu-save #[0 "\301\302\206 `\303\"\262\203 \304 \203 \305\306\307\310#\210\301y\207\311\300!\203D \203D \312 \203D \212\313 \210`)\301\211y\210`W\205B \314 \210\2026 )\207\301y\207" [outline-minor-mode nil get-text-property tabulated-list-id Buffer-menu-buffer tabulated-list-set-col 2 "S" t boundp outline-on-heading-p outline-end-of-subtree Buffer-menu-save] 5 (#$ . 23298) [nil (Buffer-menu-mode)]])#@166 Mark the buffer on this line as unmodified (no changes to save).
+(defalias 'Buffer-menu-save #[0 "\301\302\206 `\303\"\262\203 \304 \203 \305\306\307\310#\210\301y\207\311\300!\203D \203D \312 \203D \212\313 \210`)\301\211y\210`W\205B \314 \210\2026 )\207\301y\207" [outline-minor-mode nil get-text-property tabulated-list-id Buffer-menu-buffer tabulated-list-set-col 2 "S" t boundp outline-on-heading-p outline-end-of-subtree Buffer-menu-save] 5 (#$ . 23313) [nil (Buffer-menu-mode)]])#@166 Mark the buffer on this line as unmodified (no changes to save).
 If ARG is non-nil (interactively, with a prefix argument), mark
 it as modified.
 
 (fn &optional ARG)
-(defalias 'Buffer-menu-not-modified #[256 "r\300\301!q\210\302!)\210\303\304\203 \305\202 \306\301#\207" [Buffer-menu-buffer t set-buffer-modified-p tabulated-list-set-col 2 "*" " "] 5 (#$ . 23998) ["P" (Buffer-menu-mode)]])#@207 Save and/or delete marked buffers in the Buffer Menu.
+(defalias 'Buffer-menu-not-modified #[256 "r\300\301!q\210\302!)\210\303\304\203 \305\202 \306\301#\207" [Buffer-menu-buffer t set-buffer-modified-p tabulated-list-set-col 2 "*" " "] 5 (#$ . 24013) ["P" (Buffer-menu-mode)]])#@207 Save and/or delete marked buffers in the Buffer Menu.
 Buffers marked with \<Buffer-menu-mode-map>\[Buffer-menu-save] are saved.
 Buffers marked with \<Buffer-menu-mode-map>\[Buffer-menu-delete] are deleted.
-(defalias 'Buffer-menu-execute #[0 "\212\300 \210m?\205} \301\302\206 `\303\"\262\301\302\206 `\304\"\262\211\204* \305y\266\202 \306!\2047 \307 \266\202 \301f\310=\311H\312\232\203_ \3131Y rq\210\314 )\210\315\311\316\317#0\210\202_ \210\320\321\"\210\211\203v p=\204v \322!\203v \307 \266\202 \305y\266\202 )\207" [Buffer-menu-beginning nil get-text-property tabulated-list-id tabulated-list-entry 1 buffer-live-p tabulated-list-delete-entry 68 2 "S" (error) save-buffer tabulated-list-set-col " " t warn "Error saving %s" kill-buffer] 7 (#$ . 24398) [nil (Buffer-menu-mode)]])#@270 Select this line's buffer; also, display buffers marked with `>'.
+(defalias 'Buffer-menu-execute #[0 "\212\300 \210m?\205} \301\302\206 `\303\"\262\301\302\206 `\304\"\262\211\204* \305y\266\202 \306!\2047 \307 \266\202 \301f\310=\311H\312\232\203_ \3131Y rq\210\314 )\210\315\311\316\317#0\210\202_ \210\320\321\"\210\211\203v p=\204v \322!\203v \307 \266\202 \305y\266\202 )\207" [Buffer-menu-beginning nil get-text-property tabulated-list-id tabulated-list-entry 1 buffer-live-p tabulated-list-delete-entry 68 2 "S" (error) save-buffer tabulated-list-set-col " " t warn "Error saving %s" kill-buffer] 7 (#$ . 24413) [nil (Buffer-menu-mode)]])#@270 Select this line's buffer; also, display buffers marked with `>'.
 You can mark buffers with the \<Buffer-menu-mode-map>\[Buffer-menu-mark] command.
 
 This command deletes and replaces all the previously existing windows
 in the selected frame, and will remove any marks.
-(defalias 'Buffer-menu-select #[0 "\300\301!p\302\303\301!\"\304 SGT\245\305 \210\306!\210=\204\" \307!\210\211\203; \211@\310\311\"\210\312\313!\210\306!\266A\202# \210\312\313!\207" [Buffer-menu-buffer t delq Buffer-menu-marked-buffers frame-height delete-other-windows switch-to-buffer bury-buffer split-window nil other-window 1] 9 (#$ . 25210) [nil (Buffer-menu-mode)]])#@118 Return the list of buffers marked with `Buffer-menu-mark'.
+(defalias 'Buffer-menu-select #[0 "\300\301!p\302\303\301!\"\304 SGT\245\305 \210\306!\210=\204\" \307!\210\211\203; \211@\310\311\"\210\312\313!\210\306!\266A\202# \210\312\313!\207" [Buffer-menu-buffer t delq Buffer-menu-marked-buffers frame-height delete-other-windows switch-to-buffer bury-buffer split-window nil other-window 1] 9 (#$ . 25225) [nil (Buffer-menu-mode)]])#@118 Return the list of buffers marked with `Buffer-menu-mark'.
 If UNMARK is non-nil, unmark them.
 
 (fn &optional UNMARK)
-(defalias 'Buffer-menu-marked-buffers #[256 "\212\300\301 \210\302\303\300\304#\203, \305 \211\203 \203 \306\307\310\304#\210\311!\203( \211B\262\210\202 \237)\207" [nil Buffer-menu-beginning re-search-forward "^>" t Buffer-menu-buffer tabulated-list-set-col 0 " " buffer-live-p] 7 (#$ . 25871)])#@63 Search for a string through all marked buffers using Isearch.
-(defalias 'Buffer-menu-isearch-buffers #[0 "\300\301 !\207" [multi-isearch-buffers Buffer-menu-marked-buffers] 2 (#$ . 26297) [nil (Buffer-menu-mode)]])#@63 Search for a regexp through all marked buffers using Isearch.
-(defalias 'Buffer-menu-isearch-buffers-regexp #[0 "\300\301 !\207" [multi-isearch-buffers-regexp Buffer-menu-marked-buffers] 2 (#$ . 26517) [nil (Buffer-menu-mode)]])#@97 Show all lines in marked buffers containing a match for a regexp.
+(defalias 'Buffer-menu-marked-buffers #[256 "\212\300\301 \210\302\303\300\304#\203, \305 \211\203 \203 \306\307\310\304#\210\311!\203( \211B\262\210\202 \237)\207" [nil Buffer-menu-beginning re-search-forward "^>" t Buffer-menu-buffer tabulated-list-set-col 0 " " buffer-live-p] 7 (#$ . 25886)])#@63 Search for a string through all marked buffers using Isearch.
+(defalias 'Buffer-menu-isearch-buffers #[0 "\300\301 !\207" [multi-isearch-buffers Buffer-menu-marked-buffers] 2 (#$ . 26312) [nil (Buffer-menu-mode)]])#@63 Search for a regexp through all marked buffers using Isearch.
+(defalias 'Buffer-menu-isearch-buffers-regexp #[0 "\300\301 !\207" [multi-isearch-buffers-regexp Buffer-menu-marked-buffers] 2 (#$ . 26532) [nil (Buffer-menu-mode)]])#@97 Show all lines in marked buffers containing a match for a regexp.
 
 (fn REGEXP &optional NLINES)
-(defalias 'Buffer-menu-multi-occur #[513 "\300\301 #\207" [multi-occur Buffer-menu-marked-buffers] 6 (#$ . 26751) [(occur-read-primary-args) (Buffer-menu-mode)]])#@75 Visit the tags table in the buffer on this line.  See `visit-tags-table'.
+(defalias 'Buffer-menu-multi-occur #[513 "\300\301 #\207" [multi-occur Buffer-menu-marked-buffers] 6 (#$ . 26766) [(occur-read-primary-args) (Buffer-menu-mode)]])#@75 Visit the tags table in the buffer on this line.  See `visit-tags-table'.
 (autoload 'etags-verify-tags-table "etags")
-(defalias 'Buffer-menu-visit-tags-table #[0 "\300\301!\302!\211\204 \303\304!\207\203  rq\210\305 )\203  \306!\207\303\307!\207" [Buffer-menu-buffer t buffer-file-name error "Specified buffer has no file" etags-verify-tags-table visit-tags-table "Specified buffer is not a tags-table"] 4 (#$ . 27017) [nil (Buffer-menu-mode)]])#@50 Select this line's buffer, alone, in full frame.
-(defalias 'Buffer-menu-1-window #[0 "\300\301\302!!\210\303\304 !\210\305 \207" [switch-to-buffer Buffer-menu-buffer t bury-buffer other-buffer delete-other-windows] 3 (#$ . 27473) [nil (Buffer-menu-mode)]])#@43 Select this line's buffer in this window.
-(defalias 'Buffer-menu-this-window #[0 "\300\301\302!!\207" [switch-to-buffer Buffer-menu-buffer t] 3 (#$ . 27735) [nil (Buffer-menu-mode)]])#@73 Select this line's buffer in other window, leaving buffer menu visible.
-(defalias 'Buffer-menu-other-window #[0 "\301\302\303\304!!)\207" [display-buffer-overriding-action (nil (inhibit-same-window . t)) switch-to-buffer-other-window Buffer-menu-buffer t] 3 (#$ . 27924) [nil (Buffer-menu-mode)]])#@87 Make the other window select this line's buffer.
+(defalias 'Buffer-menu-visit-tags-table #[0 "\300\301!\302!\211\204 \303\304!\207\203  rq\210\305 )\203  \306!\207\303\307!\207" [Buffer-menu-buffer t buffer-file-name error "Specified buffer has no file" etags-verify-tags-table visit-tags-table "Specified buffer is not a tags-table"] 4 (#$ . 27032) [nil (Buffer-menu-mode)]])#@50 Select this line's buffer, alone, in full frame.
+(defalias 'Buffer-menu-1-window #[0 "\300\301\302!!\210\303\304 !\210\305 \207" [switch-to-buffer Buffer-menu-buffer t bury-buffer other-buffer delete-other-windows] 3 (#$ . 27488) [nil (Buffer-menu-mode)]])#@43 Select this line's buffer in this window.
+(defalias 'Buffer-menu-this-window #[0 "\300\301\302!!\207" [switch-to-buffer Buffer-menu-buffer t] 3 (#$ . 27750) [nil (Buffer-menu-mode)]])#@73 Select this line's buffer in other window, leaving buffer menu visible.
+(defalias 'Buffer-menu-other-window #[0 "\301\302\303\304!!)\207" [display-buffer-overriding-action (nil (inhibit-same-window . t)) switch-to-buffer-other-window Buffer-menu-buffer t] 3 (#$ . 27939) [nil (Buffer-menu-mode)]])#@87 Make the other window select this line's buffer.
 The current window remains selected.
-(defalias 'Buffer-menu-switch-other-window #[0 "\301\302\303\304!\304\")\207" [display-buffer-overriding-action (nil (inhibit-same-window . t)) display-buffer Buffer-menu-buffer t] 3 (#$ . 28228) [nil (Buffer-menu-mode)]])#@67 Select this line's buffer, with previous buffer in second window.
-(defalias 'Buffer-menu-2-window #[0 "\300\301!p\302 \210\303\304 !\210\305!\210\306!\207" [Buffer-menu-buffer t delete-other-windows switch-to-buffer other-buffer switch-to-buffer-other-window bury-buffer] 4 (#$ . 28543) [nil (Buffer-menu-mode)]])#@110 Toggle read-only status of buffer on this line.
+(defalias 'Buffer-menu-switch-other-window #[0 "\301\302\303\304!\304\")\207" [display-buffer-overriding-action (nil (inhibit-same-window . t)) display-buffer Buffer-menu-buffer t] 3 (#$ . 28243) [nil (Buffer-menu-mode)]])#@67 Select this line's buffer, with previous buffer in second window.
+(defalias 'Buffer-menu-2-window #[0 "\300\301!p\302 \210\303\304 !\210\305!\210\306!\207" [Buffer-menu-buffer t delete-other-windows switch-to-buffer other-buffer switch-to-buffer-other-window bury-buffer] 4 (#$ . 28558) [nil (Buffer-menu-mode)]])#@110 Toggle read-only status of buffer on this line.
 This behaves like invoking \[read-only-mode] in that buffer.
-(defalias 'Buffer-menu-toggle-read-only #[0 "r\301\302!q\210\303\304!\210)\305\306\203 \307\202 \310\302#\207" [buffer-read-only Buffer-menu-buffer t read-only-mode toggle tabulated-list-set-col 1 "%" " "] 5 (#$ . 28865) [nil (Buffer-menu-mode)]])#@38 Bury the buffer listed on this line.
-(defalias 'Buffer-menu-bury #[0 "\300\301\206 `\302\"\262\211?\2061 \303!\203+ \304!\210\212\305 db\210\306\307\")\266\310\311!\207\305 \210\310\312!\207" [nil get-text-property tabulated-list-id buffer-live-p bury-buffer tabulated-list-delete-entry apply tabulated-list-print-entry message "Buffer buried." "Buffer is dead; removing from list."] 5 (#$ . 29231) [nil (Buffer-menu-mode)]])#@39 View this line's buffer in View mode.
-(defalias 'Buffer-menu-view #[0 "\300\301\302!!\207" [view-buffer Buffer-menu-buffer t] 3 (#$ . 29669) [nil (Buffer-menu-mode)]])#@57 View this line's buffer in View mode in another window.
-(defalias 'Buffer-menu-view-other-window #[0 "\300\301\302!!\207" [view-buffer-other-window Buffer-menu-buffer t] 3 (#$ . 29842) [nil (Buffer-menu-mode)]])#@561 Create and return a Buffer Menu buffer.
+(defalias 'Buffer-menu-toggle-read-only #[0 "r\301\302!q\210\303\304!\210)\305\306\203 \307\202 \310\302#\207" [buffer-read-only Buffer-menu-buffer t read-only-mode toggle tabulated-list-set-col 1 "%" " "] 5 (#$ . 28880) [nil (Buffer-menu-mode)]])#@38 Bury the buffer listed on this line.
+(defalias 'Buffer-menu-bury #[0 "\300\301\206 `\302\"\262\211?\2061 \303!\203+ \304!\210\212\305 db\210\306\307\")\266\310\311!\207\305 \210\310\312!\207" [nil get-text-property tabulated-list-id buffer-live-p bury-buffer tabulated-list-delete-entry apply tabulated-list-print-entry message "Buffer buried." "Buffer is dead; removing from list."] 5 (#$ . 29246) [nil (Buffer-menu-mode)]])#@39 View this line's buffer in View mode.
+(defalias 'Buffer-menu-view #[0 "\300\301\302!!\207" [view-buffer Buffer-menu-buffer t] 3 (#$ . 29684) [nil (Buffer-menu-mode)]])#@57 View this line's buffer in View mode in another window.
+(defalias 'Buffer-menu-view-other-window #[0 "\300\301\302!!\207" [view-buffer-other-window Buffer-menu-buffer t] 3 (#$ . 29857) [nil (Buffer-menu-mode)]])#@561 Create and return a Buffer Menu buffer.
 This is called by `buffer-menu' and others as a subroutine.
 
 If FILES-ONLY is non-nil, show only file-visiting buffers.
@@ -728547,33 +728547,33 @@ that filters out buffers from the list of buffers.
 See more at `Buffer-menu-filter-predicate'.
 
 (fn &optional FILES-ONLY BUFFER-LIST FILTER-PREDICATE)
-(defalias 'list-buffers-noselect #[768 "p\306\307!r\211q\210\310 \210\205 \311!\312Y\313\"\210\314 \210\2035 \315\304!\210\316\315\305!\210\316\317\320!\210)\207" [Buffer-menu-files-only Buffer-menu-buffer-list Buffer-menu-filter-predicate tabulated-list-groups outline-minor-mode-cycle outline-minor-mode-highlight get-buffer-create "*Buffer List*" Buffer-menu-mode prefix-numeric-value 0 list-buffers--refresh tabulated-list-print make-local-variable t outline-minor-mode 1] 8 (#$ . 30060)])#@56 Select the buffer whose line you click on.
+(defalias 'list-buffers-noselect #[768 "p\306\307!r\211q\210\310 \210\205 \311!\312Y\313\"\210\314 \210\2035 \315\304!\210\316\315\305!\210\316\317\320!\210)\207" [Buffer-menu-files-only Buffer-menu-buffer-list Buffer-menu-filter-predicate tabulated-list-groups outline-minor-mode-cycle outline-minor-mode-highlight get-buffer-create "*Buffer List*" Buffer-menu-mode prefix-numeric-value 0 list-buffers--refresh tabulated-list-print make-local-variable t outline-minor-mode 1] 8 (#$ . 30075)])#@56 Select the buffer whose line you click on.
 
 (fn EVENT)
-(defalias 'Buffer-menu-mouse-select #[257 "\300\301!@!\210\302\301!!\303\206 `\304\"\262\305!\2050 \306 \203- \307 \310 =\203- \311!\207\312!\207" [select-window event-end posn-point get-text-property tabulated-list-id buffer-live-p window-dedicated-p selected-window frame-root-window switch-to-buffer-other-frame switch-to-buffer] 5 (#$ . 31132) ["e" (Buffer-menu-mode)]])#@41 
+(defalias 'Buffer-menu-mouse-select #[257 "\300\301!@!\210\302\301!!\303\206 `\304\"\262\305!\2050 \306 \203- \307 \310 =\203- \311!\207\312!\207" [select-window event-end posn-point get-text-property tabulated-list-id buffer-live-p window-dedicated-p selected-window frame-root-window switch-to-buffer-other-frame switch-to-buffer] 5 (#$ . 31147) ["e" (Buffer-menu-mode)]])#@41 
 
 (fn &optional BUFFER-LIST OLD-BUFFER)#@14 
 
 (fn ENTRY)#@10 
 
 (fn F)
-(defalias 'list-buffers--refresh #[512 "\306 p	?\n\307!\205 \310\211\307\n!\203 	 \2029 	\2069 \307\f!\203- \f \2029 \f\2069 \311\2058 \312 !\211\203\336 \211@r\211q\210\313 ,\314!\203\327 \204\200 \204d \315\316O\317\230\203d \211\203\327 \n=\204\327 \211\204t \203\327 \203\200 !\203\327 \320=\203\215 \321\202\231 \235\203\230 \322\202\231 \317-\203\242 \323\202\243 \317\324 \203\254 \325\202\255 \317\326!\327\330 !\331.\310\211$/\205\312 \331/\310\211$P\332	!&DB\262)\266A\2029 \210\3070!\203\362 0\333\334\"!\262\202\365 \2100\320\335\336\337\340\341BB\342\343BB\3441\345BB\346&234\2375\3475\350\3076!\203'6\202(\351\3527F\"'\266\353 \207" [Buffer-menu-size-width Buffer-menu-files-only Buffer-menu-show-internal Buffer-menu-filter-predicate Buffer-menu-buffer-list Buffer-menu-use-frame-buffer-list Buffer-menu-marked-buffers functionp nil buffer-list selected-frame buffer-name buffer-live-p 0 1 " " vector "." ">" "%" buffer-modified-p "*" Buffer-menu--pretty-name number-to-string buffer-size format-mode-line Buffer-menu--pretty-file-name mapcar car ("C" 1 t :pad-right 0) ("R" 1 t :pad-right 0) ("M" 1 t) "Buffer" (t) "Size" (tabulated-list-entry-size-> :right-align t) "Mode" (t) ("File" 1 t) tabulated-list-groups :path-function #[257 "\301\302\303\"\"C\207" [Buffer-menu-group-by mapcar make-closure #[257 "\211\300!\207" [V0] 3 (#$ . 31638)]] 5 (#$ . 31620)] :sort-function tabulated-list-init-header buffer-file-name buffer-read-only mode-name mode-line-process Buffer-menu-name-width Buffer-menu-mode-width tabulated-list-format Buffer-menu-use-header-line tabulated-list-use-header-line tabulated-list-entries Buffer-menu-group-by Buffer-menu-group-sort-by] 27 (#$ . 31575)])#@22 
+(defalias 'list-buffers--refresh #[512 "\306 p	?\n\307!\205 \310\211\307\n!\203 	 \2029 	\2069 \307\f!\203- \f \2029 \f\2069 \311\2058 \312 !\211\203\336 \211@r\211q\210\313 ,\314!\203\327 \204\200 \204d \315\316O\317\230\203d \211\203\327 \n=\204\327 \211\204t \203\327 \203\200 !\203\327 \320=\203\215 \321\202\231 \235\203\230 \322\202\231 \317-\203\242 \323\202\243 \317\324 \203\254 \325\202\255 \317\326!\327\330 !\331.\310\211$/\205\312 \331/\310\211$P\332	!&DB\262)\266A\2029 \210\3070!\203\362 0\333\334\"!\262\202\365 \2100\320\335\336\337\340\341BB\342\343BB\3441\345BB\346&234\2375\3475\350\3076!\203'6\202(\351\3527F\"'\266\353 \207" [Buffer-menu-size-width Buffer-menu-files-only Buffer-menu-show-internal Buffer-menu-filter-predicate Buffer-menu-buffer-list Buffer-menu-use-frame-buffer-list Buffer-menu-marked-buffers functionp nil buffer-list selected-frame buffer-name buffer-live-p 0 1 " " vector "." ">" "%" buffer-modified-p "*" Buffer-menu--pretty-name number-to-string buffer-size format-mode-line Buffer-menu--pretty-file-name mapcar car ("C" 1 t :pad-right 0) ("R" 1 t :pad-right 0) ("M" 1 t) "Buffer" (t) "Size" (tabulated-list-entry-size-> :right-align t) "Mode" (t) ("File" 1 t) tabulated-list-groups :path-function #[257 "\301\302\303\"\"C\207" [Buffer-menu-group-by mapcar make-closure #[257 "\211\300!\207" [V0] 3 (#$ . 31653)]] 5 (#$ . 31635)] :sort-function tabulated-list-init-header buffer-file-name buffer-read-only mode-name mode-line-process Buffer-menu-name-width Buffer-menu-mode-width tabulated-list-format Buffer-menu-use-header-line tabulated-list-use-header-line tabulated-list-entries Buffer-menu-group-by Buffer-menu-group-sort-by] 27 (#$ . 31590)])#@22 
 
 (fn ENTRY1 ENTRY2)
-(defalias 'tabulated-list-entry-size-> #[514 "\300A@\301H!\300A@\301H!V\207" [string-to-number 4] 6 (#$ . 33421)])#@13 
+(defalias 'tabulated-list-entry-size-> #[514 "\300A@\301H!\300A@\301H!V\207" [string-to-number 4] 6 (#$ . 33436)])#@13 
 
 (fn NAME)
-(defalias 'Buffer-menu--pretty-name #[257 "\300\301\302\303\304%\207" [propertize font-lock-face buffer-menu-buffer mouse-face highlight] 7 (#$ . 33564)])#@13 
+(defalias 'Buffer-menu--pretty-name #[257 "\300\301\302\303\304%\207" [propertize font-lock-face buffer-menu-buffer mouse-face highlight] 7 (#$ . 33579)])#@13 
 
 (fn FILE)
-(defalias 'Buffer-menu--pretty-file-name #[257 "\211\203 \301!\207\302\300!\203 \203 \301!\207\303\207" [list-buffers-directory abbreviate-file-name boundp ""] 3 (#$ . 33737)])#@14 
+(defalias 'Buffer-menu--pretty-file-name #[257 "\211\203 \301!\207\302\300!\203 \203 \301!\207\303\207" [list-buffers-directory abbreviate-file-name boundp ""] 3 (#$ . 33752)])#@14 
 
 (fn GROUP)
-(defalias 'Buffer-menu-group-by-mode #[257 "\211A@\301H\302\303\304\"\"A\206 \211\207" [mouse-buffer-menu-mode-groups 5 seq-find make-closure #[257 "\211@\300\301\302\303$\207" [V0 nil string-match t] 9 (#$ . 33937)]] 6 (#$ . 31620)])
-(defalias 'Buffer-menu-group-by-root #[257 "r\211@q\210\301 \211\203 \302!\262\202 \210)\207" [default-directory project-current project-root] 4 (#$ . 31620)])#@21 
+(defalias 'Buffer-menu-group-by-mode #[257 "\211A@\301H\302\303\304\"\"A\206 \211\207" [mouse-buffer-menu-mode-groups 5 seq-find make-closure #[257 "\211@\300\301\302\303$\207" [V0 nil string-match t] 9 (#$ . 33952)]] 6 (#$ . 31635)])
+(defalias 'Buffer-menu-group-by-root #[257 "r\211@q\210\301 \211\203 \302!\262\202 \210)\207" [default-directory project-current project-root] 4 (#$ . 31635)])#@21 
 
 (fn GROUPS LEVEL)
-(defalias 'Buffer-menu-group-sort-alphabetically #[514 "\300\301\302\303\304%\207" [sort :in-place t :key car] 8 (#$ . 34361)])
+(defalias 'Buffer-menu-group-sort-alphabetically #[514 "\300\301\302\303\304%\207" [sort :in-place t :key car] 8 (#$ . 34376)])
 ;;; button.el --- clickable buttons -*- lexical-binding: t -*-
 ;;
 ;; Copyright (C) 2001-2025 Free Software Foundation, Inc.
@@ -892811,4 +892811,4 @@ the TAG was found.  Sometimes TABLE can be nil.
 (autoload 'semanticdb-find-result-nth-in-buffer "semantic/db-find" "\
 In RESULT, return the Nth search result.
 Like `semanticdb-find-result-nth', except that only the TAG
-is returned, and the buffer it is found it will be made c
+is returned, and the buffer it is found it

@@ -16,6 +16,7 @@ export const DEFAULT_CALLER_ORIGINS = Object.freeze([
 export const DEFAULT_OPTIONS = Object.freeze({
   allowedCallerOrigins: [...DEFAULT_CALLER_ORIGINS],
   targetAllowlist: [...DEFAULT_TARGET_ALLOWLIST],
+  maxRequestBytes: 25 * 1024 * 1024,
   maxResponseBytes: 25 * 1024 * 1024,
   timeoutMs: 30_000,
   allowCredentials: false,
@@ -32,6 +33,7 @@ export function normalizeOptions(options = {}) {
       DEFAULT_OPTIONS.allowedCallerOrigins,
     ),
     targetAllowlist: normalizeStringList(options.targetAllowlist, DEFAULT_OPTIONS.targetAllowlist),
+    maxRequestBytes: normalizePositiveInteger(options.maxRequestBytes, DEFAULT_OPTIONS.maxRequestBytes),
     maxResponseBytes: normalizePositiveInteger(
       options.maxResponseBytes,
       DEFAULT_OPTIONS.maxResponseBytes,

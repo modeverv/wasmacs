@@ -4,6 +4,7 @@ import { clearAuditLog, readAuditLog, storageGet, storageSet } from "../src/audi
 const fields = {
   allowedCallerOrigins: document.querySelector("#allowedCallerOrigins"),
   targetAllowlist: document.querySelector("#targetAllowlist"),
+  maxRequestBytes: document.querySelector("#maxRequestBytes"),
   maxResponseBytes: document.querySelector("#maxResponseBytes"),
   timeoutMs: document.querySelector("#timeoutMs"),
   allowCredentials: document.querySelector("#allowCredentials"),
@@ -31,6 +32,7 @@ async function loadOptions() {
   const options = { ...DEFAULT_OPTIONS, ...stored };
   fields.allowedCallerOrigins.value = options.allowedCallerOrigins.join("\n");
   fields.targetAllowlist.value = options.targetAllowlist.join("\n");
+  fields.maxRequestBytes.value = String(options.maxRequestBytes);
   fields.maxResponseBytes.value = String(options.maxResponseBytes);
   fields.timeoutMs.value = String(options.timeoutMs);
   fields.allowCredentials.checked = Boolean(options.allowCredentials);
@@ -47,6 +49,7 @@ async function saveOptions() {
   await storageSet(chrome.storage.local, {
     allowedCallerOrigins: lines(fields.allowedCallerOrigins.value),
     targetAllowlist,
+    maxRequestBytes: Number(fields.maxRequestBytes.value),
     maxResponseBytes: Number(fields.maxResponseBytes.value),
     timeoutMs: Number(fields.timeoutMs.value),
     allowCredentials: fields.allowCredentials.checked,

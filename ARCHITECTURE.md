@@ -197,8 +197,8 @@ minibuffer probe、`specpdl` scrub、copied-source backtrace pin、cold
 service contract を満たすまで normal browser runtime の意味論に昇格しない。
 
 低レイヤ substrate は C/wasm-first とする。`src/wasm/src/small-os-services.js`
-と `src/wasm/src/small-os-runtime.js` は service contract の mirror、browser-side
-coordinator、diagnostic/test scaffold であり、raw `Lisp_Object`、GC roots、
+は service contract の mirror であり（以前の browser-side coordinator
+`small-os-runtime.js` は `archive/retired/` に移した）、raw `Lisp_Object`、GC roots、
 `specpdl`、pure space、relocation table、preloaded-state object identity の
 owner ではない。lifecycle、entrypoint root refresh、GC permission、
 pending-command guard、backtrace/root ownership、preloaded-state/pdump、
@@ -216,26 +216,47 @@ src/assets/ source assets copied into generated docs output
 src/build/  docs and generated artifact build scripts
 src/c/      Emacs C-side patch layer
 src/runtime/ host/runtime libraries used by tests and tools
-tools/      build, validation, probe, prototype, and inspection tools
-tools/probs/ prototype and exploratory probe code
+src/runtime/process/ Process Service: kernel, per-process runtime, userland layout
+src/userland/ builds of the programs that run as processes (BusyBox, git, GNU grep)
+tools/      build, validation, probe, and inspection tools
 build/      copied Emacs source/build workspaces and generated artifacts
-build/artifacts/ generated wasm, pdmp, and wasifs build products
+build/artifacts/ generated wasm, pdmp, wasifs, and userland build products
+build/userland/ userland build trees and downloaded release tarballs
 build2/     VS Code-only copied Emacs workspaces and generated runtime artifacts
 doc/        architecture and planning notes
 docs/       GitHub Pages output
 vscode/     generated VS Code webview app bundle
 logs/       ignored runtime logs
 tests/      automated tests
-archive/    old or superseded files
+archive/    retired mechanisms (archive/retired/, indexed in archive/README.md) and old outputs
 ```
+
+The product route is exactly one page, one worker, one host library and one
+build script:
+
+```text
+src/wasm/xterm-atomics-pdump.html
+src/wasm/src/emacs-atomics-pdump-worker.js
+tools/scripts/wasmacs-atomics-host-library.js
+src/build/build-emacs-browser-atomics-pdump-profile.sh
+```
+
+Mechanisms that led there (the textarea app and its command bridge, the
+Asyncify command protocol, early build spikes, pdump bring-up experiments) were
+moved to `archive/retired/<mechanism>/<original path>`.
+`tests/runtime/canonical-route.test.js` fails when a live file starts depending
+on a retired one, when a script names a file that does not exist, or when
+`docs/app` is not the current `src/wasm`.
 
 The browser development server maps the historical `/app/...` URL prefix to
 `src/wasm/...`, so existing smoke URLs remain valid while the repo source lives
 under `src/`.
 
-The browser development server also maps the runtime URL prefix `/artifacts/...`
-to local files under `build/artifacts/...`. Root `artifacts/` is not a source
-directory and should not be recreated.
+The browser development server also serves the runtime URL prefix
+`/artifacts/...`: from the Pages bundle (`docs/artifacts/...`) when the file is
+there, otherwise from `build/artifacts/...`. Rebuild the bundle (`npm run build`)
+after rebuilding the wasm. Root `artifacts/` is not a source directory and
+should not be recreated.
 
 `host-abi.wit` is generated as `build/artifacts/host-abi.wit` by
 `src/build/generate-host-abi-wit.mjs`; it is not checked-in source under
@@ -268,8 +289,44 @@ are not source and are ignored by Git. Historical evidence logs that predate
 this layout are kept under `archive/old-logs/`.
 
 `vendor/emacs` remains read-only. C/wasm changes are represented as unified diff
-patches under `src/c/patches/` and are applied to copied Emacs trees in
-`build/`.
+patches under `src/c/patches/` (numbered, applied in order by
+`src/build/apply-emacs-patches.sh`) to copied Emacs trees in `build/`.
+
+### Process Service
+
+Emacs の `process.c` / `callproc.c` はそのまま動かし、その下に本物の
+プロセスを用意する。host のプロセスは使わない（`host.process` は引き続き
+unavailable）。代わりに、Emacs の worker の中で動く協調型の小さな kernel
+（`src/runtime/process/wasmacs-kernel.js`）が、同梱した userland を別の
+WebAssembly instance として実行する。
+
+```text
+Emacs (pid 1, Asyncify なし)
+  emacs_spawn / waitpid / kill / pipe2 / poll / idle wait   <- patch 0006, host library
+    |
+  process kernel (JS, worker 内, 同期のみ)
+    プロセス表、fd table、パイプ、シグナル、タイマー、スケジューラ
+    |
+  process = Emscripten + Asyncify でビルドしたプログラムの instance
+    /bin/sh ほか (BusyBox)、/bin/git、/bin/grep (GNU grep)
+```
+
+- ファイルシステムは1つだけである。全プロセスが Emacs の Emscripten `FS`
+  object を共有し、fd table（`FS.streams`）と cwd はコンテキストスイッチで
+  差し替える。
+- 待ちが必要なシステムコール（空のパイプの read、waitpid、sleep、fork）は
+  Asyncify でプロセスを scheduler まで巻き戻し、待つ理由がなくなったら
+  同じシステムコールからやり直す。
+- Emacs は巻き戻せないので、Emacs 自身のシステムコール（idle wait、
+  select/poll、パイプの read、waitpid、kill）が scheduling point になる。
+- Emacs は worker の event loop に戻らない。したがって kernel とプロセス側の
+  glue は promise、timer、message に一切依存しない。
+- プロセスが死んだあとに何かが kernel や共有 `FS` に残ると、その instance と
+  メモリ（プロセスごとに独立した wasm memory）が回収されなくなる。これは
+  テストで監視している。
+
+擬似端末、job control、socket は提供しない。詳細、規則、テストは
+`doc/process-service.md` にある。
 
 ### Emacs Core
 
@@ -493,8 +550,8 @@ host.stdio
   stdout / stderr / debug_log
 
 host.process
-  unavailable by default
-  optional browser/remote substitute later
+  unavailable (no host programs are ever run)
+  subprocesses come from the Process Service inside the wasm world instead
 ```
 
 Milestone 6 ではこの境界を `doc/host-abi.md` と、ビルド時に生成される `build/artifacts/host-abi.wit` に落とす。`host-abi.wit` は checked-in source ではなく、`src/build/generate-host-abi-wit.mjs` が出力する build artifact である。WIT world は `emacs-core-host` とし、filesystem、clock、random、environment、stdio、process、gui を別 interface として import する。GUI は input event、frame metrics、redisplay/draw、clipboard に限定し、filesystem host calls とは混ぜない。
@@ -599,13 +656,19 @@ pdump section mapping、relocation、static root semantics の owner には
 
 ### 1. Emacs の process model
 
-Emacs は subprocess, pty, shell, compiler, grep, language server との連携に強く依存する。ブラウザ単体ではこれは成立しない。
+Emacs は subprocess, pty, shell, compiler, grep, language server との連携に強く依存する。ブラウザにはプロセスがない。
 
-初期版では次を明確に切る。
+当初は「shell-command は未対応、grep/find は VFS 内実装」と切っていたが、
+現在は Process Service（上記）が同梱 userland をプロセスとして動かす。
 
-- shell-command は未対応または remote worker へ委譲
-- LSP は browser reachable な language service へ接続
-- grep/find は VFS 内実装
+- `call-process` / `make-process` / `shell-command` / `M-x shell` / eshell は
+  BusyBox の `sh` とコマンド群に対して動く
+- grep/find は GNU grep と BusyBox `find` をそのまま使う（`M-x grep`、
+  `rgrep`、xref 検索は Emacs の既定値のまま）
+- git は本物の git を使う（`vc-git`、Magit）。HTTP(S) の clone/fetch/push は
+  下記の Git Smart HTTP transport を通す
+- LSP、コンパイラなど同梱していないプログラムは動かない。pty と socket は
+  ない
 - package install は archive download + VFS write として実装
 
 Package install の Phase 1 は `host.process` や `make-network-process` を
@@ -682,6 +745,30 @@ worker posts a `host-network-fetch` request and waits on a SharedArrayBuffer
 result slot; the page performs direct `fetch` or localhost proxy `fetch` and
 wakes the worker. This avoids worker-local synchronous XHR being blocked before
 Chrome sends a request to `127.0.0.1`.
+
+Git Smart HTTP uses the same host capability through a separate `git-http`
+process image (`src/userland/git/`). It compiles the release-pinned upstream
+`remote-curl.c` unchanged and replaces only its HTTP/curl plumbing with
+`http-browser.c`. Git owns protocol v0/v2, negotiation, packfiles and ref
+updates. The helper appears as `/bin/git-remote-http` and `git-remote-https`;
+it does not introduce raw sockets or host subprocesses.
+
+The child import `wasmacs_host_http_fetch` starts one page-owned request and
+unwinds through the Process Service. The kernel polls per-request shared state
+while scheduling other processes and servicing keyboard interrupts. The page
+performs asynchronous I/O; the Emacs worker registers no promises or callbacks.
+At most four requests are in flight per kernel. Each request has a unique ID
+and its own bounded SAB; termination cancels it and drops process references.
+The host allocates the completed response in the calling process's memory.
+
+Git requests select one transport (companion by default, or explicitly direct
+fetch/configured proxy). There is no retry through a different transport after
+a failure because a POST may already have updated the remote. The companion
+permits binary POST only at Git RPC endpoints with matching content types;
+Authorization requires explicit permission and an exact HTTPS target origin.
+Authenticated requests and POST reject redirects. Request/response bodies are
+bounded to 25 MiB each and requests to 30 seconds. TLS belongs to the browser;
+this does not enable `make-network-process`, SSH, UDP or listening sockets.
 - workspace image は信頼境界として扱う
 
 ## 採用候補
@@ -715,7 +802,7 @@ Chrome sends a request to `127.0.0.1`.
 
 - OS の任意ディレクトリを透明に mount する
 - 完全な native Emacs 互換
-- subprocess / pty の完全再現
+- host の subprocess、pty、job control、socket の再現（同梱 userland のプロセスは Process Service が提供する）
 - TRAMP の完全再現
 - 複数ユーザー同時編集
 - package ecosystem の完全互換
@@ -751,6 +838,8 @@ generated/copied-source artifact lane に限定し、`vendor/emacs` は read-onl
 - 初期実装は Emscripten/browser integration を許容する。
 - WASI Preview 2 / Component Model は最終的な interface の整理先として追う。
 - MVP は single frame, single buffer, read-only `/system`, writable `/home/user`, VFS backed editing から始める。
+- 製品ルートは Atomics + pdump + xterm.js の1本とし、それ以前の仕組みは `archive/retired/` に置く。
+- サブプロセスは host に委譲せず、worker 内の Process Service（協調型 kernel + 同梱 userland）で提供する。Emacs の process code は変更しない。
 
 ## 参考
 

@@ -50,6 +50,9 @@ docs/artifacts/
 !docs/artifacts/emacs-browser-atomics-pdump/temacs.data.parts/
 !docs/artifacts/emacs-browser-atomics-pdump/temacs.data.parts/**
 docs/artifacts/emacs-browser-atomics-pdump/temacs.data
+# Process userland published with the Pages bundle (sh, git, grep images).
+!docs/artifacts/userland/
+!docs/artifacts/userland/**
 
 # wasmacs generated images and runtime outputs
 *.wasm
@@ -63,6 +66,7 @@ docs/artifacts/emacs-browser-atomics-pdump/temacs.data
 !docs/artifacts/user-filesystem-empty.wasifs
 !docs/artifacts/emacs-browser-atomics-pdump/temacs.wasm
 !docs/artifacts/emacs-browser-atomics-pdump/temacs.data.parts/**
+!docs/artifacts/userland/*.wasm
 
 # Keep interface/design sources trackable.
 !docs/**/*.md

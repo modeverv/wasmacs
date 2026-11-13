@@ -1,12 +1,12 @@
 (function wasmacsCompanionContentScript() {
   const CHANNEL = "WASMACS_COMPANION";
   const VERSION = 1;
-  const REQUEST_TYPES = new Set(["WASMACS_PROXY_PING", "WASMACS_PROXY_REQUEST"]);
+  const REQUEST_TYPES = new Set(["WASMACS_PROXY_PING", "WASMACS_PROXY_REQUEST", "WASMACS_PROXY_CANCEL"]);
 
   function makeErrorResponse(message, code, text) {
     const type = message && message.type === "WASMACS_PROXY_PING"
       ? "WASMACS_PROXY_PONG"
-      : "WASMACS_PROXY_RESPONSE";
+      : message?.type === "WASMACS_PROXY_CANCEL" ? "WASMACS_PROXY_CANCELLED" : "WASMACS_PROXY_RESPONSE";
     return {
       type,
       version: VERSION,

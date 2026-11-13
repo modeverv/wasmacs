@@ -1,0 +1,14 @@
+--- a/src/keyboard.c
++++ b/src/keyboard.c
+@@ -4160,6 +4160,11 @@
+ 		  if (pre_timers_ != timers_run)
+ 		    redisplay_preserve_echo_area (9);
+ 		  int timeout_ms_ = wasmacs_timespec_to_timeout_ms (next_timer_);
++		  /* The caller gave a deadline (read-event or sit-for with
++		     a timeout): do not sleep past it.  */
++		  int duration_ms_ = wasmacs_timespec_to_timeout_ms (duration);
++		  if (duration_ms_ < timeout_ms_)
++		    timeout_ms_ = duration_ms_;
+ 		  int wait_rc_ = wasmacs_host_wait_for_input (timeout_ms_);
+ 		  if (wait_rc_ == 0)
+ 		    {

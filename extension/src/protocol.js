@@ -4,6 +4,7 @@ export const PROTOCOL_VERSION = 1;
 export const REQUEST_TYPES = Object.freeze([
   "WASMACS_PROXY_PING",
   "WASMACS_PROXY_REQUEST",
+  "WASMACS_PROXY_CANCEL",
 ]);
 
 export function isProxyMessage(message) {
@@ -41,8 +42,14 @@ export function validateProxyRequest(request) {
   if (request.method !== undefined && typeof request.method !== "string") {
     return makeError(ErrorCodes.BAD_MESSAGE, "request.method must be a string");
   }
-  if (request.headers !== undefined && !isPlainObject(request.headers)) {
-    return makeError(ErrorCodes.BAD_MESSAGE, "request.headers must be an object");
+  if (request.headers !== undefined && !isPlainObject(request.headers)
+      && !(Array.isArray(request.headers) && request.headers.every((entry) =>
+        Array.isArray(entry) && entry.length === 2 && typeof entry[0] === "string"
+          && typeof entry[1] === "string"))) {
+    return makeError(ErrorCodes.BAD_MESSAGE, "request.headers must be an object or header pairs");
+  }
+  if (request.bodyBase64 != null && typeof request.bodyBase64 !== "string") {
+    return makeError(ErrorCodes.BAD_MESSAGE, "request.bodyBase64 must be a string");
   }
   if (
     request.credentials !== undefined

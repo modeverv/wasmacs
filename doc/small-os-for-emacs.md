@@ -472,9 +472,9 @@ Open questions:
 Responsibilities:
 
 - Provide environment, cwd, clocks, random, stdio, and debug logs.
-- Stub or explicitly reject unsupported syscalls and process features.
-- Keep process/pty unavailable for MVP unless routed to an explicit host or
-  remote service.
+- Stub or explicitly reject unsupported syscalls.
+- Keep host processes, ptys and sockets unavailable. Subprocesses are the
+  Process Service's business (service 10), not a host capability.
 - Avoid Node-only facilities in browser product profiles.
 
 Emacs source surfaces:
@@ -488,7 +488,7 @@ Emacs source surfaces:
 Acceptance tests:
 
 - Browser profile avoids `NODERAWFS`.
-- Unsupported process paths report explicit unavailable states.
+- Unsupported pty and socket paths report explicit unavailable states.
 - TERM/TERMCAP/env defaults avoid startup crashes.
 - Unsupported syscalls are logged and classified as harmless, required, or
   blockers.
@@ -530,6 +530,38 @@ Open questions:
   console shape?
 - Which debug panels should be hidden by default once the compatibility OS
   substrate is stable?
+
+### 10. Process Service
+
+Responsibilities:
+
+- Give Emacs's unchanged process code real subprocesses: `emacs_spawn`,
+  `waitpid`, `kill`, pipes and `poll` work against a cooperative kernel in the
+  Emacs worker (`src/runtime/process/wasmacs-kernel.js`).
+- Run the bundled userland (`src/userland`: BusyBox `sh` and tools, git, GNU
+  grep) as separate WebAssembly instances that share Emacs's filesystem.
+- Let processes run whenever Emacs waits, and let Emacs see their output, exit
+  and signals through its normal paths (`SIGCHLD`, `wait_reading_process_output`).
+- Never depend on the worker's event loop: Emacs does not return to it.
+
+Emacs source surfaces:
+
+- `vendor/emacs/src/callproc.c` (`emacs_spawn`, `call_process`)
+- `vendor/emacs/src/process.c` (`create_process`, `wait_reading_process_output`)
+- `vendor/emacs/src/sysdep.c` (`get_child_status`)
+- `vendor/emacs/src/keyboard.c` (`kbd_buffer_get_event`)
+
+Acceptance tests:
+
+- `tests/process/run-kernel-tests.mjs`: the kernel without Emacs.
+- `tools/scripts/probe-process-service.mjs`: `call-process`, `make-process`,
+  `M-x shell`, eshell, `vc-git`, Magit and `M-x grep` in the real Emacs build.
+- `tools/scripts/run-browser-smoke.mjs shell persist`: the page in a browser.
+- A dead process leaves nothing reachable (kernel suite and Emacs probe).
+
+Not provided: pseudoterminals, job control, sockets, preemption of a program
+that makes no system calls. The design, its rules and its limits are in
+`doc/process-service.md`.
 
 ## Cross-Service Checks
 
@@ -594,6 +626,27 @@ These checks prevent services from contradicting each other.
 - Does xterm.js remain a renderer for terminal bytes, not an editor model?
 - Is the later custom text-grid renderer kept separate from the tty MVP?
 
+### Process x Input Scheduler
+
+- Does every wait of Emacs (idle keyboard wait, `poll`, pipe read, `waitpid`)
+  run the process scheduler, and does Emacs sleep when no process can run?
+- Does `C-g` end a wait for a subprocess?
+- Is process activity serviced by Emacs itself (`wait_reading_process_output`)
+  and not by host-side code calling into Lisp?
+
+### Process x Filesystem
+
+- Do all processes use the one shared filesystem, with only the descriptor
+  table and the working directory switched per process?
+- Does a process leave nothing registered in the shared filesystem when it
+  exits?
+
+### Process x Terminal
+
+- Processes get pipes, never the terminal: is `isatty` false in a subprocess,
+  and do Emacs settings that assume a pty (`process-connection-type`, grep
+  colours) say so?
+
 ### Host Capability x Browser GUI
 
 - Are unsupported process/clipboard/pty paths surfaced as explicit unavailable
@@ -657,8 +710,10 @@ These checks prevent services from contradicting each other.
   explicitly asks for a preloaded-state experiment.
 - Do not design a custom snapshot that ignores pdumper-class relocation and
   static-root requirements if the preloaded-state lane is resumed.
-- Do not implement a full POSIX pty/job-control/process layer for the MVP.
-  Build only the fake tty surface Emacs proves it needs.
+- Do not implement a POSIX pty or job-control layer for the MVP. Build only the
+  fake tty surface Emacs proves it needs. (Processes themselves are provided:
+  see the Process Service. Its scope is what Emacs's process code and the
+  bundled userland need, not POSIX at large.)
 - Do not patch `vendor/emacs` for product work without an explicit experiment.
 
 ## Working Rule For Future LLM Turns

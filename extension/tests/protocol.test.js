@@ -34,3 +34,14 @@ test("protocol accepts safe proxy request shape", () => {
   };
   assert.equal(validateBridgeMessage(message), null);
 });
+
+test("protocol accepts cancellation and Git binary request fields", () => {
+  assert.equal(validateBridgeMessage({ type: "WASMACS_PROXY_CANCEL", version: 1, requestId: "fetch-1" }), null);
+  const message = { type: "WASMACS_PROXY_REQUEST", version: 1, requestId: "git-1", request: {
+    url: "https://github.com/example/repo.git/git-upload-pack", method: "POST",
+    headers: [["Content-Type", "application/x-git-upload-pack-request"]], bodyBase64: "AA==",
+  } };
+  assert.equal(validateBridgeMessage(message), null);
+  assert.equal(validateBridgeMessage({ ...message, request: { ...message.request, bodyBase64: [] } }).code, "BAD_MESSAGE");
+  assert.equal(validateBridgeMessage({ ...message, request: { ...message.request, headers: [["bad"]] } }).code, "BAD_MESSAGE");
+});

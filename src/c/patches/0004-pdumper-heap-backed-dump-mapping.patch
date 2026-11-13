@@ -1,0 +1,19 @@
+--- a/src/pdumper.c
++++ b/src/pdumper.c
+@@ -5043,7 +5043,15 @@
+       total_size += maps[i].spec.size;
+     }
+ 
+-  return (VM_SUPPORTED ? dump_mmap_contiguous_vm : dump_mmap_contiguous_heap)
++  return
++#ifdef __EMSCRIPTEN__
++    /* wasmacs pdumper: use heap-backed contiguous dump mapping under Emscripten.
++       Emscripten exposes POSIX-like mmap enough for configure, but wasm/browser
++       pdmp restore cannot rely on the VM reservation path used by native Emacs. */
++    dump_mmap_contiguous_heap
++#else
++    (VM_SUPPORTED ? dump_mmap_contiguous_vm : dump_mmap_contiguous_heap)
++#endif
+     (maps, nr_maps, total_size);
+ }
+ 

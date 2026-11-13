@@ -1,0 +1,18 @@
+--- a/include/platform.h
++++ b/include/platform.h
+@@ -558,6 +558,15 @@
+ # undef HAVE_PRINTF_PERCENTM
+ #endif
+ 
++#if defined(__EMSCRIPTEN__)
++/* Emscripten's musl is built without the GNU "%m" printf conversion
++ * (system/lib/libc/musl/src/stdio/vfprintf.c: "#ifndef __EMSCRIPTEN__ // 'm'
++ * is a gnu extension"), and an unknown conversion makes vfprintf() fail
++ * without printing anything: every "...: %m" message would come out empty.
++ */
++# undef HAVE_PRINTF_PERCENTM
++#endif
++
+ /*
+  * Now, define prototypes for all the functions defined in platform.c
+  * These must come after all the HAVE_* macros are defined (or not)

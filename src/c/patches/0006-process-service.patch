@@ -1,0 +1,205 @@
+--- a/src/callproc.c
++++ b/src/callproc.c
+@@ -95,7 +95,52 @@
+ #ifdef HAVE_ANDROID
+ #include "android.h"
+ #endif /* HAVE_ANDROID */
++
++#ifdef __EMSCRIPTEN__
++/* wasmacs process service.  There is no fork or exec under wasm.  A
++   subprocess is another wasm program that the host kernel
++   (src/runtime/process/wasmacs-kernel.js) runs inside the same worker;
++   the host starts it, delivers signals to it and reports its status.  */
++extern int wasmacs_host_proc_spawn (char **argv, char **envp, const char *cwd,
++				    int std_in, int std_out, int std_err);
++extern int wasmacs_host_proc_kill (int pid, int sig);
++
++/* kill for subprocesses: PID < 0 names a process group, like kill(2).  */
++int
++wasmacs_os_kill (pid_t pid, int sig)
++{
++  if (pid == getpid ())
++    return raise (sig);
++  int rc = wasmacs_host_proc_kill (pid, sig);
++  if (rc < 0)
++    {
++      errno = -rc;
++      return -1;
++    }
++  return 0;
++}
++# define kill wasmacs_os_kill
++
++/* The host calls this when C-g arrives while Emacs is blocked waiting for
++   a subprocess (reading its output, waitpid, accept-process-output).  On
++   a real terminal the tty driver would have turned the key into SIGINT.  */
++__attribute__ ((used, visibility ("default")))
++void
++wasmacs_os_request_quit (void)
++{
++  Vquit_flag = Qt;
++}
+ 
++/* The host calls this to run a signal handler of Emacs: the SIGCHLD
++   handler when a subprocess changed state.  */
++__attribute__ ((used, visibility ("default")))
++int
++wasmacs_os_raise_signal (int sig)
++{
++  return raise (sig);
++}
++#endif /* __EMSCRIPTEN__ */
++
+ /* Pattern used by call-process-region to make temp files.  */
+ static Lisp_Object Vtemp_file_name_pattern;
+ 
+@@ -1443,6 +1488,25 @@
+              const char *pty_name, bool pty_in, bool pty_out,
+              const sigset_t *oldset)
+ {
++#ifdef __EMSCRIPTEN__
++  /* wasmacs process service: the host kernel creates the child and gives
++     it duplicates of STD_IN, STD_OUT and STD_ERR as its descriptors 0, 1
++     and 2; nothing else is inherited.  There are no pseudoterminals:
++     allocate_pty fails, so process.c has already fallen back to pipes
++     and PTY_NAME is null.  */
++  {
++    int rc = wasmacs_host_proc_spawn (argv, envp, cwd, std_in, std_out,
++				      std_err < 0 ? std_out : std_err);
++    if (rc < 0)
++      {
++	*newpid = -1;
++	return -rc;
++      }
++    *newpid = rc;
++    return 0;
++  }
++#endif
++
+ #if defined HAVE_ANDROID && !defined ANDROID_STUBIFY
+   /* Android 10 and later don't allow directly executing programs
+      installed in the application data directory.  Emacs provides a
+--- a/src/process.c
++++ b/src/process.c
+@@ -135,6 +135,13 @@
+ #endif
+ #endif
+ 
++#ifdef __EMSCRIPTEN__
++/* wasmacs process service: signals to subprocesses go to the host kernel
++   (see callproc.c).  */
++extern int wasmacs_os_kill (pid_t pid, int sig);
++# define kill wasmacs_os_kill
++#endif
++
+ #if defined HAVE_GETADDRINFO_A || defined HAVE_GNUTLS
+ /* This is 0.1s in nanoseconds. */
+ #define ASYNC_RETRY_NSEC 100000000
+--- a/src/sysdep.c
++++ b/src/sysdep.c
+@@ -457,6 +457,11 @@
+ 
+    Return CHILD if successful, 0 if no status is available, and a
+    negative value (setting errno) if waitpid is buggy.  */
++#ifdef __EMSCRIPTEN__
++/* wasmacs process service: subprocesses live in the host kernel.  */
++extern int wasmacs_host_proc_waitpid (int pid, int *status, int options);
++#endif
++
+ static pid_t
+ get_child_status (pid_t child, int *status, int options, bool interruptible)
+ {
+@@ -476,7 +481,19 @@
+       if (interruptible)
+ 	maybe_quit ();
+ 
++#ifdef __EMSCRIPTEN__
++      /* A blocking wait runs the subprocesses until CHILD changes state.
++	 It fails with EINTR when the user types C-g, so that the
++	 maybe_quit above can act on it.  */
++      pid = wasmacs_host_proc_waitpid (child, status, options);
++      if (pid < 0)
++	{
++	  errno = -pid;
++	  pid = -1;
++	}
++#else
+       pid = waitpid (child, status, options);
++#endif
+       if (0 <= pid)
+ 	break;
+       if (errno != EINTR)
+--- a/src/keyboard.c
++++ b/src/keyboard.c
+@@ -2519,6 +2519,20 @@
+                                         wasmacs_host_terminal_resize_rows ());
+       wasmacs_host_terminal_resize_ack ();
+     }
++}
++
++/* wasmacs process service.  wasmacs_host_wait_for_input returns this when
++   subprocesses did something Emacs has to look at while it sat in the
++   input wait: output or end-of-file on a pipe, or a status change.  */
++enum { WASMACS_WAIT_PROCESS = 3 };
++
++/* Run process filters and sentinels the way the stock idle wait
++   (wait_reading_process_output) would have, without waiting for more.  */
++static void
++wasmacs_os_service_subprocesses (bool do_display)
++{
++  wait_reading_process_output (-1, 0, 0, do_display, Qnil, NULL, 0);
++  wasmacs_host_flush_terminal_output ();
+ }
+ 
+ /* Read a character from the keyboard; call the redisplay if needed.  */
+@@ -4146,7 +4160,8 @@
+ 		  if (pre_timers_ != timers_run)
+ 		    redisplay_preserve_echo_area (9);
+ 		  int timeout_ms_ = wasmacs_timespec_to_timeout_ms (next_timer_);
+-		  if (wasmacs_host_wait_for_input (timeout_ms_) == 0)
++		  int wait_rc_ = wasmacs_host_wait_for_input (timeout_ms_);
++		  if (wait_rc_ == 0)
+ 		    {
+ 		      unsigned post_timers_ = timers_run;
+ 		      timer_check ();
+@@ -4159,6 +4174,8 @@
+ 		  wasmacs_os_maybe_apply_terminal_resize ();
+ 		  wasmacs_os_timing_checkpoint (11);
+ 		  gobble_input ();
++		  if (wait_rc_ == WASMACS_WAIT_PROCESS)
++		    wasmacs_os_service_subprocesses (true);
+ 		  wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 23 : 24);
+ 		}
+ #else
+@@ -4192,7 +4209,8 @@
+ 	      if (pre_timers_ != timers_run)
+ 		redisplay_preserve_echo_area (9);
+ 	      int timeout_ms_ = wasmacs_timespec_to_timeout_ms (next_timer_);
+-	      if (wasmacs_host_wait_for_input (timeout_ms_) == 0)
++	      int wait_rc_ = wasmacs_host_wait_for_input (timeout_ms_);
++	      if (wait_rc_ == 0)
+ 		{
+ 		  unsigned post_timers_ = timers_run;
+ 		  timer_check ();
+@@ -4205,6 +4223,8 @@
+ 	      wasmacs_os_maybe_apply_terminal_resize ();
+ 	      wasmacs_os_timing_checkpoint (10);
+ 	      gobble_input ();
++	      if (wait_rc_ == WASMACS_WAIT_PROCESS)
++		wasmacs_os_service_subprocesses (do_display);
+ 	      wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 21 : 22);
+ 	    }
+ 	  wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 31 : 32);
+--- a/src/lisp.h
++++ b/src/lisp.h
+@@ -5261,6 +5261,10 @@
+ /* Defined in callproc.c.  */
+ #ifdef DOS_NT
+ # define CHILD_SETUP_ERROR_DESC "Spawning child process"
++#elif defined __EMSCRIPTEN__
++/* wasmacs process service: there is no vfork; the host kernel starts the
++   subprocess.  */
++# define CHILD_SETUP_ERROR_DESC "Starting subprocess"
+ #else
+ # define CHILD_SETUP_ERROR_DESC "Doing vfork"
+ #endif

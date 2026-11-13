@@ -1,0 +1,186 @@
+# Applet whitelist for the wasmacs multicall busybox.
+# One Kconfig symbol (without CONFIG_) per line; '#' starts a comment.
+# Every applet symbol that exists in the BusyBox tree and is NOT listed here
+# is forced off by scripts/mkconfig.sh; all FEATURE_* sub-options keep their
+# Kconfig defaults unless config/settings.list overrides them.
+
+# --- libbb ---
+BUSYBOX
+
+# --- shells ---
+ASH
+HUSH
+SH_IS_ASH
+
+# --- coreutils ---
+BB_ARCH
+BASE32
+BASE64
+BASENAME
+CAT
+CHGRP
+CHMOD
+CHOWN
+CKSUM
+COMM
+CP
+CRC32
+CUT
+DATE
+DD
+DF
+DIRNAME
+DOS2UNIX
+UNIX2DOS
+DU
+ECHO
+ENV
+EXPAND
+UNEXPAND
+EXPR
+FACTOR
+FALSE
+FOLD
+FSYNC
+GROUPS
+HEAD
+HOSTID
+ID
+INSTALL
+LINK
+LN
+LOGNAME
+LS
+MD5SUM
+SHA1SUM
+SHA256SUM
+SHA384SUM
+SHA512SUM
+SHA3SUM
+MKDIR
+MKFIFO
+MKNOD
+MKTEMP
+MV
+NICE
+NL
+NOHUP
+NPROC
+OD
+PASTE
+PRINTENV
+PRINTF
+PWD
+READLINK
+REALPATH
+RM
+RMDIR
+SEQ
+SHRED
+SHUF
+SLEEP
+SORT
+SPLIT
+STAT
+STTY
+SUM
+SYNC
+TAC
+TAIL
+TEE
+TEST
+TEST1
+TEST2
+TIMEOUT
+TOUCH
+TR
+TRUE
+TRUNCATE
+TSORT
+TTY
+UNAME
+UNIQ
+UNLINK
+USLEEP
+UUDECODE
+UUENCODE
+WC
+WHOAMI
+YES
+
+# --- findutils ---
+# grep is GNU grep (src/userland/grep): Emacs relies on its options.  It must
+# not be an applet as well, or the standalone shell would run the applet
+# instead of looking /bin/grep up.  egrep and fgrep are two-line shell scripts
+# (src/runtime/process/wasmacs-userland.js).
+FIND
+XARGS
+
+# --- editors ---
+AWK
+CMP
+DIFF
+ED
+PATCH
+SED
+VI
+
+# --- archival ---
+AR
+BUNZIP2
+BZCAT
+BZIP2
+CPIO
+GUNZIP
+ZCAT
+GZIP
+LZCAT
+LZMA
+UNLZMA
+UNXZ
+XZCAT
+XZ
+TAR
+UNCOMPRESS
+UNZIP
+
+# --- debianutils ---
+WHICH
+PIPE_PROGRESS
+RUN_PARTS
+
+# --- miscutils ---
+ASCII
+BC
+DC
+HEXEDIT
+LESS
+STRINGS
+TIME
+TREE
+TS
+TTYSIZE
+
+# --- procps (only the ones that do not need /proc) ---
+KILL
+KILLALL
+WATCH
+
+# --- util-linux ---
+CAL
+GETOPT
+HEXDUMP
+HD
+XXD
+MORE
+REV
+UUIDGEN
+SETSID
+FLOCK
+
+# --- console-tools ---
+CLEAR
+RESET
+
+# --- networking (no sockets involved) ---
+HOSTNAME

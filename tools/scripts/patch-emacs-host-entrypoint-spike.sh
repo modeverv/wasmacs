@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Perl-regex patcher for the VS Code Asyncify lane
+# (tools/scripts/build-emacs-browser-asyncify-spike.sh).  The product route
+# (Atomics + pdump) does not use it: its Emacs changes are the unified diffs in
+# src/c/patches, applied by src/build/apply-emacs-patches.sh.
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-spike_src="${WASMACS_SPIKE_SRC:-${repo_root}/build/emacs-core-spike/src}"
+if [ -z "${WASMACS_SPIKE_SRC:-}" ]; then
+  echo "error: WASMACS_SPIKE_SRC must point at a copied Emacs source tree" >&2
+  exit 2
+fi
+spike_src="${WASMACS_SPIKE_SRC}"
 source_file="${spike_src}/src/emacs.c"
 keyboard_file="${spike_src}/src/keyboard.c"
 minibuf_file="${spike_src}/src/minibuf.c"
@@ -13,11 +21,7 @@ waitpoint_mode="${WASMACS_ASYNCIFY_WAITPOINT_MODE:-read-char}"
 terminal_tty_enabled="${WASMACS_ENABLE_ASYNCIFY_WAITPOINT:-0}"
 
 if [ ! -f "${source_file}" ] || [ ! -f "${keyboard_file}" ] || [ ! -f "${minibuf_file}" ] || [ ! -f "${sysdep_file}" ] || [ ! -f "${term_file}" ]; then
-  if [ "${spike_src}" = "${repo_root}/build/emacs-core-spike/src" ]; then
-    "${repo_root}/tools/scripts/build-emacs-core-spike.sh"
-  else
-    echo "error: source files not found at ${spike_src}/src/" >&2; exit 1
-  fi
+  echo "error: source files not found at ${spike_src}/src/" >&2; exit 1
 fi
 
 if ! rg 'wasmacs tty direct-color output' "${term_file}" >/dev/null; then

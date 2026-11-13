@@ -1,6 +1,6 @@
 # wasmacs CORS Companion
 
-This is an unpacked Manifest V3 Chrome extension that gives wasmacs a user-granted network capability for package archives and raw files that normal page `fetch()` cannot read because of CORS.
+This is an unpacked Manifest V3 Chrome extension that gives wasmacs a user-granted network capability for package archives, raw files, and Git smart HTTP requests that normal page `fetch()` cannot read because of CORS.
 
 It is not a global CORS disable switch. It does not intercept all browser traffic, rewrite arbitrary response headers, read cookies, or forward credentials by default.
 
@@ -52,6 +52,38 @@ window.postMessage({
 
 The response body is returned as `bodyBase64`.
 
+## Git smart HTTP
+
+The existing message bridge also accepts binary Git requests:
+
+- GET discovery at `repo.git/info/refs?service=git-upload-pack` or `git-receive-pack`.
+- POST to `repo.git/git-upload-pack` or `repo.git/git-receive-pack`, with the matching
+  `application/x-git-upload-pack-request` or `application/x-git-receive-pack-request`
+  Content-Type and a base64-encoded `bodyBase64`.
+- Git RPC POST may carry `Content-Encoding: gzip` for compressed negotiation
+  requests; the compressed bytes are forwarded unchanged.
+- `Git-Protocol`, `Accept`, and explicit `Authorization` request headers;
+  `WWW-Authenticate` is preserved in HTTP responses. Headers may be an object or
+  `[name, value]` pairs. HTTP errors such as 401 remain HTTP responses.
+
+For authenticated remotes, enable **Allow credentials** in the options page and
+allow the exact HTTPS target origin. The Git transport must supply its own
+Authorization header; the extension does not store tokens. `credentials: "omit"`
+still omits browser cookies even when an Authorization header is supplied.
+Credentials embedded in URLs are rejected. Adding a server outside the default
+four hosts also requires its matching `host_permissions` entry in `manifest.json`.
+
+Git POST and authenticated requests reject redirects, so configure the canonical
+remote URL. They are not retried by the extension. Public GET discovery may follow
+redirects and returns the final URL after checking its allowlist. Request and
+response bodies each default to a 25 MiB limit; downloads are stopped while
+reading if they exceed the response limit.
+
+To abort a request, post `WASMACS_PROXY_CANCEL` with protocol version 1 and the
+original `requestId`. The acknowledgement is `WASMACS_PROXY_CANCELLED`; the original
+request receives `FETCH_ABORTED`. Cancellation is scoped to the originating tab
+and document. Timeout remains a separate `FETCH_TIMEOUT` error.
+
 ## Defaults
 
 Allowed page origins:
@@ -73,7 +105,7 @@ Allowed network targets:
 - `https://raw.githubusercontent.com/*`
 - `https://github.com/*`
 
-Credentials and private network targets are disabled by default. The extension keeps a bounded audit log in `chrome.storage.local` without storing response bodies.
+Credentials and private network targets are disabled by default. The extension keeps a bounded audit log in `chrome.storage.local` without storing headers, bodies, URL credentials, or query strings.
 
 ## Options
 
@@ -81,7 +113,7 @@ Open the extension options page from `chrome://extensions` to edit:
 
 - allowed wasmacs origins
 - allowed target URL patterns
-- max response size
+- max request and response sizes
 - timeout
 - credentialed request mode
 - private network target mode

@@ -2350,6 +2350,51 @@ Validation notes:
 
 ## Current Next Step
 
+Status as of 2026-11-13.
+
+The product route is the Atomics + pdump + xterm.js runtime and nothing else:
+
+```text
+src/wasm/xterm-atomics-pdump.html
+src/wasm/src/emacs-atomics-pdump-worker.js
+tools/scripts/wasmacs-atomics-host-library.js
+src/build/build-emacs-browser-atomics-pdump-profile.sh   (applies src/c/patches/0001..0007)
+```
+
+Everything that led there and is no longer used lives under `archive/retired/`
+(see "Phase: Canonical route and archive" below). The VS Code `.wasifs` lane
+(`build2/`, Asyncify) stays a separate, live side lane.
+
+Subprocesses work (see "Phase: Process Service" below): `M-x shell`, eshell,
+git with `vc-git` and Magit, `M-x grep` / `rgrep` / `lgrep` / xref search, on a
+bundled userland of BusyBox, git and GNU grep. Git Smart HTTP(S) clone/fetch/push
+now uses the companion extension (see the implementation record below).
+
+Next candidates, in the order they would matter to a user:
+
+1. A pseudoterminal in the process kernel (line discipline, `isatty`, window
+   size): `M-x term`, job control, programs that behave differently on a tty.
+2. GNU diffutils as a fourth userland image, for `ediff`.
+3. Incremental persistence of `/home/user` (today the whole tree is saved as
+   one image whenever it changed; large repositories make that slow).
+4. Bring the VS Code lane onto the numbered patch layer (`src/c/patches`), so
+   that `tools/scripts/patch-emacs-host-entrypoint-spike.sh` can be retired too.
+
+Validation commands for the current state:
+
+```sh
+npm test                          # CI: contracts + the checked-in docs bundle runs sh/git/grep
+npm run test:process              # kernel tests, then real Emacs with real subprocesses (Node)
+npm run browser:smoke:processes   # the page in headless Chrome: shell, git, grep, reload persistence
+npm run test:product && npm run test:artifacts && npm run test:vscode-lane
+```
+
+## Earlier Next Step (historical: the Asyncify Terminal/Tty pivot, 2026-06)
+
+The text below was the "Current Next Step" until 2026-11-13. It describes the
+Asyncify route before the Atomics + pdump route became the product, and is kept
+as a record. Do not work from it.
+
 Milestone 13.5 now pivots to a minimal Terminal/Tty Service and xterm.js
 renderer as the active product route.
 
@@ -4929,3 +4974,206 @@ X2/X3 確認後、org-mode 最小確認:
     `os-timing-checkpoint` or `wait-enter` stream.
 
 **vendor/emacs unchanged.**
+
+## Phase: Canonical route and archive (2026-11-13)
+
+**Status: COMPLETE**
+
+Request: move old and abandoned mechanisms to `archive/`, protected by tests, so
+that the current canonical route is unambiguous.
+
+### Completed
+- [x] 145 tracked files moved with `git mv` to
+  `archive/retired/<mechanism>/<original path>`: the textarea app and its
+  command bridge, the Asyncify command protocol, early build spikes, the
+  Asyncify xterm browser page, Atomics without pdump, pdump bring-up
+  experiments, and the stale C patch layer. `archive/README.md` is the index
+  and says how to resurrect a file.
+- [x] `src/c/patches/0001..0005` are now real unified diffs of what the product
+  build applies (they reproduce the June `temacs.wasm` byte for byte).
+  `src/build/apply-emacs-patches.sh` applies them; the product build script no
+  longer patches with inline perl. `make prepare` is gone, `make check-patches`
+  replaces it.
+- [x] `package.json` scripts reduced to what exists and is live; the dev server
+  redirects `/` to the canonical page; the browser smoke runner drives that page.
+- [x] Guard tests: `tests/runtime/canonical-route.test.js` (entrypoints agree,
+  canonical files exist, scripts and Makefile only name existing files, live
+  files do not reference retired ones, `docs/app` is the current `src/wasm`,
+  the archive index covers every mechanism) and
+  `tests/runtime/emacs-patch-layer.test.js` (numbering, `--check`, pinned
+  vendor revision, no in-place source edits by the builder).
+
+### Validation
+- `npm test`: 109 of 110 pass. The one failure is the PowerShell proxy sample
+  on this machine (`pwsh` is a broken shim here); it is unrelated and
+  pre-existing.
+- `npm run test:artifacts`, `npm run test:product`, `npm run test:vscode-lane`: PASS.
+  (`test:xterm-cold-loadup-failure` pointed at a directory that does not exist,
+  `build/artifacts/emacs-browser-asyncify-spike`; the lane builds into
+  `build2/artifacts/`, and the probe now defaults to that.)
+
+**vendor/emacs unchanged.**
+
+## Phase: Process Service (2026-11-13)
+
+**Status: COMPLETE for the requested scope** (M-x shell, eshell, git, Magit
+basics, grep). Design, rules and limits: `doc/process-service.md`.
+
+Request: extend the OS-compatible layer so that `M-x shell`, git and processes
+started from Emacs work; later also grep, with "git, Magit (some features) and
+eshell or shell" named as what makes casual daily use possible.
+
+### Completed
+- [x] Kernel: `src/runtime/process/wasmacs-kernel.js`. Cooperative, in the
+  Emacs worker, synchronous. Processes are separate wasm instances (Emscripten
+  + Asyncify) sharing Emacs's `FS`; `fork` / `vfork` / `exec` / `posix_spawn` /
+  `wait4`, pipes, signals and process groups, timers, `poll`, time slices.
+- [x] Per-process runtime: `src/runtime/process/child/` (JS library, pre-js, C
+  runtime, link flags).
+- [x] Emacs seam: `src/c/patches/0006-process-service.patch` (`emacs_spawn`,
+  `get_child_status`, `kill`, idle servicing in `keyboard.c`) and the host
+  library (`pipe2`, `poll`, `wasmacs_host_wait_for_input` returning 3 for
+  process activity). `0007-keyboard-honor-read-timeout.patch` fixes
+  `sit-for` / `read-event` timeouts in the idle wait (they waited a full second).
+- [x] Userland: `src/userland/{busybox,git,grep}` -> `build/artifacts/userland`
+  (BusyBox 1.38.0 with `ash` and ~150 applets, git 2.52.1, GNU grep 3.12;
+  sha256 pinned, sources downloaded once to `build/userland/dl`).
+  `src/runtime/process/wasmacs-userland.js` lays out `/bin`, `/etc` and the
+  three Emacs settings that follow from "no pty".
+- [x] Worker and page: userland install and synchronous program loader; input
+  flush retry so that `C-g` reaches a blocked Emacs.
+- [x] User image: file modes and modification times are kept, paths up to 255
+  bytes are stored, and the image is rewritten only when the tree changed, so
+  a repository in `/home/user` survives a reload clean.
+
+### Found and fixed along the way
+- Idle Emacs was not idle: the page republished the terminal size on every
+  idle wait, which woke Emacs, which entered the idle wait again: about 4200
+  round trips per second, each one also re-saving `/home/user`. Now about 1 per
+  second. (Pre-existing; visible only in a real browser.)
+- Every git process left a `SOCKFS` mount in the shared filesystem, which kept
+  the dead instance and its 16 MB memory alive; a tab ran out of memory after
+  about 116 git commands. Sockets are stubbed, `FS.mount` is refused at program
+  start, and tests measure retention.
+- A `promise.catch()` per process did the same through the microtask queue,
+  which never drains while Emacs runs.
+- The pipe was a queue of chunks and went quadratic with the tiny writes of
+  line-buffered stdout (2 MB took 13.7 s; now 0.5 s).
+- eshell parses `#!` itself, so the executable marker is not a `#!` line.
+
+### Validation
+- `node tests/process/run-kernel-tests.mjs`: 39/39.
+- `node tools/scripts/probe-process-service.mjs`: 33/33 (real Emacs build under
+  Node; includes `M-x shell`, `M-x eshell`, Magit status / stage / commit by
+  keys, `C-g`, and heap retention across 900 process images).
+- `node tools/scripts/run-browser-smoke.mjs shell persist`: PASS in headless
+  Chrome 157 (shell, git, GNU grep pipeline, `C-c C-c`, `C-g`, `M-x grep`, 300
+  git processes in a row, idle at 1.0 waits/s, repository clean after reload).
+  A run with 3000 git processes in a row also passed (6.3 s).
+- `npm test`: includes `tests/runtime/process-service-bundle.test.js`, which
+  boots the checked-in `docs/` bundle and runs `sh`, `git`, `grep`.
+
+### Limits (by design or not done)
+- No pty (`M-x term`), no job control, no sockets (git is local-only), no
+  preemption of a program that makes no system call, only the bundled programs.
+- `ediff` needs GNU `diff`; the BusyBox `diff` prints unified format only.
+- Magit is not bundled; the probe uses the copy installed on the developer's
+  machine and is skipped without it.
+
+**vendor/emacs unchanged.**
+
+## Research: Chrome companion as socket transport (2026-11-13)
+
+Scope: feasibility follow-up to Milestone 14 network Phase 1 and the Process
+Service. This is research, not an adopted architecture change or a working
+socket implementation.
+
+- [x] Inspect the existing companion. `extension/src/service-worker.js` accepts
+  only GET/HEAD and buffers one complete response; `extension/src/protocol.js`
+  has PING/REQUEST only. The page bridge and worker SAB relay already exist.
+- [x] Check Chrome's boundary: ordinary MV3 extensions have no raw TCP/UDP API.
+  Chrome Apps' socket API is not an extension API. An extension can instead
+  connect to a WebSocket-to-TCP relay, or an installed Native Messaging helper.
+  The latter adds a native dependency outside the current browser-only scope.
+- [x] Inspect Emacs's required contract: `vendor/emacs/src/process.c`,
+  `connect_network_socket` / `Fmake_network_process`, requires socket/connect,
+  readiness, errors and descriptor I/O; an HTTP fetch response is insufficient.
+- Candidate: add a separate stream capability with connection IDs, send/receive,
+  EOF/close, cancellation, bounded buffering and fd/poll integration. Keep
+  asynchronous network handling in the page or another worker, outside the
+  Emacs worker (see `doc/process-service.md`, Rules). Do not restore per-process
+  SOCKFS mounts, which previously retained terminated wasm instances.
+- For Git HTTPS alone, extend `host.network.fetch` plus a Git transport/helper
+  first: the companion needs POST/body/auth handling and the bundled Git has
+  `NO_CURL` (`src/userland/git/config.mak`). Socket support alone is insufficient.
+- [ ] If selected, validate a TCP echo stream through real Emacs filters and
+  sentinels in Chrome, including idle wakeup, EOF, failed connect, C-g, buffer
+  pressure and repeated connection cleanup. TLS/STARTTLS, UDP and listening
+  sockets require separate scope. A relay must enforce permitted destinations.
+
+Validation: `rtk npm --prefix extension test` passed 12/12 existing fetch tests.
+No browser socket connection was implemented or tested in this research.
+References: [Chrome Extensions DevRel on raw sockets](https://groups.google.com/a/chromium.org/g/chromium-extensions/c/fC_IpY_43LU),
+[WebSocket service-worker lifecycle](https://developer.chrome.com/docs/extensions/how-to/web-platform/websockets),
+[Native Messaging](https://developer.chrome.com/docs/extensions/develop/concepts/native-messaging).
+
+## Implementation: Git Smart HTTP through the companion (2026-11-13)
+
+Status: [x] complete for bounded Smart HTTP(S) clone/fetch/push.
+Active slice: Milestone 14 network Phase 1 / the Git network next-step candidate.
+
+- [x] Reuse pinned Git 2.52.1 remote-curl.c unchanged for discovery, v0/v2
+  negotiation, pack handling and ref updates. `src/userland/git/http-browser.c`
+  supplies the HTTP adapter; `git-http` is a separate wasm image installed as
+  `git-remote-http` and `git-remote-https`.
+- [x] Add `wasmacs_host_http_fetch`, `Kernel.sys_http_fetch` and the page-owned
+  relay. The Emacs worker uses no promises/callbacks; at most four requests are
+  pending. Per-request IDs/SABs, cancellation and process-death cleanup preserve
+  the scheduler and prevent late responses from completing a newer request.
+- [x] Extend the companion for binary/gzip Git RPC POST, explicit auth, bounded
+  reads and document-scoped cancellation. POST/authenticated requests reject
+  redirects; process HTTP selects one transport without fallback/replay.
+- [x] Verify clone/fetch/push in real Chrome through the installed test extension
+  against disposable HTTP and HTTPS+Basic repositories. Compare commit SHA,
+  binary SHA256, server ref and pushed file, reject non-fast-forward updates,
+  repeat fetch, cancel with C-g/C-c C-c, then fetch again.
+- [x] Clone the public GitHub octocat/Hello-World repository with --depth 1 via
+  the companion. No test commits were pushed to any external repository.
+- [x] Rebuild Emacs/pdump, Git/userland and docs/. The site builder now copies
+  current plain-JS runtime helpers so a source fix cannot leave stale HTTP glue
+  in the published bundle. README, architecture and process documentation updated.
+
+Validation:
+
+- `rtk npm --prefix extension test`: 24/24.
+- `rtk npm run test:process`: kernel 39/39, real Emacs 33/33 (including Magit).
+- `rtk proxy node src/userland/git/test-http.mjs`: v0/v2, URL/header auth, 401 failure,
+  2 MiB binary upload, 27 suspended/resumed imports, no surviving HTTP handles.
+- `rtk node tools/scripts/probe-git-http.mjs --public`: HTTPS+Basic, GitHub,
+  cancellation/recovery; 25 extension-audited requests, zero fallback attempts.
+  Evidence: `logs/git-https-extension-e2e.txt` (WASMACS_GIT_HTTP_LOG override).
+- `rtk node tools/scripts/probe-git-http.mjs --http`: plain HTTP, cancellation
+  and recovery; 22 extension-audited requests, zero fallbacks.
+  Evidence: `logs/git-http-extension-e2e.txt`.
+- `rtk proxy mise exec powershell@7.6.2 -- npm test`: 125/125 and artifact policy.
+  Bare npm test initially hit the existing unconfigured pwsh shim; selecting the
+  already installed PowerShell for this command fixed the environment without
+  changing global settings. The new helper was added to the bundle expectation.
+- `rtk npm run test:artifacts`: all three checks passed.
+
+Browser validation found and fixed a SharedArrayBuffer/TextDecoder incompatibility
+(copy bytes before decoding) and stale userland JS in the site build. Unit tests
+cover these as well as request replay, limits, cancellation and allocation failure.
+
+Limits: 25 MiB each request/response; 30 second request timeout; Smart HTTP only.
+TLS is browser-owned. SSH, git://, dumb HTTP/WebDAV, cross-origin packfile URI,
+raw sockets and VS Code-lane networking are outside this change. Authenticated
+remotes need the extension's Allow credentials setting and Git credentials.
+The extension and wasmacs page must be reloaded to use the new build.
+
+Release handoff (2026-11-13): the user requested committing and pushing today's
+changes together: the canonical-route archive, Process Service and numbered
+Emacs patch layer, Git Smart HTTP, documentation and rebuilt Pages artifacts.
+Local executable-bit-only drift is excluded; `vendor/emacs` remains pinned to
+Emacs 30.2 with no content changes. The verified push result is recorded as a
+new project event in Drive after publication.

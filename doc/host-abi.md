@@ -172,16 +172,36 @@ testable in Node, Wasmtime, or a non-browser shell.
 
 ## Process Surface
 
-`host.process` is unavailable by default for the MVP.
+`host.process`, the ability to run programs of the host machine, is
+unavailable. The host ABI does not expose arbitrary host command execution, and
+no later integration may smuggle it through filesystem calls.
 
-Process-like features in Emacs should fail explicitly or route later through
-separate services. Initial behavior:
+Subprocesses exist nevertheless. They are provided inside the wasm world by the
+Process Service (`doc/process-service.md`): a cooperative kernel in the Emacs
+worker that runs the bundled userland (BusyBox `sh` and tools, git, GNU grep)
+as separate WebAssembly instances. The imports Emacs uses for it are:
 
-- `call-process`, shell commands, pty, and network subprocess workflows are
-  disabled or stubbed.
-- The host ABI does not expose arbitrary host command execution.
-- Later remote-worker or browser-service integrations must cross a deliberate
-  boundary and should not be smuggled through filesystem calls.
+```text
+wasmacs_host_proc_spawn(argv, envp, cwd, stdin_fd, stdout_fd, stderr_fd) -> pid | -errno
+wasmacs_host_proc_waitpid(pid, status_ptr, options) -> pid | 0 | -errno
+wasmacs_host_proc_kill(pid, signal) -> 0 | -errno
+__syscall_pipe2, __syscall_poll        libc system calls, overridden
+wasmacs_host_wait_for_input(timeout_ms) -> 0 timeout | 1 input | 2 resize | 3 process activity
+```
+
+and the kernel calls two exports of Emacs:
+
+```text
+wasmacs_os_raise_signal(signal)        run Emacs's handler (SIGCHLD)
+wasmacs_os_request_quit()              C-g arrived while Emacs waited for a subprocess
+```
+
+The only thing the kernel asks of the browser host is a program image by name
+(`globalThis.__wasmacsLoadProgram(name) -> { factory, wasm }`), loaded
+synchronously from the same origin as the page.
+
+Ptys and sockets stay unavailable: `allocate_pty` fails and Emacs falls back to
+pipes; `socket()` in a subprocess fails with `EAFNOSUPPORT`.
 
 ## Emscripten Compatibility
 

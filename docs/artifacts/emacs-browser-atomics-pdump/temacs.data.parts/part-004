@@ -1,4 +1,83 @@
-al oddly-spelled words to accept.
+pell-current-dictionary ispell-dictionary-alist)
+		(error "No data for dictionary \"%s\" in `ispell-local-dictionary-alist' or `ispell-dictionary-alist'"
+		       ispell-current-dictionary)))
+         (str (nth n slot)))
+    (if (stringp str)
+        (decode-coding-string str (ispell-get-coding-system) t))))
+
+(defun ispell-get-casechars ()
+  "Return CASECHARS of a dictionary."
+  (ispell-get-decoded-string 1))
+(defun ispell-get-not-casechars ()
+  "Return NOT-CASECHARS of a dictionary."
+  (ispell-get-decoded-string 2))
+(defun ispell-get-otherchars ()
+  "Return OTHERCHARS of a dictionary."
+  (ispell-get-decoded-string 3))
+(defun ispell-get-many-otherchars-p ()
+  "Return MANY-OTHERCHARS of a dictionary."
+  (nth 4 (or (assoc ispell-current-dictionary ispell-local-dictionary-alist)
+	     (assoc ispell-current-dictionary ispell-dictionary-alist))))
+(defun ispell-get-ispell-args ()
+  "Return ARGS of a dictionary."
+  (nth 5 (or (assoc ispell-current-dictionary ispell-local-dictionary-alist)
+	     (assoc ispell-current-dictionary ispell-dictionary-alist))))
+(defun ispell-get-extended-character-mode ()
+  "Return extended character mode of a dictionary."
+  (if ispell-really-hunspell     ;; hunspell treats ~word as ordinary words
+      nil                        ;; in pipe mode. Disable extended-char-mode
+    (nth 6 (or (assoc ispell-current-dictionary ispell-local-dictionary-alist)
+	       (assoc ispell-current-dictionary ispell-dictionary-alist)))))
+(defun ispell-get-coding-system ()
+  "Return encoding of a dictionary."
+  (nth 7 (or (assoc ispell-current-dictionary ispell-local-dictionary-alist)
+	     (assoc ispell-current-dictionary ispell-dictionary-alist))))
+
+
+(defvar ispell-pdict-modified-p nil
+  "Non-nil means personal dictionary has modifications to be saved.")
+
+;; If you want to save the dictionary when quitting, must do so explicitly.
+;; When non-nil, the spell session is terminated.
+;; When numeric, contains cursor location in buffer, and cursor remains there.
+(defvar ispell-quit nil)
+
+(defvar ispell-process-directory nil
+  "The directory where `ispell-process' was started.")
+
+(defvar ispell-filter nil
+  "Output filter from piped calls to Ispell.")
+
+(defvar ispell-filter-continue nil
+  "Control variable for Ispell filter function.")
+
+(defvar ispell-output-buffer nil
+  "Buffer used for reading output of a synchronous Ispell subprocess.")
+
+(defvar ispell-session-buffer nil
+  "Buffer used for passing input to a synchronous Ispell subprocess.")
+
+(defvar ispell-cmd-args nil
+  "Command-line arguments to pass to a synchronous Ispell subprocess.")
+
+(defvar ispell-query-replace-marker (make-marker)
+  "Marker for `query-replace' processing.")
+
+(defvar ispell-recursive-edit-marker (make-marker)
+  "Marker for return point from recursive edit.")
+
+(defvar ispell-checking-message nil
+  "Non-nil when we're checking a mail message.
+Set to the MIME boundary locations when checking messages.")
+
+(defconst ispell-choices-buffer "*Choices*")
+
+(defvar ispell-overlay nil "Overlay variable for Ispell highlighting.")
+
+;;; *** Buffer Local Definitions ***
+
+(defconst ispell-words-keyword "LocalWords: "
+  "The keyword for local oddly-spelled words to accept.
 The keyword will be followed by any number of local word spellings.
 There can be multiple instances of this keyword in the file.")
 
@@ -101067,7 +101146,7 @@ meaning:
 
 Customize the user option `use-package-compute-statistics' to
 enable gathering statistics.
-(defalias 'use-package-report #[0 "\303C\304\305\306\"\"\210\262\242\211\204! 	\203 \307\310!\210\202! \307\311!\210r\312\313!q\210\314\315\"\316 \210\317 \210\320p!)\207" [use-package-statistics use-package-compute-statistics tabulated-list-entries nil maphash make-closure #[514 "\300\300\242B\240\207" [V0] 5 ("/Users/seijiro/by-llms/wasmacs/build/native-emacs-30.2/src/lisp/emacs-lisp/subr-x.elc" . 1870)] user-error "No use-package statistics available" "Customize `use-package-compute-statistics' to enable reporting" get-buffer-create "*use-package statistics*" mapcar use-package-statistics-convert use-package-statistics-mode tabulated-list-print display-buffer] 6 (#$ . 34043) nil])
+(defalias 'use-package-report #[0 "\303C\304\305\306\"\"\210\262\242\211\204! 	\203 \307\310!\210\202! \307\311!\210r\312\313!q\210\314\315\"\316 \210\317 \210\320p!)\207" [use-package-statistics use-package-compute-statistics tabulated-list-entries nil maphash make-closure #[514 "\300\300\242B\240\207" [V0] 5 ("/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/native-emacs-30.2/src/lisp/emacs-lisp/subr-x.elc" . 1870)] user-error "No use-package statistics available" "Customize `use-package-compute-statistics' to enable reporting" get-buffer-create "*use-package statistics*" mapcar use-package-statistics-convert use-package-statistics-mode tabulated-list-print display-buffer] 6 (#$ . 34043) nil])
 (defvar use-package-statistics-status-order '(("Declared" . 0) ("Prefaced" . 1) ("Initialized" . 2) ("Configured" . 3)))
 (defvar use-package-statistics-mode-hook nil)
 (byte-code "\300\301N\204\f \302\300\301\303#\210\304\305!\204 \302\305\306\307#\210\300\207" [use-package-statistics-mode-hook variable-documentation put "Hook run after entering `use-package-statistics-mode'.\nNo problems result if this variable is not bound.\n`add-hook' automatically binds it.  (This is true for all hook variables.)" boundp use-package-statistics-mode-map definition-name use-package-statistics-mode] 4)
@@ -101079,111 +101158,111 @@ the final or penultimate step during initialization.
 
 \{use-package-statistics-mode-map}
 (byte-code "\301\302N\204 \303\301\302\304\305!#\210\306\307!\204* \303\307\310\311#\210\312\307\306\307!\203& \313\202( \314 \"\210\307\302N\2048 \303\307\302\304\315!#\210\306\300!\204X \303\300\310\311#\210\312\300\306\300!\203P \313\202V \316\300\313\"\210\"\210\300\302N\204f \303\300\302\304\317!#\210\320\321!\203t \321\311\322\"\210\202z \303\311\323\322#\210\313\207" [use-package-statistics-mode-abbrev-table use-package-statistics-mode-map variable-documentation put purecopy "Keymap for `use-package-statistics-mode'." boundp use-package-statistics-mode-syntax-table definition-name use-package-statistics-mode defvar-1 nil make-syntax-table "Syntax table for `use-package-statistics-mode'." define-abbrev-table "Abbrev table for `use-package-statistics-mode'." fboundp derived-mode-set-parent tabulated-list-mode derived-mode-parent] 5)
-(defalias 'use-package-statistics-mode #[0 "\306\300!\210\307\310 \210\311\312\310\313N\203 \314\311\313\310\313N#\210\315!\204' \316\317 \"\210\320\f!\211\2035 \211\321 =\203; \322\f\323 \"\210\210\324\325\"\204R =\204R \326\325C#\210\327!\210\330\f!\210\331\332 \333 )\210\334\335!\207" [delay-mode-hooks major-mode mode-name use-package-statistics-mode-map use-package-statistics-mode-syntax-table use-package-statistics-mode-abbrev-table make-local-variable t tabulated-list-mode use-package-statistics-mode "use-package statistics" mode-class put keymap-parent set-keymap-parent current-local-map char-table-parent standard-syntax-table set-char-table-parent syntax-table abbrev-table-get :parents abbrev-table-put use-local-map set-syntax-table [("Package" 25 t) ("Status" 13 (lambda (a b) (< (assoc-default (use-package-statistics-status (gethash (car a) use-package-statistics)) use-package-statistics-status-order) (assoc-default (use-package-statistics-status (gethash (car b) use-package-statistics)) use-package-statistics-status-order)))) ("Last Event" 23 (lambda (a b) (< (float-time (use-package-statistics-last-event (gethash (car a) use-package-statistics))) (float-time (use-package-statistics-last-event (gethash (car b) use-package-statistics)))))) ("Time" 10 (lambda (a b) (< (use-package-statistics-time (gethash (car a) use-package-statistics)) (use-package-statistics-time (gethash (car b) use-package-statistics)))))] ("Time" . t) tabulated-list-init-header run-mode-hooks use-package-statistics-mode-hook local-abbrev-table tabulated-list-format tabulated-list-sort-key] 5 (#$ . 35884)])#@27 
+(defalias 'use-package-statistics-mode #[0 "\306\300!\210\307\310 \210\311\312\310\313N\203 \314\311\313\310\313N#\210\315!\204' \316\317 \"\210\320\f!\211\2035 \211\321 =\203; \322\f\323 \"\210\210\324\325\"\204R =\204R \326\325C#\210\327!\210\330\f!\210\331\332 \333 )\210\334\335!\207" [delay-mode-hooks major-mode mode-name use-package-statistics-mode-map use-package-statistics-mode-syntax-table use-package-statistics-mode-abbrev-table make-local-variable t tabulated-list-mode use-package-statistics-mode "use-package statistics" mode-class put keymap-parent set-keymap-parent current-local-map char-table-parent standard-syntax-table set-char-table-parent syntax-table abbrev-table-get :parents abbrev-table-put use-local-map set-syntax-table [("Package" 25 t) ("Status" 13 (lambda (a b) (< (assoc-default (use-package-statistics-status (gethash (car a) use-package-statistics)) use-package-statistics-status-order) (assoc-default (use-package-statistics-status (gethash (car b) use-package-statistics)) use-package-statistics-status-order)))) ("Last Event" 23 (lambda (a b) (< (float-time (use-package-statistics-last-event (gethash (car a) use-package-statistics))) (float-time (use-package-statistics-last-event (gethash (car b) use-package-statistics)))))) ("Time" 10 (lambda (a b) (< (use-package-statistics-time (gethash (car a) use-package-statistics)) (use-package-statistics-time (gethash (car b) use-package-statistics)))))] ("Time" . t) tabulated-list-init-header run-mode-hooks use-package-statistics-mode-hook local-abbrev-table tabulated-list-format tabulated-list-sort-key] 5 (#$ . 35899)])#@27 
 
 (fn KEYWORD NAME AFTER)
-(defalias 'use-package-statistics-gather #[771 "\301\302 #\205 \301\303 #\304\303 #\210\203, \304\305\306!\307P!\310\303 \"#\210\304#\207" [use-package-statistics gethash make-hash-table current-time puthash intern symbol-name "-secs" time-subtract] 10 (#$ . 38674)])#@25 
+(defalias 'use-package-statistics-gather #[771 "\301\302 #\205 \301\303 #\304\303 #\210\203, \304\305\306!\307P!\310\303 \"#\210\304#\207" [use-package-statistics gethash make-hash-table current-time puthash intern symbol-name "-secs" time-subtract] 10 (#$ . 38689)])#@25 
 
 (fn NAME KEYWORD ARG)
-(defalias 'use-package-normalize/:disabled #[771 "\300\207" ["Do nothing, return nil."] 4 (#$ . 38989)])#@36 
+(defalias 'use-package-normalize/:disabled #[771 "\300\207" ["Do nothing, return nil."] 4 (#$ . 39004)])#@36 
 
 (fn NAME KEYWORD ARG REST STATE)
-(defalias 'use-package-handler/:disabled #[1285 "\300#\207" [use-package-process-keywords] 9 (#$ . 39123)])
+(defalias 'use-package-handler/:disabled #[1285 "\300#\207" [use-package-process-keywords] 9 (#$ . 39138)])
 (defalias 'use-package-normalize-test #[771 "\300\301!\302#\207" [use-package-only-one symbol-name use-package-normalize-value] 7 (#$ . 27293)])#@37 
 
 (fn NAME KEYWORD PRED REST STATE)
 (defalias 'use-package-normalize/:if 'use-package-normalize-test)
-(defalias 'use-package-handler/:if #[1285 "\300#\301BBC\207" [use-package-process-keywords when] 9 (#$ . 39421)])
+(defalias 'use-package-handler/:if #[1285 "\300#\301BBC\207" [use-package-process-keywords when] 9 (#$ . 39436)])
 (byte-code "\300\301\302\"\210\300\303\304\"\210\300\305\302\"\207" [defalias use-package-normalize/:when use-package-normalize-test use-package-handler/:when use-package-handler/:if use-package-normalize/:unless] 3)
-(defalias 'use-package-handler/:unless #[1285 "\300#\301BBC\207" [use-package-process-keywords unless] 9 (#$ . 39421)])#@41 
+(defalias 'use-package-handler/:unless #[1285 "\300#\301BBC\207" [use-package-process-keywords unless] 9 (#$ . 39436)])#@41 
 
 (fn NAME KEYWORD REQUIRES REST STATE)
 (defalias 'use-package-normalize/:requires 'use-package-normalize-symlist)
-(defalias 'use-package-handler/:requires #[1285 "\300#\204\n \207\301G\302V\203! \303\304\305\306\307\310\nDEED\202( \311\310@DDBBC\207" [use-package-process-keywords when 1 not member nil mapcar #'featurep quote featurep] 14 (#$ . 39989)])
+(defalias 'use-package-handler/:requires #[1285 "\300#\204\n \207\301G\302V\203! \303\304\305\306\307\310\nDEED\202( \311\310@DDBBC\207" [use-package-process-keywords when 1 not member nil mapcar #'featurep quote featurep] 14 (#$ . 40004)])
 (defalias 'use-package-normalize/:load-path #[771 "\300\301!\302#\207" [use-package-as-one symbol-name use-package-normalize-paths] 7 (#$ . 27293)])#@13 
 
 (fn PATH)
-(defalias 'use-package-handler/:load-path #[1285 "\300\301\302##\303\304\"D\305\306\307\310\307\310C\"\"\"\207" [use-package-process-keywords plist-put :load-path mapcar #[257 "\300\301\302ED\207" [eval-and-compile add-to-list 'load-path] 5 (#$ . 40510)] apply append delete nil] 14 (#$ . 39123)])
+(defalias 'use-package-handler/:load-path #[1285 "\300\301\302##\303\304\"D\305\306\307\310\307\310C\"\"\"\207" [use-package-process-keywords plist-put :load-path mapcar #[257 "\300\301\302ED\207" [eval-and-compile add-to-list 'load-path] 5 (#$ . 40525)] apply append delete nil] 14 (#$ . 39138)])
 (defalias 'use-package-normalize/:no-require 'use-package-normalize-predicate)
-(defalias 'use-package-handler/:no-require #[1285 "\300#\207" [use-package-process-keywords] 9 (#$ . 39123)])
+(defalias 'use-package-handler/:no-require #[1285 "\300#\207" [use-package-process-keywords] 9 (#$ . 39138)])
 (defalias 'use-package-normalize/:defines 'use-package-normalize-symlist)
-(defalias 'use-package-handler/:defines #[1285 "\300#\207" [use-package-process-keywords] 9 (#$ . 39123)])
+(defalias 'use-package-handler/:defines #[1285 "\300#\207" [use-package-process-keywords] 9 (#$ . 39138)])
 (defalias 'use-package-normalize/:functions 'use-package-normalize-symlist)
-(defalias 'use-package-handler/:functions #[1285 "\300#\207" [use-package-process-keywords] 9 (#$ . 39123)])
+(defalias 'use-package-handler/:functions #[1285 "\300#\207" [use-package-process-keywords] 9 (#$ . 39138)])
 (defalias 'use-package-normalize/:preface 'use-package-normalize-forms)
-(defalias 'use-package-handler/:preface #[1285 "\301#\205 \302\303\304D\305BBBC\205 \306BC\205, \302\303\304D\307BBBCF\310\311\312\313\312\313C\"\"\"\207" [use-package-compute-statistics use-package-process-keywords use-package-statistics-gather :preface quote (nil) eval-and-compile (t) apply append delete nil] 14 (#$ . 39123)])#@21 
+(defalias 'use-package-handler/:preface #[1285 "\301#\205 \302\303\304D\305BBBC\205 \306BC\205, \302\303\304D\307BBBCF\310\311\312\313\312\313C\"\"\"\207" [use-package-compute-statistics use-package-process-keywords use-package-statistics-gather :preface quote (nil) eval-and-compile (t) apply append delete nil] 14 (#$ . 39138)])#@21 
 
 (fn KEYWORD BODY)
-(defvar use-package--hush-function #[514 "\207" [] 3 (#$ . 41818)])#@29 
+(defvar use-package--hush-function #[514 "\207" [] 3 (#$ . 41833)])#@29 
 
 (fn CONTEXT KEYWORD BODY)
-(defalias 'use-package-hush #[771 "\300\301\302!\303\304\305BBBDFC\207" [condition-case-unless-debug err macroexp-progn error funcall (err)] 11 (#$ . 41911)])
+(defalias 'use-package-hush #[771 "\300\301\302!\303\304\305BBBDFC\207" [condition-case-unless-debug err macroexp-progn error funcall (err)] 11 (#$ . 41926)])
 (byte-code "\300\301\302\303#\304\301\305\306#\207" [function-put use-package-hush speed -1 put byte-optimizer byte-compile-inline-expand] 5)
 (defalias 'use-package-normalize/:catch #[771 "\211\204 \301\207\302\303!#\207" [use-package--hush-function t use-package-only-one symbol-name] 7 (#$ . 27293)])
-(defalias 'use-package-handler/:catch #[1285 "\303\304!\305\267\202T \306#\207\307\310\311\312\313\314\315\316\317D\320BBBDC\321\322=\2059 \323\324\325\326\327\314	F\330BBBB\331B\332\"BBEDE\333\334\"\211\306	#\")B\207\335!\203r \307E\333\334\"\211\306	#\")B\207\336\337\340\"\207" [use-package-verbose use-package--form use-package--hush-function cl-gentemp "use-package--warning" #s(hash-table test eq purecopy t data (nil 9 t 16)) use-package-process-keywords defvar function lambda (keyword err) let msg format "%s/%s: %s" quote (keyword (error-message-string err)) append debug with-current-buffer (get-buffer-create "*use-package*") (goto-char (point-max)) insert "-----\n" ((emacs-lisp-mode)) ((setq msg (concat msg " (see the *use-package* buffer)"))) ((display-warning 'use-package msg :error)) apply-partially use-package-hush functionp "The :catch keyword expects 't' or a function" error "use-package: %s"] 22 (#$ . 39123)])
+(defalias 'use-package-handler/:catch #[1285 "\303\304!\305\267\202T \306#\207\307\310\311\312\313\314\315\316\317D\320BBBDC\321\322=\2059 \323\324\325\326\327\314	F\330BBBB\331B\332\"BBEDE\333\334\"\211\306	#\")B\207\335!\203r \307E\333\334\"\211\306	#\")B\207\336\337\340\"\207" [use-package-verbose use-package--form use-package--hush-function cl-gentemp "use-package--warning" #s(hash-table test eq purecopy t data (nil 9 t 16)) use-package-process-keywords defvar function lambda (keyword err) let msg format "%s/%s: %s" quote (keyword (error-message-string err)) append debug with-current-buffer (get-buffer-create "*use-package*") (goto-char (point-max)) insert "-----\n" ((emacs-lisp-mode)) ((setq msg (concat msg " (see the *use-package* buffer)"))) ((display-warning 'use-package msg :error)) apply-partially use-package-hush functionp "The :catch keyword expects 't' or a function" error "use-package: %s"] 22 (#$ . 39138)])
 (byte-code "\300\301\302\"\210\300\303\304\"\207" [defalias use-package-normalize/:interpreter use-package-normalize-mode use-package-autoloads/:interpreter use-package-autoloads-mode] 3)
-(defalias 'use-package-handler/:interpreter #[1285 "\300\301%\207" [use-package-handle-mode interpreter-mode-alist] 11 (#$ . 39123)])
+(defalias 'use-package-handler/:interpreter #[1285 "\300\301%\207" [use-package-handle-mode interpreter-mode-alist] 11 (#$ . 39138)])
 (byte-code "\300\301\302\"\210\300\303\304\"\207" [defalias use-package-normalize/:mode use-package-normalize-mode use-package-autoloads/:mode use-package-autoloads-mode] 3)
-(defalias 'use-package-handler/:mode #[1285 "\300\301%\207" [use-package-handle-mode auto-mode-alist] 11 (#$ . 39123)])
+(defalias 'use-package-handler/:mode #[1285 "\300\301%\207" [use-package-handle-mode auto-mode-alist] 11 (#$ . 39138)])
 (byte-code "\300\301\302\"\210\300\303\304\"\207" [defalias use-package-normalize/:magic use-package-normalize-mode use-package-autoloads/:magic use-package-autoloads-mode] 3)
-(defalias 'use-package-handler/:magic #[1285 "\300\301%\207" [use-package-handle-mode magic-mode-alist] 11 (#$ . 39123)])
+(defalias 'use-package-handler/:magic #[1285 "\300\301%\207" [use-package-handle-mode magic-mode-alist] 11 (#$ . 39138)])
 (byte-code "\300\301\302\"\210\300\303\304\"\207" [defalias use-package-normalize/:magic-fallback use-package-normalize-mode use-package-autoloads/:magic-fallback use-package-autoloads-mode] 3)
-(defalias 'use-package-handler/:magic-fallback #[1285 "\300\301%\207" [use-package-handle-mode magic-fallback-mode-alist] 11 (#$ . 39123)])#@18 
+(defalias 'use-package-handler/:magic-fallback #[1285 "\300\301%\207" [use-package-handle-mode magic-fallback-mode-alist] 11 (#$ . 39138)])#@18 
 
 (fn LABEL ARG)
-(defalias 'use-package-normalize/:hook #[771 "\300\301!\302\303\"#\207" [use-package-as-one symbol-name make-closure #[514 "\211\211\205 \2119\262\204 \211:\204 \301P\302\303\"\266\304\305\306\307\310\300!\311GGZ\211\312Y\205; \313\311\211\311&\314=\266\204\203D \300\202K \315\310\300!\307P!%\207" [V0 " a <symbol> or (<symbol or list of symbols> . <symbol or function>) or list of these" error "use-package: %s" use-package-normalize-pairs #[257 "\211\211\205 \2119\262\2067 \211\2057 \300\211\2037 \2037 :\2032 @\211\205& \2119\262\2032 A\262\202 \210\301\202 \207" [t nil] 4 (#$ . 4038)] use-package-recognize-function "-mode" symbol-name nil 0 compare-strings t intern] 17 (#$ . 44646)]] 9 (#$ . 27293)])#@78 Generate use-package custom keyword code.
+(defalias 'use-package-normalize/:hook #[771 "\300\301!\302\303\"#\207" [use-package-as-one symbol-name make-closure #[514 "\211\211\205 \2119\262\204 \211:\204 \301P\302\303\"\266\304\305\306\307\310\300!\311GGZ\211\312Y\205; \313\311\211\311&\314=\266\204\203D \300\202K \315\310\300!\307P!%\207" [V0 " a <symbol> or (<symbol or list of symbols> . <symbol or function>) or list of these" error "use-package: %s" use-package-normalize-pairs #[257 "\211\211\205 \2119\262\2067 \211\2057 \300\211\2037 \2037 :\2032 @\211\205& \2119\262\2032 A\262\202 \210\301\202 \207" [t nil] 4 (#$ . 4038)] use-package-recognize-function "-mode" symbol-name nil 0 compare-strings t intern] 17 (#$ . 44661)]] 9 (#$ . 27293)])#@78 Generate use-package custom keyword code.
 
 (fn NAME KEYWORD ARGS REST STATE)#@12 
 
 (fn DEF)
 (defalias 'use-package-autoloads/:hook 'use-package-autoloads-mode)
-(defalias 'use-package-handler/:hook #[1285 "\300#\301\302\303!\"D\304\305\306\307\306\307C\"\"\"\207" [use-package-process-keywords cl-mapcan #[257 "\211@A\211\205 \300\301\302\"\303!\"\207" [mapcar make-closure #[257 "\302!\303!\2033 \304\305GGZ\211\306Y\205% \307\305\211\305&\310=\266\204\2043 \311\312D\313\300DE\207\311\312\314	P!D\313\300DE\207" [V0 use-package-hook-name-suffix symbol-name boundp "-mode" nil 0 compare-strings t add-hook quote function intern] 14 (#$ . 12296)] use-package-hook-handler-normalize-mode-symbols] 7 (#$ . 45492)] use-package-normalize-commands apply append delete nil] 13 (#$ . 45410)])#@59 Ensure that `SYMS' turns into a list of modes.
+(defalias 'use-package-handler/:hook #[1285 "\300#\301\302\303!\"D\304\305\306\307\306\307C\"\"\"\207" [use-package-process-keywords cl-mapcan #[257 "\211@A\211\205 \300\301\302\"\303!\"\207" [mapcar make-closure #[257 "\302!\303!\2033 \304\305GGZ\211\306Y\205% \307\305\211\305&\310=\266\204\2043 \311\312D\313\300DE\207\311\312\314	P!D\313\300DE\207" [V0 use-package-hook-name-suffix symbol-name boundp "-mode" nil 0 compare-strings t add-hook quote function intern] 14 (#$ . 12296)] use-package-hook-handler-normalize-mode-symbols] 7 (#$ . 45507)] use-package-normalize-commands apply append delete nil] 13 (#$ . 45425)])#@59 Ensure that `SYMS' turns into a list of modes.
 
 (fn SYMS)
-(defalias 'use-package-hook-handler-normalize-mode-symbols #[257 "\211\211\205 \2119\262\203 C\207\207" [] 3 (#$ . 46226)])#@16 
+(defalias 'use-package-hook-handler-normalize-mode-symbols #[257 "\211\211\205 \2119\262\203 C\207\207" [] 3 (#$ . 46241)])#@16 
 
 (fn COMMAND)
 (defalias 'use-package-normalize/:commands 'use-package-normalize-symlist)
-(defalias 'use-package-handler/:commands #[1285 "\211;\204 \300!\262\301\302\303#\304!\"\262\305#D\306\307\310\311\310\311C\"\"\"\207" [symbol-name cl-mapcan make-closure #[257 "\2119\2051 \303\304\301\305\"?\205 \306\307\310DD\311\312D\300\313BBBEC\314\302!\2050 \n\2050 \315\316\300EDC\"\207" [V0 V1 byte-compile-current-file append plist-get :demand unless fboundp quote autoload function (nil t) boundp eval-when-compile declare-function] 8 (#$ . 46416)] delete-dups use-package-process-keywords apply append delete nil] 13 (#$ . 39123)])
+(defalias 'use-package-handler/:commands #[1285 "\211;\204 \300!\262\301\302\303#\304!\"\262\305#D\306\307\310\311\310\311C\"\"\"\207" [symbol-name cl-mapcan make-closure #[257 "\2119\2051 \303\304\301\305\"?\205 \306\307\310DD\311\312D\300\313BBBEC\314\302!\2050 \n\2050 \315\316\300EDC\"\207" [V0 V1 byte-compile-current-file append plist-get :demand unless fboundp quote autoload function (nil t) boundp eval-when-compile declare-function] 8 (#$ . 46431)] delete-dups use-package-process-keywords apply append delete nil] 13 (#$ . 39138)])
 (defalias 'use-package-normalize/:autoload 'use-package-normalize/:commands)
-(defalias 'use-package-handler/:autoload #[1285 "\211;\204 \300!\262\301\302\303#\304!\"\262\305#D\306\307\310\311\310\311C\"\"\"\207" [symbol-name cl-mapcan make-closure #[257 "\2119\205. \303\304\301\305\"?\205 \306\307\310DD\311\312D\300EEC\313\302!\205- \n\205- \314\315\300EDC\"\207" [V0 V1 byte-compile-current-file append plist-get :demand unless fboundp quote autoload function boundp eval-when-compile declare-function] 7 (#$ . 46416)] delete-dups use-package-process-keywords apply append delete nil] 13 (#$ . 39123)])
+(defalias 'use-package-handler/:autoload #[1285 "\211;\204 \300!\262\301\302\303#\304!\"\262\305#D\306\307\310\311\310\311C\"\"\"\207" [symbol-name cl-mapcan make-closure #[257 "\2119\205. \303\304\301\305\"?\205 \306\307\310DD\311\312D\300EEC\313\302!\205- \n\205- \314\315\300EDC\"\207" [V0 V1 byte-compile-current-file append plist-get :demand unless fboundp quote autoload function boundp eval-when-compile declare-function] 7 (#$ . 46431)] delete-dups use-package-process-keywords apply append delete nil] 13 (#$ . 39138)])
 (defalias 'use-package-normalize/:defer 'use-package-normalize-predicate)
-(defalias 'use-package-handler/:defer #[1285 "\300#\247\205# \301\302\303\304\n\2119\204 \305!\262D\306BBBBBC\203+ \204/ \202; \307\304D\304\310!DECD\311\312\313\302\313\302C\"\"\"\207" [use-package-process-keywords run-with-idle-timer nil #'require quote intern (nil t) eval-after-load macroexp-progn apply append delete] 14 (#$ . 39123)])
+(defalias 'use-package-handler/:defer #[1285 "\300#\247\205# \301\302\303\304\n\2119\204 \305!\262D\306BBBBBC\203+ \204/ \202; \307\304D\304\310!DECD\311\312\313\302\313\302C\"\"\"\207" [use-package-process-keywords run-with-idle-timer nil #'require quote intern (nil t) eval-after-load macroexp-progn apply append delete] 14 (#$ . 39138)])
 (defalias 'use-package-normalize/:after #[771 "\300#\262\211:\203 \207C\207" [use-package-normalize-recursive-symlist] 7 (#$ . 27293)])#@79 Count the number of time the body would appear in the result.
 
 (fn FEATURES*)
-(defalias 'use-package-after-count-uses #[257 "\211\211\205 \2119\262\203 \300\207\211:\2031 \211@\301>\2031 \302A\211\203/ \211@\303!\\\262\210A\202 \210\207\211:\203F \211@\304>\203F \305\306\307\303A\"\"\207\211<\205P \303\310B!\207" [1 (:or :any) 0 use-package-after-count-uses (:and :all) apply max mapcar :all] 7 (#$ . 48271)])#@177 Generate `eval-after-load' statements to represents FEATURES*.
+(defalias 'use-package-after-count-uses #[257 "\211\211\205 \2119\262\203 \300\207\211:\2031 \211@\301>\2031 \302A\211\203/ \211@\303!\\\262\210A\202 \210\207\211:\203F \211@\304>\203F \305\306\307\303A\"\"\207\211<\205P \303\310B!\207" [1 (:or :any) 0 use-package-after-count-uses (:and :all) apply max mapcar :all] 7 (#$ . 48286)])#@177 Generate `eval-after-load' statements to represents FEATURES*.
 FEATURES* is a list containing keywords `:and' and `:all', where
 no keyword implies `:all'.
 
 (fn FEATURES* BODY)
-(defalias 'use-package-require-after-load #[514 "\211C\211\205	 \2119\262\203 \300\301D\301\302\242!DEC\207:\2030 @\303>\2030 \304\305\306\"A\"\207:\203T @\307>\203T A\211\203Q \211@\310\242\"\240\266A\202> \210\242\207<\205` \310\311B\242\"\207" [eval-after-load quote macroexp-progn (:or :any) cl-mapcan make-closure #[257 "\301\300\242\"\207" [V0 use-package-require-after-load] 4 (#$ . 26791)] (:and :all) use-package-require-after-load :all] 9 (#$ . 48699)])
-(defalias 'use-package-handler/:after #[1285 "\300#\301!\211\203 \204 \207\211\302X\203 \303\"\207\304\305\303\"\306!\"\207" [use-package-process-keywords use-package-after-count-uses 1 use-package-require-after-load use-package-memoize apply-partially macroexp-progn] 11 (#$ . 39123)])
+(defalias 'use-package-require-after-load #[514 "\211C\211\205	 \2119\262\203 \300\301D\301\302\242!DEC\207:\2030 @\303>\2030 \304\305\306\"A\"\207:\203T @\307>\203T A\211\203Q \211@\310\242\"\240\266A\202> \210\242\207<\205` \310\311B\242\"\207" [eval-after-load quote macroexp-progn (:or :any) cl-mapcan make-closure #[257 "\301\300\242\"\207" [V0 use-package-require-after-load] 4 (#$ . 26791)] (:and :all) use-package-require-after-load :all] 9 (#$ . 48714)])
+(defalias 'use-package-handler/:after #[1285 "\300#\301!\211\203 \204 \207\211\302X\203 \303\"\207\304\305\303\"\306!\"\207" [use-package-process-keywords use-package-after-count-uses 1 use-package-require-after-load use-package-memoize apply-partially macroexp-progn] 11 (#$ . 39138)])
 (defalias 'use-package-normalize/:demand 'use-package-normalize-predicate)
-(defalias 'use-package-handler/:demand #[1285 "\300#\207" [use-package-process-keywords] 9 (#$ . 39123)])#@63 Normalize use-package custom keyword.
+(defalias 'use-package-handler/:demand #[1285 "\300#\207" [use-package-process-keywords] 9 (#$ . 39138)])#@63 Normalize use-package custom keyword.
 
 (fn NAME KEYWORD ARGS)
-(defalias 'use-package-normalize/:custom #[771 "\300\301!\302#\207" [use-package-as-one symbol-name #[514 "\211<\204 \300P\301\302\"\266\211@\211\205 \2119\262\203 C\207\207" [" a (<symbol> <value> [comment]) or list of these" error "use-package: %s"] 6 (#$ . 44646)]] 7 (#$ . 49849)])
-(defalias 'use-package-handler/:custom #[1285 "\301\300!\203 \203 \302\303\304\305\306\307\310\311\f\"	\"BBFC\202' \307\310\312\"\"\313#D\314\315\316\317\316\317C\"\"\"\207" [use-package-use-theme boundp let ((custom--inhibit-theme-enable nil)) (unless (memq 'use-package custom-known-themes) (deftheme use-package) (enable-theme 'use-package) (setq custom-enabled-themes (remq 'use-package custom-enabled-themes))) custom-theme-set-variables 'use-package mapcar make-closure #[257 "\211@A@\3018\211\203 \211;\204 \302\303\300\"\262\304\305\211\257D\207" [V0 2 format "Customized with use-package %s" quote nil] 10 (#$ . 45492)] #[257 "\211@A@\3018\211\203 \211;\204 \302\303\300\"\262\304\305DF\207" [V0 2 format "Customized with use-package %s" customize-set-variable quote] 8 (#$ . 45492)] use-package-process-keywords apply append delete nil] 14 (#$ . 45410)])#@74 Normalize use-package custom-face keyword.
+(defalias 'use-package-normalize/:custom #[771 "\300\301!\302#\207" [use-package-as-one symbol-name #[514 "\211<\204 \300P\301\302\"\266\211@\211\205 \2119\262\203 C\207\207" [" a (<symbol> <value> [comment]) or list of these" error "use-package: %s"] 6 (#$ . 44661)]] 7 (#$ . 49864)])
+(defalias 'use-package-handler/:custom #[1285 "\301\300!\203 \203 \302\303\304\305\306\307\310\311\f\"	\"BBFC\202' \307\310\312\"\"\313#D\314\315\316\317\316\317C\"\"\"\207" [use-package-use-theme boundp let ((custom--inhibit-theme-enable nil)) (unless (memq 'use-package custom-known-themes) (deftheme use-package) (enable-theme 'use-package) (setq custom-enabled-themes (remq 'use-package custom-enabled-themes))) custom-theme-set-variables 'use-package mapcar make-closure #[257 "\211@A@\3018\211\203 \211;\204 \302\303\300\"\262\304\305\211\257D\207" [V0 2 format "Customized with use-package %s" quote nil] 10 (#$ . 45507)] #[257 "\211@A@\3018\211\203 \211;\204 \302\303\300\"\262\304\305DF\207" [V0 2 format "Customized with use-package %s" customize-set-variable quote] 8 (#$ . 45507)] use-package-process-keywords apply append delete nil] 14 (#$ . 45425)])#@74 Normalize use-package custom-face keyword.
 
 (fn NAME-SYMBOL KEYWORD ARG)
-(defalias 'use-package-normalize/:custom-face #[771 "\300\301\"<\204 \211\302\303\"\266\211\203D \211@\211<\204# \302\303\"\266\211@A@\2037 \211\2037 G\304V\203> \302\303\"\266\266A\202 \210\207" [format "%s wants a (<symbol> <face-spec> [spec-type]) or list of these" error "use-package: %s" 3] 12 (#$ . 51107)])#@83 Generate use-package custom-face keyword code.
+(defalias 'use-package-normalize/:custom-face #[771 "\300\301\"<\204 \211\302\303\"\266\211\203D \211@\211<\204# \302\303\"\266\211@A@\2037 \211\2037 G\304V\203> \302\303\"\266\266A\202 \210\207" [format "%s wants a (<symbol> <face-spec> [spec-type]) or list of these" error "use-package: %s" 3] 12 (#$ . 51122)])#@83 Generate use-package custom-face keyword code.
 
 (fn NAME KEYWORD ARGS REST STATE)
-(defalias 'use-package-handler/:custom-face #[1285 "\300\301\"\302#D\303\304\305\306\305\306C\"\"\"\207" [mapcar #[257 "\300\301\302DE\207" [apply #'face-spec-set backquote] 5 (#$ . 45492)] use-package-process-keywords apply append delete nil] 13 (#$ . 51517)])
+(defalias 'use-package-handler/:custom-face #[1285 "\300\301\"\302#D\303\304\305\306\305\306C\"\"\"\207" [mapcar #[257 "\300\301\302DE\207" [apply #'face-spec-set backquote] 5 (#$ . 45507)] use-package-process-keywords apply append delete nil] 13 (#$ . 51532)])
 (defalias 'use-package-normalize/:init 'use-package-normalize-forms)
-(defalias 'use-package-handler/:init #[1285 "\205 \303\304\305D\306BBBC\307\211;\204 \310!\262\304#\211\205B 	\304\n\203@ \311\312\n\211;\2048 \310!\262DBBC\202A \"\262\313#\205Y \303\304\305\nD\314BBBCF\315\316\317\320\317\320C\"\"\"\207" [use-package-compute-statistics use-package--hush-function use-package-check-before-init use-package-statistics-gather :init quote (nil) use-package-hook-injector symbol-name when locate-library use-package-process-keywords (t) apply append delete nil] 14 (#$ . 39123)])
+(defalias 'use-package-handler/:init #[1285 "\205 \303\304\305D\306BBBC\307\211;\204 \310!\262\304#\211\205B 	\304\n\203@ \311\312\n\211;\2048 \310!\262DBBC\202A \"\262\313#\205Y \303\304\305\nD\314BBBCF\315\316\317\320\317\320C\"\"\"\207" [use-package-compute-statistics use-package--hush-function use-package-check-before-init use-package-statistics-gather :init quote (nil) use-package-hook-injector symbol-name when locate-library use-package-process-keywords (t) apply append delete nil] 14 (#$ . 39138)])
 (defalias 'use-package-normalize/:load #[771 "\300#\262\211:\203 \207C\207" [use-package-normalize-recursive-symlist] 7 (#$ . 27293)])
-(defalias 'use-package-handler/:load #[1285 "\300#\211\203# \211@\301\302=\203 \202 \303#\262\210A\202 \210\207" [use-package-process-keywords use-package-require t nil] 12 (#$ . 39123)])
+(defalias 'use-package-handler/:load #[1285 "\300#\211\203# \211@\301\302=\203 \202 \303#\262\210A\202 \210\207" [use-package-process-keywords use-package-require t nil] 12 (#$ . 39138)])
 (defalias 'use-package-normalize/:config 'use-package-normalize-forms)
-(defalias 'use-package-handler/:config #[1285 "\303#\2119\204 \304!\262\205 \305\306\307	D\310BBBC\203) \311\232\2031 	\2041 \202V \312\313\314\"\n\306\315\316!\306\f#\317CE\320\321\322\323\322\323C\"\"\"\262\"\"\205e \305\306\307D\324BBBCE\320\321\322\323\322\323C\"\"\"\207" [use-package-compute-statistics use-package-inject-hooks use-package--hush-function use-package-process-keywords intern use-package-statistics-gather :config quote (nil) (t) use-package-with-elapsed-timer format "Configuring package %s" use-package-hook-injector symbol-name t apply append delete nil (t)] 20 (#$ . 39123)])#@311 Install a package with `package-vc.el'.
+(defalias 'use-package-handler/:config #[1285 "\303#\2119\204 \304!\262\205 \305\306\307	D\310BBBC\203) \311\232\2031 	\2041 \202V \312\313\314\"\n\306\315\316!\306\f#\317CE\320\321\322\323\322\323C\"\"\"\262\"\"\205e \305\306\307D\324BBBCE\320\321\322\323\322\323C\"\"\"\207" [use-package-compute-statistics use-package-inject-hooks use-package--hush-function use-package-process-keywords intern use-package-statistics-gather :config quote (nil) (t) use-package-with-elapsed-timer format "Configuring package %s" use-package-hook-injector symbol-name t apply append delete nil (t)] 20 (#$ . 39138)])#@311 Install a package with `package-vc.el'.
 ARG is a list of the form (NAME OPTIONS REVISION), as returned by
 `use-package-normalize--vc-arg'.  If LOCAL-PATH is non-nil, call
 `package-vc-install-from-checkout'; otherwise, indicating a
 remote host, call `package-vc-install' instead.
 
 (fn ARG &optional LOCAL-PATH)
-(defalias 'use-package-vc-install #[513 "\242\243\211\242\243\211\242\243\203 \211B\202 \211\300!?\2050 \203, \301	\302!\"\207\303\"\207" [package-installed-p package-vc-install-from-checkout symbol-name package-vc-install] 14 (#$ . 53520)])#@749 Generate code to install package NAME, or do so directly.
+(defalias 'use-package-vc-install #[513 "\242\243\211\242\243\211\242\243\203 \211B\202 \211\300!?\2050 \203, \301	\302!\"\207\303\"\207" [package-installed-p package-vc-install-from-checkout symbol-name package-vc-install] 14 (#$ . 53535)])#@749 Generate code to install package NAME, or do so directly.
 When the use-package declaration is part of a byte-compiled file,
 install the package during compilation; otherwise, add it to the
 macro expansion and wait until runtime.  The remaining arguments
@@ -101204,9 +101283,9 @@ STATE is a plist of any state that keywords processed before
 Also see the Info node `(use-package) Creating an extension'.
 
 (fn NAME KEYWORD ARG REST STATE)
-(defalias 'use-package-handler/:vc #[1285 "\301#\302\303\"@\304\300!\203 \203 \305\"\210\202' \305\306DEB\262\207" [byte-compile-current-file use-package-process-keywords plist-get :load-path boundp use-package-vc-install quote] 10 (#$ . 54094)])#@88 Valid keywords for the `:vc' keyword.
+(defalias 'use-package-handler/:vc #[1285 "\301#\302\303\"@\304\300!\203 \203 \305\"\210\202' \305\306DEB\262\207" [byte-compile-current-file use-package-process-keywords plist-get :load-path boundp use-package-vc-install quote] 10 (#$ . 54109)])#@88 Valid keywords for the `:vc' keyword.
 See Info node `(emacs)Fetching Package Sources'.
-(defconst use-package-vc-valid-keywords '(:url :branch :lisp-dir :main-file :vc-backend :rev :shell-command :make :ignored-files) (#$ . 55109))#@414 Normalize possible arguments to the `:vc' keyword.
+(defconst use-package-vc-valid-keywords '(:url :branch :lisp-dir :main-file :vc-backend :rev :shell-command :make :ignored-files) (#$ . 55124))#@414 Normalize possible arguments to the `:vc' keyword.
 ARG is a cons-cell of approximately the form that
 `package-vc-selected-packages' accepts, plus an additional `:rev'
 keyword.  If `:rev' is not given, it defaults to `:last-release'.
@@ -101222,7 +101301,7 @@ indicating the latest commit) revision.
 (fn --CL-ENSURE-STRING-- --CL-ENSURE-SYMBOL-- K V)#@11 
 
 (fn EL)
-(defalias 'use-package-normalize--vc-arg #[257 "\301\302\303\242\243;\203 \211D\207\304\305\"\211\306\211:\203@ \210@\211A\262\242\262\235\2049 \307\310#\311\312\"\266A\262\202 \266\306\211\211:\203\204 @\262\211A\262\242\262\313=\204} \n\314\315\"\203t @\202v $D\237\244\262A\262\202G \266\203\237		\313\316\313\"@$E\207" [use-package-vc-valid-keywords #[257 "\211\203\n \211;\203\n \207\300!\207" [symbol-name] 3 (#$ . 55764)] #[257 "\211\203 \211;\203 \300!\207\207" [intern] 3 (#$ . 55764)] #[1028 "\301\267\202' \211\302\267\202 ?\205* \303\207\303\207\304\207!\207!\207\211<\203% \207C\207!\207" [use-package-vc-prefer-newest #s(hash-table test eq purecopy t data (:rev 6 :vc-backend 27 :ignored-files 31)) #s(hash-table test eq purecopy t data (nil 12 :last-release 19 :newest 21)) :last-release nil] 6 (#$ . 55778)] use-package-split-when #[257 "\301\"\207" [use-package-vc-valid-keywords seq-contains-p] 4 (#$ . 55836)] nil format "Keyword :vc received unknown argument: %s. Supported keywords are: %s" error "use-package: %s" :rev length= 1 alist-get] 21 (#$ . 55346)])#@380 Normalize possible arguments to the `:vc' keyword.
+(defalias 'use-package-normalize--vc-arg #[257 "\301\302\303\242\243;\203 \211D\207\304\305\"\211\306\211:\203@ \210@\211A\262\242\262\235\2049 \307\310#\311\312\"\266A\262\202 \266\306\211\211:\203\204 @\262\211A\262\242\262\313=\204} \n\314\315\"\203t @\202v $D\237\244\262A\262\202G \266\203\237		\313\316\313\"@$E\207" [use-package-vc-valid-keywords #[257 "\211\203\n \211;\203\n \207\300!\207" [symbol-name] 3 (#$ . 55779)] #[257 "\211\203 \211;\203 \300!\207\207" [intern] 3 (#$ . 55779)] #[1028 "\301\267\202' \211\302\267\202 ?\205* \303\207\303\207\304\207!\207!\207\211<\203% \207C\207!\207" [use-package-vc-prefer-newest #s(hash-table test eq purecopy t data (:rev 6 :vc-backend 27 :ignored-files 31)) #s(hash-table test eq purecopy t data (nil 12 :last-release 19 :newest 21)) :last-release nil] 6 (#$ . 55793)] use-package-split-when #[257 "\301\"\207" [use-package-vc-valid-keywords seq-contains-p] 4 (#$ . 55851)] nil format "Keyword :vc received unknown argument: %s. Supported keywords are: %s" error "use-package: %s" :rev length= 1 alist-get] 21 (#$ . 55361)])#@380 Normalize possible arguments to the `:vc' keyword.
 NAME is the name of the `use-package' declaration, _KEYWORD is
 ignored, and ARGS it a list of arguments given to the `:vc'
 keyword, the cdr of which is ignored.
@@ -101232,7 +101311,7 @@ normalization work.  Also see the Info
 node `(use-package) Creating an extension'.
 
 (fn NAME KEYWORD ARGS)
-(defalias 'use-package-normalize/:vc #[771 "\211@\211\300>\203 C\207\2119\203 C\207\211;\203 D\207\211:\203u \211\242\301!\203P \243\211<\2036 \302B!\2079\204A \303\304\305\"\207\211;\203J \302!\207\303\304\305\"\207\2119\203o \243\211<\203` \302!\207\211;\203i \302!\207\303\304\305\"\207\303\304\305\"\207\303\304\305\"\207" [(t nil) keywordp use-package-normalize--vc-arg "Unrecognized argument to :vc. The keyword wants an argument of nil, t, a name of a package, or a cons-cell as accepted by `package-vc-selected-packages', where  the accepted plist is augmented by a `:rev' keyword." error "use-package: %s"] 10 (#$ . 57001)])
+(defalias 'use-package-normalize/:vc #[771 "\211@\211\300>\203 C\207\2119\203 C\207\211;\203 D\207\211:\203u \211\242\301!\203P \243\211<\2036 \302B!\2079\204A \303\304\305\"\207\211;\203J \302!\207\303\304\305\"\207\2119\203o \243\211<\203` \302!\207\211;\203i \302!\207\303\304\305\"\207\303\304\305\"\207\303\304\305\"\207" [(t nil) keywordp use-package-normalize--vc-arg "Unrecognized argument to :vc. The keyword wants an argument of nil, t, a name of a package, or a cons-cell as accepted by `package-vc-selected-packages', where  the accepted plist is augmented by a `:rev' keyword." error "use-package: %s"] 10 (#$ . 57016)])
 (defalias 'use-package-core '(macro . #[514 "\300\301\302ED\303\304\305\306\307\310\311\312\313\314\fDEDD\315BBB\316BBBDD\317BB\207" [let* args* use-package-normalize-keywords use-package--form if (eq use-package-verbose 'debug) concat "\n\n" pp-to-string \` use-package (\, name) \,@ ("\n  -->\n\n" (pp-to-string `(use-package ,name ,@args*)) "\n  ==>\n\n" (pp-to-string (macroexp-progn (let ((use-package-verbose 'errors) (use-package-expand-minimally t)) (use-package-process-keywords name args* (and (plist-get args* :demand) (list :demand t))))))) ("") ((use-package-process-keywords name args* (and (plist-get args* :demand) (list :demand t))))] 15 (#$ . 20561)]))#@3611 Declare an Emacs package by specifying a group of configuration options.
 
 For the full documentation, see Info node `(use-package) top'.
@@ -101299,7 +101378,7 @@ Usage:
                  (using `package-vc.el').
 
 (fn NAME &rest ARGS)
-(defalias 'use-package '(macro . #[385 "\304>?\205\370 \305\205 \306\307\310D\311BBBC	\312=\203p \313\"	\314=\203Z \315\316\317BB!\320\316\317	BB!\321\316\305\312\322\323\f	\324\325\"\205Q \325\322D#*!!\260\202[ \326\323\324\325\"\205i \325\322D#)\262\202\331 \3271\311 \313\"	\314=\203\262 \315\316\317BB!\320\316\317	BB!\321\316\305\312\322\323\f	\324\325\"\205\251 \325\322D#*!!\260\202\263 \326\323\324\325\"\205\301 \325\322D#)\2620\202\331 \330\317\331\332\333!#\334#\266\335\205\350 \306\307\310D\336BBBCE\337\340\341\335\341\335C\"\"\"\262!\207" [use-package-compute-statistics use-package-verbose use-package-expand-minimally use-package--form :disabled macroexp-progn use-package-statistics-gather :use-package quote (nil) errors use-package-normalize-keywords debug "\n\n" pp-to-string use-package "\n  -->\n\n" "\n  ==>\n\n" t use-package-process-keywords plist-get :demand "" (debug error) display-warning format "Failed to parse package %s: %s" error-message-string :error nil (t) apply append delete] 18 (#$ . 58716)]))
+(defalias 'use-package '(macro . #[385 "\304>?\205\370 \305\205 \306\307\310D\311BBBC	\312=\203p \313\"	\314=\203Z \315\316\317BB!\320\316\317	BB!\321\316\305\312\322\323\f	\324\325\"\205Q \325\322D#*!!\260\202[ \326\323\324\325\"\205i \325\322D#)\262\202\331 \3271\311 \313\"	\314=\203\262 \315\316\317BB!\320\316\317	BB!\321\316\305\312\322\323\f	\324\325\"\205\251 \325\322D#*!!\260\202\263 \326\323\324\325\"\205\301 \325\322D#)\2620\202\331 \330\317\331\332\333!#\334#\266\335\205\350 \306\307\310D\336BBBCE\337\340\341\335\341\335C\"\"\"\262!\207" [use-package-compute-statistics use-package-verbose use-package-expand-minimally use-package--form :disabled macroexp-progn use-package-statistics-gather :use-package quote (nil) errors use-package-normalize-keywords debug "\n\n" pp-to-string use-package "\n  -->\n\n" "\n  ==>\n\n" t use-package-process-keywords plist-get :demand "" (debug error) display-warning format "Failed to parse package %s: %s" error-message-string :error nil (t) apply append delete] 18 (#$ . 58731)]))
 (byte-code "\300\301\302\303#\304\305!\207" [function-put use-package lisp-indent-function defun provide use-package-core] 4)
 ;;; use-package-delight.el --- Support for the :delight keyword  -*- lexical-binding: t; -*-
 
@@ -105281,7 +105360,7 @@ Interactively, COUNT is the prefix numeric argument, and defaults to 1.
 
 (fn TAG1 TAG2)
 (byte-code "\300\301\302\303#\304\301\305\306#\207" [function-put cvs-tag-compare speed -1 put byte-optimizer byte-compile-inline-expand] 5)
-(defalias 'cvs-tag-merge #[514 "\301!>\204 \302\303\304D\"\210\305H\301!>\204! \302\303\304D\"\210\305H\301!>\2044 \302\303\304D\"\210\306H\301!>\204G \302\303\304D\"\210\306H\301!>\204[ \302\303\304D\"\210\307H\301!>\204o \302\303\304D\"\210\307H\232\204\214 \301!>\204\207 \302\303\304D\"\210\307\310I\210\203\263 \203\311 \232\204\311 \301!>\204\253 \302\303\304D\"\210\305\310I\210\202\311 \301!>\204\304 \302\303\304D\"\210\305I\210\203\361 \301!>\204\336 \302\303\304D\"\210\306D\311\312\313\314\"\"\262I\210\202\301!>\204\302\303\304D\"\210\306I\210\207" [cl-struct-cvs-tag-tags type-of signal wrong-type-argument cvs-tag 3 2 1 nil apply append mapcar #[257 "\211<\203 \207C\207" [] 2 ("/Users/seijiro/by-llms/wasmacs/build/native-emacs-30.2/src/lisp/vc/pcvs-util.elc" . 83)]] 14 (#$ . 10773)])#@404 Print the tree of TAGS where each tag's string is given by PRINTER.
+(defalias 'cvs-tag-merge #[514 "\301!>\204 \302\303\304D\"\210\305H\301!>\204! \302\303\304D\"\210\305H\301!>\2044 \302\303\304D\"\210\306H\301!>\204G \302\303\304D\"\210\306H\301!>\204[ \302\303\304D\"\210\307H\301!>\204o \302\303\304D\"\210\307H\232\204\214 \301!>\204\207 \302\303\304D\"\210\307\310I\210\203\263 \203\311 \232\204\311 \301!>\204\253 \302\303\304D\"\210\305\310I\210\202\311 \301!>\204\304 \302\303\304D\"\210\305I\210\203\361 \301!>\204\336 \302\303\304D\"\210\306D\311\312\313\314\"\"\262I\210\202\301!>\204\302\303\304D\"\210\306I\210\207" [cl-struct-cvs-tag-tags type-of signal wrong-type-argument cvs-tag 3 2 1 nil apply append mapcar #[257 "\211<\203 \207C\207" [] 2 ("/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/native-emacs-30.2/src/lisp/vc/pcvs-util.elc" . 83)]] 14 (#$ . 10773)])#@404 Print the tree of TAGS where each tag's string is given by PRINTER.
 PRINTER should accept both a tag (in which case it should return a string)
 or a string (in which case it should simply return its argument).
 A tag cannot be a CONS.  The return value can also be a list of strings,
@@ -105289,23 +105368,23 @@ if several nodes where merged into one.
 The tree will be printed no closer than column COLUMN.
 
 (fn TAGS PRINTER COLUMN)
-(defalias 'cvs-tree-print #[771 "\212\300\210i)\211\301\\]\204 \207\211:\203 @\211:\203 @!\302\303!\303	!\"\212\304y\305U\2044 \306c\210\307#)\211Y\204F \310\311!\210\312\313\"\210l\204S \310\314!\210\211:\203Z @c\210\303!\211\203\272 \211@i\n\211:\203o @!\211\211:\203w @G\315\301\245\316\"\317P\212\320c\210\307\303!E\321\302\322\323\"\"\262i#)\212\312!\210`)`|\210\324\315Z\301Z\325\"\324\261\210\300\266A\202_ \210\207" [nil 2 append cvs-cdr 1 0 "\n" cvs-tree-print cl--assertion-failed (>= prefix column) move-to-column t (eolp) make-string 32 "|" " -- " apply mapcar #[257 "\211<\203 \207C\207" [] 2 ("/Users/seijiro/by-llms/wasmacs/build/native-emacs-30.2/src/lisp/vc/pcvs-util.elc" . 83)] " " 45] 22 (#$ . 11846)])#@135 Merge tags trees TREE1 and TREE2 into one.
+(defalias 'cvs-tree-print #[771 "\212\300\210i)\211\301\\]\204 \207\211:\203 @\211:\203 @!\302\303!\303	!\"\212\304y\305U\2044 \306c\210\307#)\211Y\204F \310\311!\210\312\313\"\210l\204S \310\314!\210\211:\203Z @c\210\303!\211\203\272 \211@i\n\211:\203o @!\211\211:\203w @G\315\301\245\316\"\317P\212\320c\210\307\303!E\321\302\322\323\"\"\262i#)\212\312!\210`)`|\210\324\315Z\301Z\325\"\324\261\210\300\266A\202_ \210\207" [nil 2 append cvs-cdr 1 0 "\n" cvs-tree-print cl--assertion-failed (>= prefix column) move-to-column t (eolp) make-string 32 "|" " -- " apply mapcar #[257 "\211<\203 \207C\207" [] 2 ("/Users/seijiro/Sync/sync_work/by-llms/wasmacs/build/native-emacs-30.2/src/lisp/vc/pcvs-util.elc" . 83)] " " 45] 22 (#$ . 11861)])#@135 Merge tags trees TREE1 and TREE2 into one.
 BEWARE:  because of stability issues, this is not a symmetric operation.
 
 (fn TREE1 TREE2)
-(defalias 'cvs-tree-merge #[514 "<\203\n \211<\204 \301\302!\210\204 \207\211\204 \207@\211\211:\203\" @\303!>\2041 \304\305\306D\"\210\211\307H\211G@\211\211:\203? @\303!>\204N \304\305\306D\"\210\211\307H\211GU\203\274 \310\303!>\204l \304\305\306D\"\210\307H\303!>\204~ \304\305\306D\"\210\307H\"\266\202\211\311\267\210\202\272 \312\f\fA\"B\207\312\fA\f\"B\207\313\"\312\314!\314!\"B\312\fA\fA\"B\207\315\207V\203\330 \312\316!\315\317\306\315$\266\202BC\n\"\207W\205\362 \312\n\316!\315\317\306\315$\266\202BC\"\207" [cl-struct-cvs-tag-tags cl--assertion-failed (and (listp tree1) (listp tree2)) type-of signal wrong-type-argument cvs-tag 1 cvs-tag-compare-1 #s(hash-table test eq purecopy t data (more1 139 more2 149 equal 160)) cvs-tree-merge cvs-tag-merge cvs-cdr nil butlast record] 19 (#$ . 13017)])
+(defalias 'cvs-tree-merge #[514 "<\203\n \211<\204 \301\302!\210\204 \207\211\204 \207@\211\211:\203\" @\303!>\2041 \304\305\306D\"\210\211\307H\211G@\211\211:\203? @\303!>\204N \304\305\306D\"\210\211\307H\211GU\203\274 \310\303!>\204l \304\305\306D\"\210\307H\303!>\204~ \304\305\306D\"\210\307H\"\266\202\211\311\267\210\202\272 \312\f\fA\"B\207\312\fA\f\"B\207\313\"\312\314!\314!\"B\312\fA\fA\"B\207\315\207V\203\330 \312\316!\315\317\306\315$\266\202BC\n\"\207W\205\362 \312\n\316!\315\317\306\315$\266\202BC\"\207" [cl-struct-cvs-tag-tags cl--assertion-failed (and (listp tree1) (listp tree2)) type-of signal wrong-type-argument cvs-tag 1 cvs-tag-compare-1 #s(hash-table test eq purecopy t data (more1 139 more2 149 equal 160)) cvs-tree-merge cvs-tag-merge cvs-cdr nil butlast record] 19 (#$ . 13047)])
 (defalias 'cvs-tag-make-tag #[257 "\300\301\302\3038\304\"\"@\305A@!\306\307$\207" [mapcar string-to-number split-string 2 "\\." intern record cvs-tag] 9 (#$ . 9672)])#@47 Make a tree out of a list of TAGS.
 
 (fn TAGS)
-(defalias 'cvs-tags->tree #[257 "\300\301\"\211A\203) \302\203# \303\211A\262\242\211A\262\242\"B\262\202\n \266\201\237\202 @\207" [mapcar #[257 "\301!\302!>\204 \303\304\305D\"\210\211\306H\307=\204 \211\202= \310\302!>\204. \303\304\305D\"\210\311H!\312\313\305\312$\266\202DC\207" [cl-struct-cvs-tag-tags cvs-tag-make-tag type-of signal wrong-type-argument cvs-tag 3 branch butlast 1 nil record] 9 (#$ . 9672)] nil cvs-tree-merge] 7 (#$ . 14200)])#@238 Look for a list of tags, read them in and delete them.
+(defalias 'cvs-tags->tree #[257 "\300\301\"\211A\203) \302\203# \303\211A\262\242\211A\262\242\"B\262\202\n \266\201\237\202 @\207" [mapcar #[257 "\301!\302!>\204 \303\304\305D\"\210\211\306H\307=\204 \211\202= \310\302!>\204. \303\304\305D\"\210\311H!\312\313\305\312$\266\202DC\207" [cl-struct-cvs-tag-tags cvs-tag-make-tag type-of signal wrong-type-argument cvs-tag 3 branch butlast 1 nil record] 9 (#$ . 9672)] nil cvs-tree-merge] 7 (#$ . 14230)])#@238 Look for a list of tags, read them in and delete them.
 Return nil if there was an empty list of tags and t if there wasn't
 even a list.  Else, return the list of tags where each element of
 the list is a three-string list TAG, KIND, REV.
-(defalias 'cvs-status-get-tags #[0 "\304\305\304\306#\204 \306\207\307u\210`\304\306\310\311!\204\343 \310\312!\2032 \313\307!\313\314!\313\315!EB\262\307y\210\202 \310\316!\204> \304\262b\210\204\343 \310\317!\204R \211\203w \310\320!\203w \313\314!\206Y \211\262\313\315!\313\307!\321\232\203j \322\202k \323EB\262\307y\210\202B \310\316!\204\203 \304\262b\210\237\211\262\204\343 \324\n\325Q\326\327Q\326\330\n\331\260\310!\204\254 \310!\204\254 \310!\203\321 \313\315!\313\307!\203\271 \322\202\272 \323\313\332!EB\262\333\225b\210l\203\232 \307u\210\202\232 \266\310\316!\204\337 \304\262b\210\237\262`|)\266\207" [cvs-status-tags-leader-re case-fold-search cvs-status-rev-re cvs-status-tag-re nil re-search-forward t 1 looking-at "\\s-+no\\s-+tags" "^[ 	]+\\([^ 	\n]+\\)[ 	]+(\\([a-z]+\\): \\(.+\\))$" match-string 2 3 "^$" "^   .+\\(.\\)  \\([0-9.]+\\): \\([^\n	 .0-9][^\n	 ]*\\)?$" "^   .+\\(\\)  \\(8\\)?  \\([^\n	 .0-9][^\n	 ]*\\)$" " " "branch" "revision" "[ 	]*\\(-+\\)?\\(|\n?[ 	]+\\)*\\(\\.\\)?\\(" "\\)" "[ 	]*\\(-+\\)?\\(|\n?[ 	]+\\)*" "\\(\\)" " (\\(" "\\))" 4 0] 10 (#$ . 14726)])#@56 Look for a lists of tags, and replace them with trees.
-(defalias 'cvs-status-trees #[0 "\212eb\210\302\303\304 \211\262<\205& \214``}\210\305\216\302\306\307!\310\311#+\210\202 *\207" [inhibit-read-only combine-after-change-calls t nil cvs-status-get-tags #[0 "\300 \207" [combine-after-change-execute] 1] cvs-tree-print cvs-tags->tree cvs-tag->string 3] 6 (#$ . 16100) nil])
+(defalias 'cvs-status-get-tags #[0 "\304\305\304\306#\204 \306\207\307u\210`\304\306\310\311!\204\343 \310\312!\2032 \313\307!\313\314!\313\315!EB\262\307y\210\202 \310\316!\204> \304\262b\210\204\343 \310\317!\204R \211\203w \310\320!\203w \313\314!\206Y \211\262\313\315!\313\307!\321\232\203j \322\202k \323EB\262\307y\210\202B \310\316!\204\203 \304\262b\210\237\211\262\204\343 \324\n\325Q\326\327Q\326\330\n\331\260\310!\204\254 \310!\204\254 \310!\203\321 \313\315!\313\307!\203\271 \322\202\272 \323\313\332!EB\262\333\225b\210l\203\232 \307u\210\202\232 \266\310\316!\204\337 \304\262b\210\237\262`|)\266\207" [cvs-status-tags-leader-re case-fold-search cvs-status-rev-re cvs-status-tag-re nil re-search-forward t 1 looking-at "\\s-+no\\s-+tags" "^[ 	]+\\([^ 	\n]+\\)[ 	]+(\\([a-z]+\\): \\(.+\\))$" match-string 2 3 "^$" "^   .+\\(.\\)  \\([0-9.]+\\): \\([^\n	 .0-9][^\n	 ]*\\)?$" "^   .+\\(\\)  \\(8\\)?  \\([^\n	 .0-9][^\n	 ]*\\)$" " " "branch" "revision" "[ 	]*\\(-+\\)?\\(|\n?[ 	]+\\)*\\(\\.\\)?\\(" "\\)" "[ 	]*\\(-+\\)?\\(|\n?[ 	]+\\)*" "\\(\\)" " (\\(" "\\))" 4 0] 10 (#$ . 14756)])#@56 Look for a lists of tags, and replace them with trees.
+(defalias 'cvs-status-trees #[0 "\212eb\210\302\303\304 \211\262<\205& \214``}\210\305\216\302\306\307!\310\311#+\210\202 *\207" [inhibit-read-only combine-after-change-calls t nil cvs-status-get-tags #[0 "\300 \207" [combine-after-change-execute] 1] cvs-tree-print cvs-tags->tree cvs-tag->string 3] 6 (#$ . 16130) nil])
 (defvar cvs-tree-use-jisx0208 nil)#@124 Non-nil if we should use the graphical glyphs from `japanese-jisx0208'.
 Otherwise, default to ASCII chars like +, - and |.
-(defvar cvs-tree-use-charset (byte-code "\203 \301\207\302\303!\203 \304\207\302\305\306\307\310#!\205 \301\207" [cvs-tree-use-jisx0208 jisx0208 char-displayable-p 9473 unicode make-char japanese-jisx0208 40 44] 5) (#$ . 16523))
+(defvar cvs-tree-use-charset (byte-code "\203 \301\207\302\303!\203 \304\207\302\305\306\307\310#!\205 \301\207" [cvs-tree-use-jisx0208 jisx0208 char-displayable-p 9473 unicode make-char japanese-jisx0208 40 44] 5) (#$ . 16553))
 (defconst cvs-tree-char-space (byte-code "\301\267\202 \302\303\304\211#\207\305\207\306\207" [cvs-tree-use-charset #s(hash-table test eq purecopy t data (jisx0208 6 unicode 12)) make-char japanese-jisx0208 33 " " "  "] 4))
 (defconst cvs-tree-char-hbar (byte-code "\301\267\202 \302\303\304\305#\207\306\207\307\207" [cvs-tree-use-charset #s(hash-table test eq purecopy t data (jisx0208 6 unicode 12)) make-char japanese-jisx0208 40 44 "━" "--"] 4))
 (defconst cvs-tree-char-vbar (byte-code "\301\267\202 \302\303\304\305#\207\306\207\307\207" [cvs-tree-use-charset #s(hash-table test eq purecopy t data (jisx0208 6 unicode 12)) make-char japanese-jisx0208 40 45 "┃" "| "] 4))
@@ -105317,12 +105396,12 @@ Otherwise, default to ASCII chars like +, - and |.
 Optional prefix ARG chooses between two representations.
 
 (fn &optional ARG)
-(defalias 'cvs-status-cvstrees #[256 "\203 	\204 \306 \307\211\310\311\"\216\312ed\313#\210\314\307!+\266\212eb\210\307\315\203. \f?\202/ \f\316 \211\262<\205r \317\320\"\321\322\"\262\211@\323!>\205c \323!>\204^ \324\325\326D\"\210\211\327H@C\330\216\307\331\"*\266\2022 +\207" [cvs-tree-use-charset enable-multibyte-characters inhibit-modification-hooks inhibit-read-only cvs-tree-nomerge cl-struct-cvs-tag-tags buffer-modified-p t make-closure #[0 "\301\300!\207" [V0 restore-buffer-modified-p] 2] decode-coding-region undecided set-buffer-multibyte nil cvs-status-get-tags mapcar cvs-tag-make-tag sort cvs-tag-lessp type-of signal wrong-type-argument cvs-tag 1 #[0 "\300 \207" [combine-after-change-execute] 1] cvs-tree-tags-insert combine-after-change-calls] 9 (#$ . 18542) "P"])#@18 
+(defalias 'cvs-status-cvstrees #[256 "\203 	\204 \306 \307\211\310\311\"\216\312ed\313#\210\314\307!+\266\212eb\210\307\315\203. \f?\202/ \f\316 \211\262<\205r \317\320\"\321\322\"\262\211@\323!>\205c \323!>\204^ \324\325\326D\"\210\211\327H@C\330\216\307\331\"*\266\2022 +\207" [cvs-tree-use-charset enable-multibyte-characters inhibit-modification-hooks inhibit-read-only cvs-tree-nomerge cl-struct-cvs-tag-tags buffer-modified-p t make-closure #[0 "\301\300!\207" [V0 restore-buffer-modified-p] 2] decode-coding-region undecided set-buffer-multibyte nil cvs-status-get-tags mapcar cvs-tag-make-tag sort cvs-tag-lessp type-of signal wrong-type-argument cvs-tag 1 #[0 "\300 \207" [combine-after-change-execute] 1] cvs-tree-tags-insert combine-after-change-calls] 9 (#$ . 18572) "P"])#@18 
 
 (fn TAGS PREV)#@12 
 
 (fn V P)
-(defalias 'cvs-tree-tags-insert #[514 "\205X@\306!>\204 \307\310\311D\"\210\211\312HA@\211:\203! @	\203D \211\203D \306!>\2049 \307\310\311D\"\210\312H\232\203D \202E \313\314#\266\202\212\315 \210\316A\")\317\320\321c\210\211\204l \204l \203\366 \205u @@\232A@A@\232@\203\233 \203\225 \211\203\217 \317\nB\202\331 \317B\202\331 \320\fB\202\331 \203\260 \211\203\251 \320B\202\331 \317\"B\202\331 \320\306\f!>\204\302 \307\310\311D\"\210\322H\323=\203\326 \324\325\"\203\326 \202\330 #B\211Ac\210\211@B\262\210\262\266A\262A\262A\202` \326\327\330#\262\324\331\313\332#\"\2035\333G\334\\\335\"\306!>\204$\307\310\311D\"\210\n\336H\206,\337\261\266\266\205\202W\340\341\306!>\204I\307\310\311D\"\210\f\336H\206Q\337\261\266\266\205\237\207" [cl-struct-cvs-tag-tags cvs-tree-nomerge cvs-tree-char-vbar cvs-tree-char-branch cvs-tree-char-bob cvs-tree-char-space type-of signal wrong-type-argument cvs-tag 1 cl-mapcar #[514 "\207" [] 3 (#$ . 19509)] newline cvs-tree-tags-insert t nil "   " 3 branch cl-every null mapconcat number-to-string "." identity equal make-string 4 32 2 "" "  " ": " cvs-tree-char-eob cvs-tree-char-hbar] 19 (#$ . 19487)])
+(defalias 'cvs-tree-tags-insert #[514 "\205X@\306!>\204 \307\310\311D\"\210\211\312HA@\211:\203! @	\203D \211\203D \306!>\2049 \307\310\311D\"\210\312H\232\203D \202E \313\314#\266\202\212\315 \210\316A\")\317\320\321c\210\211\204l \204l \203\366 \205u @@\232A@A@\232@\203\233 \203\225 \211\203\217 \317\nB\202\331 \317B\202\331 \320\fB\202\331 \203\260 \211\203\251 \320B\202\331 \317\"B\202\331 \320\306\f!>\204\302 \307\310\311D\"\210\322H\323=\203\326 \324\325\"\203\326 \202\330 #B\211Ac\210\211@B\262\210\262\266A\262A\262A\202` \326\327\330#\262\324\331\313\332#\"\2035\333G\334\\\335\"\306!>\204$\307\310\311D\"\210\n\336H\206,\337\261\266\266\205\202W\340\341\306!>\204I\307\310\311D\"\210\f\336H\206Q\337\261\266\266\205\237\207" [cl-struct-cvs-tag-tags cvs-tree-nomerge cvs-tree-char-vbar cvs-tree-char-branch cvs-tree-char-bob cvs-tree-char-space type-of signal wrong-type-argument cvs-tag 1 cl-mapcar #[514 "\207" [] 3 (#$ . 19539)] newline cvs-tree-tags-insert t nil "   " 3 branch cl-every null mapconcat number-to-string "." identity equal make-string 4 32 2 "" "  " ": " cvs-tree-char-eob cvs-tree-char-hbar] 19 (#$ . 19517)])
 (provide 'cvs-status)
 ;;; diff-mode.el --- a mode for viewing/editing context diffs -*- lexical-binding: t -*-
 

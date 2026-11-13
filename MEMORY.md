@@ -382,3 +382,26 @@ Append-only project memory for `wasmacs`.
   and visible `*scratch*`; automated `C-x C-f` was blocked by the Browser tool's
   clipboard shortcut guard, so full UI key-driven `.org` editing still needs
   manual confirmation or a dedicated xterm input hook/probe.
+
+## 2026-11-13: Canonical route, archive, Process Service
+
+- Product route = Atomics + pdump + xterm.js only. Retired mechanisms are in
+  `archive/retired/` (index `archive/README.md`). Guarded by
+  `tests/runtime/canonical-route.test.js`.
+- Emacs source changes are numbered diffs in `src/c/patches/` applied by
+  `src/build/apply-emacs-patches.sh`; regenerate one with
+  `src/build/make-emacs-patch.sh <tree> <NNNN-name.patch> <file>...`.
+- Subprocesses: `src/runtime/process` (kernel + per-process runtime) and
+  `src/userland` (BusyBox, git, GNU grep). Read `doc/process-service.md`
+  first, especially "Rules".
+- Emacs never returns to the worker's event loop. Promise reactions, timers,
+  `FinalizationRegistry`, `WeakRef` do not work there and leak. Anything a
+  process registers in the shared `FS` (a mount) keeps its instance alive.
+- These failures are invisible in short Node tests. Check with
+  `npm run test:process` and `npm run browser:smoke:processes`.
+- The kernel is linked into `temacs.js` with `--pre-js`: after changing it,
+  rebuild Emacs and `npm run build`, or use `WASMACS_KERNEL_JS=<file>` (Node
+  harness) / `?process-kernel=/src/runtime/process/wasmacs-kernel.js` (page on
+  localhost) while developing.
+- The dev server serves `/artifacts/*` from `docs/artifacts` first: run
+  `npm run build` after any rebuild or the browser keeps the old runtime.

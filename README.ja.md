@@ -4,7 +4,7 @@
 
 これは「Emacs 風のエディタ」を作るプロジェクトではありません。GNU Emacs 30.2 の C core と Elisp runtime を中心に置き、表示、入力、永続化、可搬ファイルシステムイメージをブラウザ側で支えることで、本物の Emacs を WebAssembly 上で動かすことを目指しています。
 
-現在の主ルートは、`SharedArrayBuffer` / `Atomics.wait` / pdump / xterm.js を使うブラウザ実行ルートです。`*scratch*`、Dired、Org-mode、`load-file` による Elisp 読み込み、`.wasifs` の import/export まで到達しています。
+現在の主ルートは、`SharedArrayBuffer` / `Atomics.wait` / pdump / xterm.js を使うブラウザ実行ルートです。`*scratch*`、Dired、Org-mode、`load-file` による Elisp 読み込み、`.wasifs` の import/export に加えて、サブプロセスも動きます。`M-x shell`、eshell、git、grep、Magit がブラウザのタブの中で動作します。
 
 ## 現在できること
 
@@ -18,12 +18,15 @@
 - `url.el` / `package.el` 系の HTTP(S) リクエストを `host.network.fetch` 経由に流す
 - CORS で直接 fetch できない package archive については、ユーザー管理の self-hosted proxy を使える
 - emacsでのヤンクをブラウザ clipboard に流す
+- Emacs からサブプロセスを起動する（`call-process`、`make-process`、`shell-command`、`M-x shell`、外部コマンドとパイプを使う eshell）
+- POSIX シェル（BusyBox の `ash`）と約150個のコマンド、git 2.52（ローカルリポジトリ）、GNU grep 3.12 を、パイプ・シグナル・`fork`・`exec` を備えた本物のプロセスとして動かす
+- `M-x grep`、`rgrep`、`lgrep`、xref / project の検索、`vc-git`、Magit（status、stage、Emacs でメッセージを編集する commit、log、diff）を使う
 
 ## まだ制限があること
 
-- ブラウザ内の Emacs core には raw socket や通常の POSIX process はありません
-- `host.process` は 利用不可です
-- 外部コマンドや subprocess に依存する Emacs 機能は、そのままでは動きません
+- プロセスは host のものではなく、wasmacs 自身の process service が提供します。動かせるのは同梱したプログラム（BusyBox のコマンド群、git、GNU grep）だけです。[サブプロセス](#サブプロセス-shellgitgrep) を参照してください
+- 擬似端末（pty）と socket はありません。`M-x term` / `ansi-term` は動きません（`M-x shell` と eshell は動きます）。git にネットワーク通信はなく、`clone` / `fetch` / `push` はローカルのリポジトリ間だけで使えます
+- スケジューリングは1スレッド上の協調型です。システムコールを一切せずに長時間計算するプログラムは、次にシステムコールをするまで中断できません
 - `package-refresh-contents` などのネットワーク機能は、ブラウザ fetch / CORS / proxy の制約を受けます
 - GUI Emacs の native frame を移植しているわけではなく、現状は xterm.js 上の terminal Emacs です
 - `docs/` に置く Pages 用 artifact は、GitHub Pages で扱える形に分割・制限しています
@@ -37,8 +40,9 @@ src/assets/ 生成 docs にコピーされるソースアセット
 src/build/  docs と artifact 生成用スクリプト
 src/c/      Emacs C 側の patch layer
 src/runtime/ host/runtime libraries used by tests and tools
-tools/      build / validation / probe / prototype / inspection tools
-tools/probs/ prototype and exploratory probe code
+src/runtime/process/ process service（kernel、プロセスごとの runtime、userland のファイル配置）
+src/userland/ プロセスとして動くプログラム（BusyBox、git、GNU grep）のビルド
+tools/      build / validation / probe / inspection tools
 proxy/      package archive 用の self-hosted fetch proxy サンプル
 vendor/     pinned upstream GNU Emacs source。read-only
 build/      copied Emacs working tree、temporary state、generated artifacts
@@ -49,10 +53,12 @@ docs/       GitHub Pages output
 vscode/     generated VS Code webview app bundle
 logs/       ignored runtime logs。Git には .gitkeep のみ残す
 tests/      automated test code
-archive/    old outputs and superseded files
+archive/    退役した仕組み（archive/retired/、索引は archive/README.md）と古い出力
 ```
 
-`vendor/emacs` は pinned upstream GNU Emacs source です。直接編集しません。実験用 patch は copied build tree に対して適用します。
+`vendor/emacs` は pinned upstream GNU Emacs source です。直接編集しません。製品が Emacs に加える変更は `src/c/patches/` の番号付き patch で、copied build tree に適用します（`src/c/README.md` を参照）。
+
+製品ルートは、ページ1つ・worker 1つ・ビルド1つです。`src/wasm/xterm-atomics-pdump.html`、`src/wasm/src/emacs-atomics-pdump-worker.js`、`src/build/build-emacs-browser-atomics-pdump-profile.sh` がそれにあたります。以前の仕組み（command bridge を使う textarea アプリ、Asyncify の command protocol、初期の build spike）は `archive/retired/` に移してあり、`tests/runtime/canonical-route.test.js` が、現役のファイルがそれらに依存しないことを確認します。
 
 ## ブラウザアプリ
 
@@ -115,27 +121,65 @@ npm ci
 ## よく使うコマンド
 
 ```sh
-make prepare
+make check-patches
 make test
 make build
+make userland
+make test-process
 make vscode-build
 make docs
 make dev
 ```
 
-`make prepare` は `vendor/emacs` を `build/emacs-30.2-patched/src` にコピーし、`src/c/patches/*.patch` を適用します。`vendor/emacs` を直接編集しないでください。
+`make check-patches` は `src/c/patches/*.patch` が pinned の `vendor/emacs` に適用できることを確認します。製品ビルドは copied tree への適用を自分で行います（`src/build/apply-emacs-patches.sh`）。`vendor/emacs` を直接編集しないでください。
 
-`make build` は Emacs wasm / pdmp / wasifs artifact を `build/artifacts/` 以下に再生成し、その後 GitHub Pages 用 bundle を `docs/` に反映します。
+`make build` は Emacs wasm / pdmp / wasifs artifact と process userland を `build/artifacts/` 以下に再生成し、その後 GitHub Pages 用 bundle を `docs/` に反映します。
+
+`make userland` は、プロセスとして動くプログラムだけをビルドします（`build/artifacts/userland/`）。初回は BusyBox、git、GNU grep のリリース tarball を `build/userland/dl/` にダウンロードします。sha256 はビルドスクリプトに固定してあります。
+
+`make test`（`npm test`）は CI が実行するものです。runtime contract のテストに加えて、checked-in の `docs/` bundle を Node 上で起動し、Emacs から `sh`・`git`・`grep` を実行するテストを含みます。`make test-process` は process service の全テスト（kernel のテストと、本物の Emacs が本物のサブプロセスを動かすテスト）を実行します。`npm run browser:smoke:processes` は headless Chrome で実際のページを操作します。
 
 `make dev` は開発サーバーを起動します。開発サーバーでは runtime file を `/artifacts/...` として公開し、Pages と同じ URL contract で worker / smoke URL が動くようにしています。
 
 `make vscode-build` は VS Code `.wasifs` extension 用の別ルートを生成します。VS Code 専用 artifact は `build2/artifacts/` に置かれ、webview app bundle は `vscode/app/` に置かれます。このルートは `docs/app` や `docs/artifacts` を消費・更新しません。
 
+## サブプロセス: shell、git、grep
+
+ブラウザにはプロセスがありません。そこで wasmacs は UNIX 風の小さな kernel を自前で持ちます（`src/runtime/process/wasmacs-kernel.js`）。kernel は Emacs の worker の中で動きます。Emacs がプロセス1で、それ以外のプロセスは、Emscripten と Asyncify でビルドしたプログラムの WebAssembly instance です。プロセスごとに独立したメモリを持ち、ファイルシステムは Emacs と共有します。kernel は `fork`、`exec`、`posix_spawn`、`wait`、パイプ、シグナル、プロセスグループ、タイマーを提供し、どれかのプロセス（または Emacs）がシステムコールをするたびにプロセスを切り替えます。
+
+```text
+Emacs (callproc.c, process.c)        emacs_spawn / waitpid / kill / pipe / poll
+  -> process kernel                  スケジューラ、パイプ、シグナル、fd table
+       -> /bin/sh, /bin/ls, ...      BusyBox（1つの image に約150コマンド）
+       -> /bin/git                   git 2.52
+       -> /bin/grep                  GNU grep 3.12
+```
+
+これで Emacs からできること:
+
+- `M-x shell` と eshell。パイプ、リダイレクト、バックグラウンドジョブ、`C-c C-c` を含みます
+- 同期サブプロセスを `C-g` で中断する
+- ファイルシステム上のリポジトリに対する git。`vc-git` と Magit が動きます。`/home/user` 以下のリポジトリはページを再読み込みしても残ります（実行ビットと更新時刻を user image と一緒に保存します）
+- `M-x grep`、`rgrep`、`lgrep`、`project-find-regexp`、`xref-find-references` を、Emacs の既定値のまま使う
+- シェルスクリプト、`find`、`sed`、`awk`、`diff`、`tar`、`gzip` など BusyBox のコマンド
+
+できないこと:
+
+- 擬似端末はありません。プログラムから見えるのはパイプなので、`M-x term` は動かず、全画面を使うプログラムは使えません
+- socket はありません。ネットワーク接続は一切開けず、git はローカルのリポジトリだけを扱えます
+- 同梱したもの以外のプログラムは動きません。コンパイラ、Python、パッケージマネージャはありません
+- `ediff` は GNU `diff` の出力形式を必要とし、BusyBox の `diff` はそれを出しません（`M-x diff` と `vc-diff` は使えます）
+- `/home/user` は、変更があるたびに全体を1つの image として保存します。非常に大きなリポジトリでは保存が遅くなります
+
+Magit は同梱していません。`package.el` でインストールするか（下の「ネットワークアクセス」を参照）、pack した `.wasifs` image で持ち込んでください。
+
+設計は `doc/process-service.md` に書いてあります。
+
 ## ネットワークアクセス
 
 wasmacs では、ネットワークアクセスをブラウザ host capability として明示的に扱います。
 
-Emacs core に raw socket や `host.process` を渡して package download をさせるのではありません。代わりに、checked-in の `wasmacs-url-fetch` Lisp overlay が `url.el` の HTTP(S) リクエストを `host.network.fetch` に流します。これにより、`package-refresh-contents`、`package-install`、`use-package :ensure` などは request/response service として実行できます。
+Emacs core に raw socket を渡して package download をさせるのではありません。Emacs のサブプロセスにもネットワークはありません。代わりに、checked-in の `wasmacs-url-fetch` Lisp overlay が `url.el` の HTTP(S) リクエストを `host.network.fetch` に流します。これにより、`package-refresh-contents`、`package-install`、`use-package :ensure` などは request/response service として実行できます。
 
 ただし、ブラウザの直接 `fetch` は CORS の制約を受けます。remote package archive が page origin を許可していない場合、JavaScript から response body を読むことはできません。Service Worker は app cache や COOP/COEP には使えますが、CORS で読めない cross-origin response を読めるようにはできません。
 
@@ -266,7 +310,7 @@ doc/small-os-for-emacs.md
 - Browser UI は表示と入力の host であり、undo、kill-ring、region、minibuffer、file-visiting semantics を偽装しない
 - `.wasifs` は可搬 workspace の単位として扱う
 - `vendor/emacs` は read-only とする
-- process / pty / socket は MVP では明示的に unavailable boundary として扱う
+- process は host ではなく compatibility layer（`src/runtime/process`）の service として提供する。Emacs 自身の process code はそのまま動く。pty と socket は明示的に unavailable boundary のままとする
 - product behavior と diagnostic behavior を分ける
 - low-level substrate は C/wasm-first とし、JavaScript は browser coordinator / host capability provider / diagnostic harness に留める
 

@@ -185,6 +185,13 @@ const pagesIndex = `<!doctype html>
 `;
 await writeFile(pagesIndexTarget, pagesIndex);
 await copyIfExists(buildArtifacts, docsArtifacts);
+// These are host JavaScript, not compiled program images. Publish current
+// sources even when only the page/runtime was edited since the userland build.
+if (existsSync(join(docsArtifacts, "userland", "manifest.json"))) {
+  for (const name of ["wasmacs-userland.js", "wasmacs-http.js"]) {
+    await cp(join(repoRoot, "src", "runtime", "process", name), join(docsArtifacts, "userland", name));
+  }
+}
 
 const docsAtomicsPdump = join(docsArtifacts, "emacs-browser-atomics-pdump");
 const docsTemacs = join(docsAtomicsPdump, "temacs");

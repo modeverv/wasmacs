@@ -33,6 +33,13 @@ const USER_WASIFS_URL = resolveRuntimeUrl(
   "/artifacts/user-filesystem-empty.wasifs",
 );
 
+// Userland of the process service: program images (busybox, git) plus
+// manifest.json and wasmacs-userland.js, built by src/userland/build.sh.
+const USERLAND_DIR = resolveRuntimeUrl(
+  "../../artifacts/userland/",
+  "/artifacts/userland/",
+).replace(/\/$/, "");
+
 function post(type, payload = {}) {
   self.postMessage({ type, ...payload });
 }
@@ -348,7 +355,12 @@ function parseUserTar(bytes) {
     if ((cleanEntry === "home/user" || cleanEntry.startsWith("home/user/")) && !isMacTarMetadata(cleanEntry)) {
       const isDir = type === "5" || entry.endsWith("/");
       const path = cleanEntry === "home/user" ? "/home/user" : "/" + cleanEntry;
-      nodes.set(path, { isDir, data: isDir ? null : bytes.slice(dstart, dstart + size) });
+      nodes.set(path, {
+        isDir,
+        data: isDir ? null : bytes.slice(dstart, dstart + size),
+        mode: parseOctal(h.subarray(100, 108)) & 0o7777,
+        mtime: parseOctal(h.subarray(136, 148)),
+      });
     }
     off = dstart + padLen(size);
   }
@@ -386,25 +398,34 @@ function mountUserImage(FS, nodes) {
       try { FS.unlink(path); } catch (_) {}
       try { FS.rmdir(path); } catch (_) {}
       FS.createDataFile(parent, name, node.data, true, true);
+      // The executable bit (scripts, git hooks) and the modification time
+      // (git compares it with its index) survive a reload.
+      try {
+        if (node.mode && typeof FS.chmod === "function") FS.chmod(path, node.mode);
+        if (node.mtime && typeof FS.utime === "function") FS.utime(path, node.mtime * 1000, node.mtime * 1000);
+      } catch (_) {}
     }
   }
   post("status", { text: `mounted ${nodes.size} user paths` });
 }
 
 function exportUserImage(FS) {
-  const nodes = new Map();
-  nodes.set("/home/user", { isDir: true, data: null });
-  walkFS(FS, "/home/user", nodes);
-  return createUserTar(nodes);
+  return createUserTar(readUserTree(FS, listUserTree(FS)));
 }
+
+// /home/user is saved before every idle wait of Emacs.  Walking the tree
+// (names, sizes, modes, times) is cheap; reading every file, building the
+// tar and storing it is not, so that only happens when the walk found a
+// difference to what was saved last.
+let savedUserTreeSignature = null;
 function postUserImageSnapshot(FS, reason) {
   if (!FS || globalThis.__wasmacsExportingUserImage) return;
   globalThis.__wasmacsExportingUserImage = true;
   try {
-    const nodes = new Map();
-    nodes.set("/home/user", { isDir: true, data: null });
-    walkFS(FS, "/home/user", nodes);
-    const bytes = createUserTar(nodes);
+    const listing = listUserTree(FS);
+    if (listing.signature === savedUserTreeSignature) return;
+    const bytes = createUserTar(readUserTree(FS, listing));
+    savedUserTreeSignature = listing.signature;
     self.postMessage(
       { type: "wasifs-snapshot", bytes: bytes.buffer, reason },
       [bytes.buffer],
@@ -416,25 +437,61 @@ function postUserImageSnapshot(FS, reason) {
   }
 }
 
-function walkFS(FS, startDir, nodes) {
+// The user tree without file contents: [{ path, isDir, mode, size, mtime }]
+// plus a signature that changes whenever an entry is added, removed, resized,
+// rewritten (MEMFS stamps every write) or gets another mode.
+function listUserTree(FS, startDir = "/home/user") {
+  const entries = [{ path: startDir, isDir: true, mode: 0o755, size: 0, mtime: 0 }];
+  // Two independent 32-bit FNV-1a hashes over the entry descriptions.
+  let h1 = 0x811c9dc5, h2 = 0x01000193;
+  const mix = (text) => {
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 0x01000193);
+      h2 = Math.imul(h2 ^ c, 0x85ebca6b) + 0x9e3779b9 | 0;
+    }
+  };
   const queue = [startDir];
   while (queue.length > 0) {
     const dir = queue.pop();
+    let names;
+    try { names = FS.readdir(dir); } catch (_) { continue; }
+    for (const name of names) {
+      if (name === "." || name === "..") continue;
+      const path = dir === "/" ? "/" + name : dir + "/" + name;
+      try {
+        const stat = FS.stat(path);
+        const isDir = FS.isDir(stat.mode);
+        const mtime = stat.mtime instanceof Date ? stat.mtime.getTime() : Number(stat.mtime) || 0;
+        entries.push({ path, isDir, mode: stat.mode & 0o7777, size: isDir ? 0 : stat.size, mtime });
+        // A directory's own time changes with every file created in it; the
+        // entries themselves already say what is there.
+        mix(isDir ? `${path}/${stat.mode & 0o7777}\n` : `${path}:${stat.mode & 0o7777}:${stat.size}:${mtime}\n`);
+        if (isDir) queue.push(path);
+      } catch (_) {}
+    }
+  }
+  return { entries, signature: `${entries.length}:${h1 >>> 0}:${h2 >>> 0}` };
+}
+
+// Map(path -> { isDir, data, mode, mtime }) for createUserTar.
+function readUserTree(FS, listing) {
+  const nodes = new Map();
+  for (const entry of listing.entries) {
+    if (entry.isDir) {
+      nodes.set(entry.path, { isDir: true, data: null, mode: entry.mode, mtime: Math.floor(entry.mtime / 1000) });
+      continue;
+    }
     try {
-      for (const name of FS.readdir(dir).filter(n => n !== "." && n !== "..")) {
-        const path = dir === "/" ? "/" + name : dir + "/" + name;
-        try {
-          const stat = FS.stat(path);
-          if (FS.isDir(stat.mode)) {
-            nodes.set(path, { isDir: true, data: null });
-            queue.push(path);
-          } else {
-            nodes.set(path, { isDir: false, data: new Uint8Array(FS.readFile(path, { encoding: "binary" })) });
-          }
-        } catch (_) {}
-      }
+      nodes.set(entry.path, {
+        isDir: false,
+        data: new Uint8Array(FS.readFile(entry.path, { encoding: "binary" })),
+        mode: entry.mode,
+        mtime: Math.floor(entry.mtime / 1000),
+      });
     } catch (_) {}
   }
+  return nodes;
 }
 
 const WASMACS_XTERM_TERM_SHIM = `
@@ -555,21 +612,39 @@ function installXtermTermShim(FS) {
   }
 }
 
+// ustar keeps a path as name (100 bytes) plus prefix (155 bytes), split at a
+// slash.  Returns null for a path that does not fit.
+function splitTarPath(tarpath) {
+  if (te.encode(tarpath).length <= 100) return { name: tarpath, prefix: "" };
+  for (let slash = tarpath.indexOf("/"); slash !== -1; slash = tarpath.indexOf("/", slash + 1)) {
+    const prefix = tarpath.slice(0, slash);
+    const name = tarpath.slice(slash + 1);
+    if (name.length > 0 && te.encode(prefix).length <= 155 && te.encode(name).length <= 100) return { name, prefix };
+  }
+  return null;
+}
+
 function createUserTar(nodes) {
   const chunks = [];
   const paths = [...nodes.keys()].filter(p => p === "/home/user" || p.startsWith("/home/user/")).sort();
+  const now = Math.floor(Date.now() / 1000);
+  const skipped = [];
   for (const path of paths) {
     const node = nodes.get(path);
     const tarpath = node.isDir ? path.replace(/^\//, "") + "/" : path.replace(/^\//, "");
+    const split = splitTarPath(tarpath);
+    if (!split) { skipped.push(path); continue; }
     const content = node.isDir ? new Uint8Array() : (node.data || new Uint8Array());
     const h = new Uint8Array(BLOCK);
-    const enc = (off, len, str) => { h.fill(0, off, off + len); h.set(te.encode(str.slice(0, len)).subarray(0, len), off); };
+    const enc = (off, len, str) => { h.fill(0, off, off + len); h.set(te.encode(str).subarray(0, len), off); };
     const octal = (off, len, val) => enc(off, len, val.toString(8).padStart(len - 1, "0").slice(-(len - 1)));
-    enc(0, 100, tarpath); octal(100, 8, node.isDir ? 0o755 : 0o644);
+    enc(0, 100, split.name);
+    octal(100, 8, (node.mode ?? (node.isDir ? 0o755 : 0o644)) & 0o7777);
     octal(108, 8, 0); octal(116, 8, 0); octal(124, 12, content.length);
-    octal(136, 12, Math.floor(Date.now() / 1000));
+    octal(136, 12, node.mtime || now);
     h.fill(32, 148, 156); h[156] = node.isDir ? 53 : 48;
     enc(257, 6, "ustar"); enc(263, 2, "00");
+    enc(345, 155, split.prefix);
     octal(148, 7, h.reduce((s, b) => s + b, 0)); h[155] = 0;
     chunks.push(h);
     if (!node.isDir) {
@@ -578,12 +653,83 @@ function createUserTar(nodes) {
       if (p > 0) chunks.push(new Uint8Array(p));
     }
   }
+  if (skipped.length > 0 && !globalThis.__wasmacsWarnedLongPaths) {
+    // Once per session: these files exist now but will be gone after a reload.
+    globalThis.__wasmacsWarnedLongPaths = true;
+    post("stderr", { text: `user image: ${skipped.length} path(s) are too long to be saved (ustar limit), e.g. ${skipped[0]}` });
+  }
   chunks.push(new Uint8Array(BLOCK * 2));
   const total = chunks.reduce((s, c) => s + c.length, 0);
   const out = new Uint8Array(total);
   let off = 0;
   for (const c of chunks) { out.set(c, off); off += c.length; }
   return out;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Process service userland
+// ═══════════════════════════════════════════════════════════════
+// Emacs starts subprocesses through the kernel that is linked into temacs.js
+// (src/runtime/process/wasmacs-kernel.js).  The programs themselves are
+// separate images; here the worker makes them visible in the filesystem
+// (/bin/sh, /bin/git, ... marker files) and tells the kernel how to load an
+// image when one is executed.
+
+async function installProcessUserland(FS) {
+  let manifest;
+  try {
+    importScripts(`${USERLAND_DIR}/wasmacs-userland.js?v=${ARTIFACT_CACHE_BUST}`);
+    const response = await fetch(`${USERLAND_DIR}/manifest.json?v=${ARTIFACT_CACHE_BUST}`, { cache: "no-store" });
+    if (!response.ok) throw new Error(`manifest.json: HTTP ${response.status}`);
+    manifest = await response.json();
+  } catch (e) {
+    post("status", { text: "process userland not available (subprocesses are disabled)" });
+    if (globalThis.__wasmacsDiagnosticLog) post("stderr", { text: `process userland: ${e}` });
+    return null;
+  }
+  const commandCount = self.WasmacsUserland.install(FS, manifest);
+  if (manifest.programs?.["git-http"]) {
+    importScripts(`${USERLAND_DIR}/wasmacs-http.js?v=${ARTIFACT_CACHE_BUST}`);
+    globalThis.__wasmacsStartProcessHttp = self.WasmacsHttp.createClient({
+      postMessage: (message) => self.postMessage(message),
+      wakeSAB: INPUT_SAB,
+    });
+  }
+  installProgramLoader(manifest);
+  post("status", { text: `process userland ready (${commandCount} commands)` });
+  return manifest;
+}
+
+// The kernel calls this while Emacs is blocked inside a system call (the
+// worker's event loop is not running), so loading has to be synchronous:
+// a synchronous XHR for the wasm binary and importScripts for its glue.
+function installProgramLoader(manifest) {
+  const images = new Map();
+  globalThis.__wasmacsLoadProgram = function wasmacsLoadProgram(name) {
+    if (images.has(name)) return images.get(name);
+    if (!manifest.programs || !manifest.programs[name]) {
+      throw new Error(`unknown program image: ${name}`);
+    }
+    post("status", { text: `loading ${name}...` });
+    const base = `${USERLAND_DIR}/${name}`;
+    const xhr = new XMLHttpRequest();
+    xhr.open("GET", `${base}.wasm?v=${ARTIFACT_CACHE_BUST}`, false);
+    xhr.responseType = "arraybuffer";
+    xhr.send();
+    if (xhr.status !== 200 || !xhr.response) {
+      throw new Error(`${name}.wasm: HTTP ${xhr.status}`);
+    }
+    const wasm = new WebAssembly.Module(xhr.response);
+    importScripts(`${base}.js?v=${ARTIFACT_CACHE_BUST}`);
+    const factory = self[`wasmacsProgram_${name.replace(/-/g, "_")}`];
+    if (typeof factory !== "function") {
+      throw new Error(`${name}.js did not define wasmacsProgram_${name}`);
+    }
+    const image = { factory, wasm };
+    images.set(name, image);
+    post("status", { text: `loaded ${name} (${(xhr.response.byteLength / 1024 / 1024).toFixed(1)} MB)` });
+    return image;
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -630,6 +776,14 @@ async function startEmacs(pdmpBytes, debugOptions = {}) {
     },
     onAbort(what) { post("session-ended", { error: `abort: ${what}` }); },
     preRun: [function() {
+      // The C environment is captured when the static constructors run, right
+      // after preRun.  PATH and SHELL point Emacs (exec-path, shell-file-name)
+      // and its subprocesses at the process userland; keep them in sync with
+      // WasmacsUserland.ENVIRONMENT (src/runtime/process/wasmacs-userland.js).
+      try {
+        ENV.PATH = "/bin:/usr/bin";
+        ENV.SHELL = "/bin/sh";
+      } catch (_) {}
       try {
         try { Module.FS.mkdir("/tmp"); } catch (_) {}
         try { Module.FS.mkdir("/home"); } catch (_) {}
@@ -695,6 +849,13 @@ async function startEmacs(pdmpBytes, debugOptions = {}) {
 
   await ready;
 
+  if (typeof debugOptions.processKernelUrl === "string") {
+    // Development aid (see the page): replaces the kernel linked into temacs.js
+    // before Emacs creates it.
+    importScripts(debugOptions.processKernelUrl);
+    post("status", { text: `process kernel from ${debugOptions.processKernelUrl}` });
+  }
+
   try {
     const originalAtomicsWait = Atomics.wait.bind(Atomics);
     Atomics.wait = function wasmacsSnapshottingAtomicsWait(...args) {
@@ -719,6 +880,10 @@ async function startEmacs(pdmpBytes, debugOptions = {}) {
   } catch (_) {}
 
   installXtermTermShim(Module.FS);
+
+  // Subprocesses: /bin, /etc and the program loader (PATH and SHELL were set
+  // in preRun).
+  const processUserland = await installProcessUserland(Module.FS);
 
   // Write pdmp to MEMFS AFTER runtime is ready
   if (pdmpBytes) {
@@ -749,6 +914,11 @@ async function startEmacs(pdmpBytes, debugOptions = {}) {
   ];
   if (!debugOptions.noDefaultInit) {
     COMMON_EVALS.splice(8, 0, "--eval", WASMACS_DEFAULT_LISP_INIT);
+  }
+  // Settings that go with the process userland (no ptys, GNU grep, ...); see
+  // EMACS_SETTINGS in src/runtime/process/wasmacs-userland.js.
+  for (const expr of (processUserland && self.WasmacsUserland.EMACS_SETTINGS) || []) {
+    COMMON_EVALS.push("--eval", expr);
   }
   for (const expr of debugOptions.extraEvals || []) {
     if (typeof expr === "string" && expr.length > 0) COMMON_EVALS.push("--eval", expr);

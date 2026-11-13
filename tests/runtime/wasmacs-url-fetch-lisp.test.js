@@ -27,7 +27,7 @@ test("wasmacs url.el loader is an overlay, not a vendor/emacs patch", async () =
   assert.doesNotMatch(source, /\(open-network-stream\b/);
 });
 
-test("Emacs patch script registers the host network fetch primitive", async () => {
+test("VS Code lane Emacs patch script registers the host network fetch primitive", async () => {
   const source = await readFile(join(repoRoot, "tools/scripts/patch-emacs-host-entrypoint-spike.sh"), "utf8");
 
   assert.match(source, /EM_JS \(const char \*, wasmacs_host_network_fetch_json/);
@@ -51,14 +51,15 @@ test("Emacs patch script registers the host network fetch primitive", async () =
   assert.doesNotMatch(source, /stringToNewUTF8/);
 });
 
-test("checked-in Emacs C patch carries the host network fetch primitive", async () => {
+test("product Emacs patch layer carries the host network fetch primitive", async () => {
   const source = await readFile(
-    join(repoRoot, "src/c/patches/0001-wasmacs-host-entrypoint-and-terminal.patch"),
+    join(repoRoot, "src/c/patches/0001-emacs-host-entrypoints-and-os-services.patch"),
     "utf8",
   );
 
   assert.match(source, /EM_JS \(const char \*, wasmacs_host_network_fetch_json/);
   assert.match(source, /DEFUN \("wasmacs-os-network-fetch-json"/);
+  assert.match(source, /Swasmacs_os_network_fetch_json/);
   assert.match(source, /wasmacs_os_url_fetch_loader_state/);
   assert.match(source, /function returnJson/);
   assert.match(source, /_malloc\(size\)/);
@@ -119,14 +120,19 @@ test("Atomics pdump browser builder can strip link debug info separately", async
 });
 
 test("Atomics pdump preloads fetch-backed url.el dependencies before dump", async () => {
-  const source = await readFile(
+  const builder = await readFile(
     join(repoRoot, "src/build/build-emacs-browser-atomics-pdump-profile.sh"),
     "utf8",
   );
+  const source = await readFile(
+    join(repoRoot, "src/c/patches/0005-loadup-wasm-preload-and-dired.patch"),
+    "utf8",
+  );
 
+  assert.match(builder, /src\/build\/apply-emacs-patches\.sh" "\$\{pdump_src\}"/);
   assert.match(source, /wasmacs pbootstrap: preload url fetch lisp/);
   assert.match(source, /\(equal dump-mode "pbootstrap"\)/);
-  assert.match(source, /lisp\\\/url/);
+  assert.match(source, /lisp\/url/);
   assert.match(source, /\(require \(quote json\)\)/);
   assert.match(source, /\(require \(quote url-methods\)\)/);
   assert.match(source, /\(require \(quote url-parse\)\)/);

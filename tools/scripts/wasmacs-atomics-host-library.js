@@ -26,6 +26,15 @@
  * No Asyncify, no JS wrapper frames, no call stack save/restore.
  */
 
+// Emscripten's own pipe2/poll, kept under private names: they are used when
+// no process kernel is present (globalThis.WasmacsKernel missing).
+mergeInto(LibraryManager.library, {
+  $wasmacs_orig__syscall_pipe2: LibraryManager.library['__syscall_pipe2'],
+  $wasmacs_orig__syscall_pipe2__deps: LibraryManager.library['__syscall_pipe2__deps'] || [],
+  $wasmacs_orig__syscall_poll: LibraryManager.library['__syscall_poll'],
+  $wasmacs_orig__syscall_poll__deps: LibraryManager.library['__syscall_poll__deps'] || [],
+});
+
 mergeInto(LibraryManager.library, {
   // ── Terminal input/output state ────────────────────────────────
   $wasmacs_atomics_env__deps: ["$ENV", "$TTY"],
@@ -124,6 +133,182 @@ mergeInto(LibraryManager.library, {
   ].join("\n"),
   $wasmacs_atomics_env: {},
 
+  // ── Process Service ────────────────────────────────────────────
+  // The kernel (src/runtime/process/wasmacs-kernel.js, linked in with
+  // --pre-js) is plain JS without access to this closure.  $wasmacs_process
+  // creates it on first use and hands it the pieces of the Emacs runtime it
+  // needs: the shared FS, the heap, the keyboard queue and the two C entry
+  // points that request a quit and run Emacs's signal handlers.
+  $wasmacs_process__deps: ['$FS', '$wasmacs_atomics_env', 'wasmacs_host_flush_terminal_output'],
+  // Atomics.wait as it was when the runtime was loaded: the worker later
+  // wraps the global one to snapshot /home/user before every idle wait, which
+  // the kernel's short scheduling waits must not trigger.
+  $wasmacs_process__postset: 'wasmacs_process.rawWait = Atomics.wait.bind(Atomics);',
+  $wasmacs_process: {
+    kernel: undefined,   // undefined: not created yet; null: not available
+    rawWait: null,
+    viewBuffer: null,
+    viewCache: null,
+    sleepCell: null,
+
+    get: function () {
+      var P = wasmacs_process;
+      if (P.kernel !== undefined) return P.kernel;
+      var factory = globalThis.WasmacsKernel;
+      if (!factory) {
+        P.kernel = null;
+        return null;
+      }
+      P.kernel = factory.create({
+        FS: FS,
+        debug: !!globalThis.__wasmacsProcessDebug,
+        views: P.views,
+        now: function () { return performance.now(); },
+        log: P.log,
+        loadProgram: function (name) {
+          var load = globalThis.__wasmacsLoadProgram;
+          if (typeof load !== "function") throw new Error("no program loader is installed");
+          return load(name);
+        },
+        raiseSignal: function (sig) { _wasmacs_os_raise_signal(sig); },
+        requestQuit: function () { _wasmacs_os_request_quit(); },
+        drainKeyboard: P.drainKeyboard,
+        keyboardPending: P.keyboardPending,
+        takeQuitChar: P.takeQuitChar,
+        inputEpoch: P.inputEpoch,
+        waitForInput: P.waitForInput,
+        flushTerminalOutput: function () { _wasmacs_host_flush_terminal_output(); },
+      });
+      globalThis.__wasmacsKernel = P.kernel;
+      return P.kernel;
+    },
+
+    // Heap views of Emacs (recreated after memory growth).
+    views: function () {
+      var P = wasmacs_process;
+      if (P.viewBuffer !== HEAPU8.buffer) {
+        P.viewBuffer = HEAPU8.buffer;
+        P.viewCache = { HEAPU8: HEAPU8, HEAP32: HEAP32, HEAP16: new Int16Array(HEAPU8.buffer) };
+      }
+      return P.viewCache;
+    },
+
+    log: function (msg) {
+      if (globalThis.__wasmacsDiagnosticLog || globalThis.__wasmacsProcessDebug) console.warn(msg);
+      if (typeof self !== "undefined" && typeof self.postMessage === "function"
+          && (globalThis.__wasmacsDiagnosticLog || /killed by signal|cannot load|failed/.test(String(msg)))) {
+        try { self.postMessage({ type: "stderr", text: String(msg) }); } catch (e) {}
+      }
+    },
+
+    // Move the keyboard bytes the main thread put into the SharedArrayBuffer
+    // to the tty input queue and free the buffer for the next chunk.
+    drainKeyboard: function () {
+      var sab = globalThis.__wasmacsInputSAB;
+      if (!sab) return 0;
+      var signal = new Int32Array(sab, 0, 2);
+      var byteCount = Atomics.load(signal, 1);
+      if (byteCount > 0) {
+        var data = new Uint8Array(sab, 8, byteCount);
+        var queue = globalThis.__wasmacsTerminalInputBytes;
+        for (var i = 0; i < byteCount; i++) queue.push(data[i]);
+        Atomics.store(signal, 1, 0);
+      }
+      return byteCount;
+    },
+
+    keyboardPending: function () {
+      return (globalThis.__wasmacsTerminalInputBytes || []).length > 0;
+    },
+
+    // Remove one C-g (the quit character) from the queued keyboard input.
+    takeQuitChar: function () {
+      var queue = globalThis.__wasmacsTerminalInputBytes || [];
+      var index = queue.indexOf(7);
+      if (index < 0) return false;
+      queue.splice(index, 1);
+      return true;
+    },
+
+    // The wake counter of the keyboard buffer.  Read it BEFORE looking at the
+    // keyboard and pass it to waitForInput, so that a key that arrives in
+    // between is not slept through.
+    inputEpoch: function () {
+      var sab = globalThis.__wasmacsInputSAB;
+      return sab ? Atomics.load(new Int32Array(sab, 0, 2), 0) : 0;
+    },
+
+    // Sleep for up to MS milliseconds, or until the main thread signals
+    // keyboard input or a resize.  No /home/user snapshot is taken.
+    waitForInput: function (ms, epoch) {
+      var P = wasmacs_process;
+      ms = Math.max(0, Math.min(ms, 1000));
+      var sab = globalThis.__wasmacsInputSAB;
+      if (sab) {
+        P.rawWait(new Int32Array(sab, 0, 2), 0, epoch, ms);
+      } else {
+        if (!P.sleepCell) P.sleepCell = new Int32Array(new SharedArrayBuffer(4));
+        P.rawWait(P.sleepCell, 0, 0, ms);
+      }
+    },
+  },
+
+  // Start a subprocess for emacs_spawn (callproc.c).  Returns the pid or
+  // -errno.
+  wasmacs_host_proc_spawn__deps: ['$wasmacs_process', '$UTF8ToString'],
+  wasmacs_host_proc_spawn: function (argvPtr, envpPtr, cwdPtr, stdIn, stdOut, stdErr) {
+    var K = wasmacs_process.get();
+    if (!K) return -{{{ cDefs.ENOSYS }}};
+    function strings(ptr) {
+      var out = [];
+      if (!ptr) return out;
+      for (;;) {
+        var s = HEAPU32[ptr >> 2];
+        if (!s) break;
+        out.push(UTF8ToString(s));
+        ptr += 4;
+      }
+      return out;
+    }
+    return K.emacsSpawn(strings(argvPtr), strings(envpPtr), cwdPtr ? UTF8ToString(cwdPtr) : null,
+                        [stdIn, stdOut, stdErr]);
+  },
+
+  // waitpid for get_child_status (sysdep.c): pid, 0 (WNOHANG) or -errno.
+  wasmacs_host_proc_waitpid__deps: ['$wasmacs_process'],
+  wasmacs_host_proc_waitpid: function (pid, statusPtr, options) {
+    var K = wasmacs_process.get();
+    if (!K) return -{{{ cDefs.ECHILD }}};
+    return K.emacsWaitpid(pid, statusPtr, options);
+  },
+
+  // kill for subprocesses (callproc.c wasmacs_os_kill): 0 or -errno.
+  wasmacs_host_proc_kill__deps: ['$wasmacs_process'],
+  wasmacs_host_proc_kill: function (pid, sig) {
+    var K = wasmacs_process.get();
+    if (!K) return -{{{ cDefs.ESRCH }}};
+    return K.emacsKill(pid, sig);
+  },
+
+  // Pipes come from the kernel: end-of-file when the last writer is gone,
+  // blocking reads that run the subprocesses, shared with child processes.
+  __syscall_pipe2__deps: ['$wasmacs_process', '$wasmacs_orig__syscall_pipe2'],
+  __syscall_pipe2: function (fdPtr, flags) {
+    var K = wasmacs_process.get();
+    if (!K) return wasmacs_orig__syscall_pipe2(fdPtr, flags);
+    return K.emacsPipe2(fdPtr, flags);
+  },
+
+  // select/pselect/poll all end up here (musl implements them with poll).
+  // The kernel version really waits: it runs the subprocesses, honours the
+  // timeout and reports the tty readable only when keyboard bytes are queued.
+  __syscall_poll__deps: ['$wasmacs_process', '$wasmacs_orig__syscall_poll'],
+  __syscall_poll: function (fds, nfds, timeout) {
+    var K = wasmacs_process.get();
+    if (!K) return wasmacs_orig__syscall_poll(fds, nfds, timeout);
+    return K.emacsPoll(fds, nfds, timeout);
+  },
+
   // ── wasmacs_host_flush_terminal_output ───────────────────────
   // Sends any accumulated terminal output bytes to the main thread.
   // Called independently after redisplay, and at the start of the input wait.
@@ -141,10 +326,11 @@ mergeInto(LibraryManager.library, {
   },
 
   // ── wasmacs_host_wait_for_input ────────────────────────────────
-  // Called from kbd_buffer_get_event (keyboard.c patch).
-  // Flushes terminal output, then blocks via Atomics.wait.
-  // Includes timing diagnostics via postMessage for latency analysis.
-  wasmacs_host_wait_for_input__deps: ["$wasmacs_atomics_env", "$FS", "wasmacs_host_flush_terminal_output"],
+  // Called from kbd_buffer_get_event (keyboard.c patch) when Emacs is idle.
+  // Flushes terminal output, lets subprocesses run, then blocks via
+  // Atomics.wait until keyboard input, a resize, process activity or the
+  // timeout.  Includes timing diagnostics via postMessage for latency analysis.
+  wasmacs_host_wait_for_input__deps: ["$wasmacs_atomics_env", "$FS", "$wasmacs_process", "wasmacs_host_flush_terminal_output"],
   wasmacs_host_wait_for_input: function (timeout_ms) {
     var tEnter = Date.now();
     globalThis.__wasmacsHostWaitForInputCount =
@@ -155,7 +341,8 @@ mergeInto(LibraryManager.library, {
     _wasmacs_host_flush_terminal_output();
 
     // ── 2. Block via Atomics.wait ────────────────────────────────
-    // Return codes: 0=timeout (scheduler wake), 1=input, 2=resize, -1=no SAB
+    // Return codes: 0=timeout (scheduler wake), 1=input, 2=resize,
+    //               3=subprocess activity, -1=no SAB
     var sab = globalThis.__wasmacsInputSAB;
     if (!sab) return -1;
     var signal = new Int32Array(sab, 0, 2);
@@ -163,11 +350,25 @@ mergeInto(LibraryManager.library, {
     // timeout_ms is derived from Emacs timer_check() in keyboard.c.
     // Fall back to 50ms if not provided (e.g. diagnostic callers).
     var timeoutMs = (timeout_ms > 0) ? timeout_ms : 50;
+    var deadline = tEnter + timeoutMs;
+    var K = wasmacs_process.get();
+    var waited = false;
 
     for (;;) {
       var lastSeen = Atomics.load(signal, 0);
       if (Atomics.load(signal, 1) > 0) break;
-      if (typeof self !== "undefined" && typeof self.postMessage === "function") {
+      var waitMs = timeoutMs;
+      if (K) {
+        // Scheduling point: run subprocesses for a slice.  Their output, EOF
+        // or exit has to be seen by Emacs (filters, sentinels) right away.
+        var nextRun = K.emacsIdle();
+        if (K.emacsAttention()) return 3; // WASMACS_WAIT_PROCESS
+        var remaining = deadline - Date.now();
+        if (remaining <= 0) return 0;
+        if (nextRun === 0) continue;      // still runnable: keep scheduling
+        waitMs = Math.min(remaining, nextRun);
+      }
+      if (!waited && typeof self !== "undefined" && typeof self.postMessage === "function") {
         try {
           self.postMessage({
             type: "timing-wait-enter",
@@ -179,8 +380,16 @@ mergeInto(LibraryManager.library, {
           });
         } catch(e) {}
       }
-      var result = Atomics.wait(signal, 0, lastSeen, timeoutMs);
+      // The worker wraps the global Atomics.wait to save /home/user before
+      // Emacs goes to sleep.  Once per idle wait is enough: waking up for a
+      // subprocess timer and going back to sleep uses the plain one.
+      var result = waited
+        ? wasmacs_process.rawWait(signal, 0, lastSeen, waitMs)
+        : Atomics.wait(signal, 0, lastSeen, waitMs);
+      waited = true;
       if (result === "timed-out") {
+        // A sleeping subprocess may be due before Emacs's own timeout.
+        if (K && Date.now() < deadline) continue;
         return 0; // WASMACS_WAIT_TIMEOUT — let C run timer_check()
       }
       if (globalThis.__wasmacsTerminalSizeSAB) {
@@ -194,13 +403,7 @@ mergeInto(LibraryManager.library, {
     }
 
     // ── 3. Populate terminal input queue ─────────────────────────
-    var byteCount = Atomics.load(signal, 1);
-    if (byteCount > 0) {
-      var data = new Uint8Array(sab, 8, byteCount);
-      var queue = globalThis.__wasmacsTerminalInputBytes;
-      for (var i = 0; i < byteCount; i++) queue.push(data[i]);
-      Atomics.store(signal, 1, 0);
-    }
+    var byteCount = wasmacs_process.drainKeyboard();
 
     // ── 4. Timing diagnostic ─────────────────────────────────────
     if (globalThis.__wasmacsDiagnosticLog && typeof self !== "undefined" && typeof self.postMessage === "function") {

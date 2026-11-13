@@ -193,6 +193,16 @@ export function createXtermEmacsTerminal(container, options = {}) {
     getDimensions() {
       return currentDimensions;
     },
+    // The visible screen as text, one line per row (tests and debugging).
+    screenText() {
+      const buffer = term.buffer.active;
+      const lines = [];
+      for (let row = 0; row < term.rows; row += 1) {
+        const line = buffer.getLine(buffer.viewportY + row);
+        lines.push(line ? line.translateToString(true) : "");
+      }
+      return lines.join("\n");
+    },
     focus() {
       term.focus();
     },

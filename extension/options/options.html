@@ -18,6 +18,10 @@
       </section>
       <section class="grid">
         <label>
+          Max request bytes
+          <input id="maxRequestBytes" type="number" min="1" step="1">
+        </label>
+        <label>
           Max response bytes
           <input id="maxResponseBytes" type="number" min="1" step="1">
         </label>
@@ -29,7 +33,7 @@
       <section>
         <label>
           <input id="allowCredentials" type="checkbox">
-          Allow credentialed requests
+          Allow credentials (cookies or explicit Authorization headers; exact target origins only)
         </label>
         <label>
           <input id="allowPrivateNetworkTargets" type="checkbox">

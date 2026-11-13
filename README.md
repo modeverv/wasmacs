@@ -4,7 +4,7 @@
 
 This is not a project to build an "Emacs-like editor." Its goal is to run the real Emacs on WebAssembly by keeping the GNU Emacs 30.2 C core and Elisp runtime at the center, while the browser side provides display, input, persistence, and portable filesystem images.
 
-The current main route is the browser runtime built on `SharedArrayBuffer`, `Atomics.wait`, pdump, and xterm.js. It has reached `*scratch*`, Dired, Org mode, Elisp loading through `load-file`, and import/export of `.wasifs` images.
+The current main route is the browser runtime built on `SharedArrayBuffer`, `Atomics.wait`, pdump, and xterm.js. It has reached `*scratch*`, Dired, Org mode, Elisp loading through `load-file`, import/export of `.wasifs` images, and subprocesses: `M-x shell`, eshell, git, grep, and Magit run inside the browser tab.
 
 ## Current Capabilities
 
@@ -18,12 +18,15 @@ The current main route is the browser runtime built on `SharedArrayBuffer`, `Ato
 - Route `url.el` / `package.el` HTTP(S) requests through `host.network.fetch`
 - Use a user-operated self-hosted proxy for package archives that cannot be fetched directly because of CORS
 - Copy yanked text to the browser clipboard
+- Start subprocesses from Emacs: `call-process`, `make-process`, `shell-command`, `M-x shell`, eshell with external commands and pipelines
+- Run a POSIX shell (BusyBox `ash`) and about 150 command line tools, git 2.52 (local repositories), and GNU grep 3.12 as real processes with pipes, signals, `fork` and `exec`
+- Use `M-x grep`, `rgrep`, `lgrep`, the xref/project search commands, `vc-git`, and Magit (status, staging, commit with the message edited in Emacs, log, diff)
 
 ## Current Limitations
 
-- The Emacs core inside the browser does not have raw sockets or ordinary POSIX processes.
-- `host.process` is unavailable.
-- Emacs features that depend on external commands or subprocesses do not work as-is.
+- Processes are provided by wasmacs's own process service, not by the host: only the bundled programs (BusyBox tools, git, GNU grep) can run. See [Subprocesses](#subprocesses-shell-git-grep).
+- There are no pseudoterminals or raw sockets. `M-x term` / `ansi-term` do not work; `M-x shell` and eshell do. Git `clone`, `fetch` and `push` support Smart HTTP(S) through the Chrome companion, as well as local repositories.
+- Scheduling is cooperative on one thread. A program that computes for a long time without any system call cannot be interrupted until it makes one.
 - Network features such as `package-refresh-contents` are constrained by browser fetch, CORS, and proxy configuration.
 - This is not a port of native GUI Emacs frames. The current route is terminal Emacs running on xterm.js.
 - Pages artifacts under `docs/` are split and constrained so they can be hosted by GitHub Pages.
@@ -37,8 +40,9 @@ src/assets/ source assets copied into generated docs output
 src/build/  docs and artifact generation scripts
 src/c/      Emacs C-side patch layer
 src/runtime/ host/runtime libraries used by tests and tools
-tools/      build / validation / probe / prototype / inspection tools
-tools/probs/ prototype and exploratory probe code
+src/runtime/process/ process service: kernel, per-process runtime, filesystem layout of the userland
+src/userland/ builds of the programs that run as processes (BusyBox, git, GNU grep)
+tools/      build / validation / probe / inspection tools
 proxy/      self-hosted fetch proxy samples for package archives
 vendor/     pinned upstream GNU Emacs source; read-only
 build/      copied Emacs working tree, temporary state, and generated artifacts
@@ -49,10 +53,12 @@ docs/       GitHub Pages output
 vscode/     generated VS Code webview app bundle
 logs/       ignored runtime logs; only .gitkeep is kept in Git
 tests/      automated test code
-archive/    old outputs and superseded files
+archive/    retired mechanisms (archive/retired/, indexed in archive/README.md) and old outputs
 ```
 
-`vendor/emacs` is the pinned upstream GNU Emacs source tree. Do not edit it directly. Experimental patches are applied to copied build trees.
+`vendor/emacs` is the pinned upstream GNU Emacs source tree. Do not edit it directly. The product's changes to Emacs are the numbered patches in `src/c/patches/`, applied to a copied build tree (see `src/c/README.md`).
+
+The product route is one page, one worker and one build: `src/wasm/xterm-atomics-pdump.html`, `src/wasm/src/emacs-atomics-pdump-worker.js`, and `src/build/build-emacs-browser-atomics-pdump-profile.sh`. Earlier mechanisms (the textarea app with its command bridge, the Asyncify command protocol, early build spikes) live under `archive/retired/`; `tests/runtime/canonical-route.test.js` keeps live files from depending on them.
 
 ## Browser App
 
@@ -115,31 +121,110 @@ npm ci
 ## Common Commands
 
 ```sh
-make prepare
+make check-patches
 make test
 make build
+make userland
+make test-process
 make vscode-build
 make docs
 make dev
 ```
 
-`make prepare` copies `vendor/emacs` to `build/emacs-30.2-patched/src` and applies `src/c/patches/*.patch`. Do not edit `vendor/emacs` directly.
+`make check-patches` verifies that `src/c/patches/*.patch` apply to the pinned `vendor/emacs`. The product build applies them to its copied tree itself (`src/build/apply-emacs-patches.sh`). Do not edit `vendor/emacs` directly.
 
-`make build` regenerates the Emacs wasm / pdmp / wasifs artifacts under `build/artifacts/`, then refreshes the GitHub Pages bundle under `docs/`.
+`make build` regenerates the Emacs wasm / pdmp / wasifs artifacts and the process userland under `build/artifacts/`, then refreshes the GitHub Pages bundle under `docs/`.
+
+`make userland` builds only the programs that run as processes (`build/artifacts/userland/`). The first run downloads the BusyBox, git and GNU grep release tarballs into `build/userland/dl/`; their sha256 sums are pinned in the build scripts.
+
+`make test` (`npm test`) is what CI runs: the runtime contract tests, including one that boots the checked-in `docs/` bundle under Node and lets Emacs run `sh`, `git` and `grep`. `make test-process` runs the full process suites (kernel tests, then real Emacs driving real subprocesses); `npm run browser:smoke:processes` drives the page in headless Chrome.
 
 `make dev` starts the development server. The development server exposes runtime files at `/artifacts/...`, so workers and smoke URLs use the same URL contract as Pages.
 
 `make vscode-build` generates the separate route for the VS Code `.wasifs` extension. VS Code-only artifacts are written under `build2/artifacts/`, and the webview app bundle is written under `vscode/app/`. This route does not consume or update `docs/app` or `docs/artifacts`.
 
+## Subprocesses: shell, git, grep
+
+A browser has no processes, so wasmacs brings a small UNIX-like kernel of its own (`src/runtime/process/wasmacs-kernel.js`). It lives in the Emacs worker. Emacs is process 1; every other process is a separate WebAssembly instance of a program built with Emscripten and Asyncify, with its own memory, sharing Emacs's filesystem. The kernel provides `fork`, `exec`, `posix_spawn`, `wait`, pipes, signals, process groups and timers, and switches between processes whenever one of them (or Emacs) makes a system call.
+
+```text
+Emacs (callproc.c, process.c)        emacs_spawn / waitpid / kill / pipe / poll
+  -> process kernel                  scheduler, pipes, signals, fd tables
+       -> /bin/sh, /bin/ls, ...      BusyBox (one image, ~150 commands)
+       -> /bin/git                   git 2.52
+       -> /bin/grep                  GNU grep 3.12
+```
+
+What that gives Emacs:
+
+- `M-x shell` and eshell, including pipelines, redirection, background jobs, `C-c C-c`
+- `C-g` interrupts a synchronous subprocess
+- git on repositories in the filesystem: `vc-git` and Magit work, and a repository under `/home/user` survives a page reload (executable bits and modification times are saved with the user image)
+- `M-x grep`, `rgrep`, `lgrep`, `project-find-regexp`, `xref-find-references` with the unmodified Emacs defaults
+- shell scripts, `find`, `sed`, `awk`, `diff`, `tar`, `gzip` and the other BusyBox tools
+
+What it does not give:
+
+- no pseudoterminals: programs see pipes, so `M-x term` does not work and full-screen programs are of no use
+- no raw sockets: Git HTTP(S) uses the browser host capability; SSH and `git://` are unavailable
+- no other programs than the bundled ones; there is no compiler, no Python, no package manager
+- `ediff` needs GNU `diff` output formats that the BusyBox `diff` does not produce (`M-x diff` and `vc-diff` are fine)
+- the whole of `/home/user` is saved as one image whenever it changed, so very large repositories make saving slow
+
+Magit is not bundled. Install it with `package.el` (see Network Access below), or bring it in a packed `.wasifs` image.
+
+The design is described in `doc/process-service.md`.
+
 ## Network Access
 
 wasmacs treats network access as an explicit browser host capability.
 
-The Emacs core does not receive raw sockets or `host.process` for package downloads. Instead, the checked-in `wasmacs-url-fetch` Lisp overlay routes `url.el` HTTP(S) requests through `host.network.fetch`. This lets `package-refresh-contents`, `package-install`, `use-package :ensure`, and similar features run as request/response services.
+The Emacs core does not receive raw sockets. The checked-in `wasmacs-url-fetch` Lisp overlay routes `url.el` HTTP(S) requests through `host.network.fetch`. This lets `package-refresh-contents`, `package-install`, `use-package :ensure`, and similar features run as request/response services. Git's HTTP helper uses the same request/response boundary through a restartable process import.
 
 However, direct browser `fetch` is constrained by CORS. If the remote package archive does not allow the page origin, JavaScript cannot read the response body. Service Workers can help with app caching and COOP/COEP, but they cannot make an unreadable cross-origin response readable.
 
 When an archive is blocked by CORS, users can configure a self-hosted fetch proxy under their own control. wasmacs does not provide a central proxy service.
+
+### Git clone, fetch and push
+
+Load or reload the unpacked extension from `extension/`, then reload the wasmacs
+page. In `M-x shell` or eshell, use ordinary Smart HTTP(S) remotes:
+
+```sh
+git clone https://github.com/OWNER/REPOSITORY.git
+cd REPOSITORY
+git fetch origin
+git push origin main
+```
+
+Git HTTP uses the companion by default. The target must have both Chrome host
+permission and an extension allowlist entry; GitHub is already included.
+For private repositories and authenticated pushes, enable **Allow credentials**
+in the extension's options and use an exact HTTPS host in the allowlist. Supply
+authentication using Git credentials or a URL-scoped `http.extraHeader` inside
+wasmacs. The extension does not import credentials from the host machine or
+store tokens. Credentials saved under `/home/user` are part of the portable
+user image. Use the canonical remote URL: authenticated requests and POST do
+not follow redirects.
+
+The helper is built from pinned Git's original `remote-curl.c`; Git still owns
+negotiation, pack validation and ref updates. It supports protocol v0/v2. HTTP
+bodies are buffered and limited to **25 MiB per request and response**, with a
+**30 second request timeout**. Large repositories may exceed these limits.
+SSH, `git://`, dumb HTTP/WebDAV and cross-origin packfile downloads are not
+provided. `C-g`/process termination cancels pending requests; a cancelled or
+failed push can have reached the server, so inspect the remote before retrying.
+
+For CORS-enabled servers, `?network-transport=direct` explicitly selects direct
+fetch. `?network-transport=proxy&network-proxy=...` selects one configured HTTP
+proxy (it must support Git POST and authentication). Process HTTP never falls
+back to another transport after a failure, so a push is not silently replayed.
+Package downloads keep their existing fallback behavior.
+
+Run `npm run test:git-http` for real Chrome/extension clone, fetch and push
+against a disposable HTTPS repository, or `npm run test:git-http:transport`
+for the wasm Git transport test. Neither test pushes to a user's remote.
+Implementation details: [Git HTTP adapter](src/userland/git/README.md).
 
 ### Chrome companion extension
 
@@ -326,7 +411,7 @@ doc/small-os-for-emacs.md
 - The browser UI is a display/input host; it must not fake undo, kill-ring, region, minibuffer, or file-visiting semantics.
 - `.wasifs` is the unit of portable workspaces.
 - `vendor/emacs` is read-only.
-- Processes, ptys, and sockets are treated as explicit unavailable boundaries in the MVP.
+- Processes are a service of the compatibility layer (`src/runtime/process`), not of the host: Emacs's own process code runs unchanged against it. Ptys and sockets stay explicit unavailable boundaries.
 - Product behavior and diagnostic behavior are kept separate.
 - The low-level substrate is C/wasm-first. JavaScript remains the browser coordinator, host capability provider, and diagnostic harness.
 

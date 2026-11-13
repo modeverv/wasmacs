@@ -1,0 +1,304 @@
+--- a/src/keyboard.c
++++ b/src/keyboard.c
+@@ -2490,6 +2490,37 @@
+     }
+ }
+ 
++/* wasmacs os-compat terminal input injection spike. */
++extern void wasmacs_host_flush_terminal_output (void);
++extern int wasmacs_host_wait_for_input (int timeout_ms);
++extern int wasmacs_host_terminal_input_available (void);
++extern int wasmacs_host_terminal_read_byte (void);
++extern int wasmacs_host_scheduler_checkpoint (int code);
++extern int wasmacs_host_terminal_resize_pending (void);
++extern int wasmacs_host_terminal_resize_cols (void);
++extern int wasmacs_host_terminal_resize_rows (void);
++extern int wasmacs_host_terminal_resize_ack (void);
++extern int wasmacs_os_apply_terminal_resize (int width, int height);
++extern void wasmacs_os_timing_checkpoint (int code);
++
++static int wasmacs_timespec_to_timeout_ms (struct timespec delay) {
++  if (!timespec_valid_p (delay)) return 1000;
++  if (delay.tv_sec < 0 || (delay.tv_sec == 0 && delay.tv_nsec <= 0)) return 1;
++  long long ms = (long long) delay.tv_sec * 1000 + delay.tv_nsec / 1000000;
++  if (ms <= 0) return 1; if (ms > 1000) return 1000; return (int) ms;
++}
++
++static void
++wasmacs_os_maybe_apply_terminal_resize (void)
++{
++  if (wasmacs_host_terminal_resize_pending ())
++    {
++      wasmacs_os_apply_terminal_resize (wasmacs_host_terminal_resize_cols (),
++                                        wasmacs_host_terminal_resize_rows ());
++      wasmacs_host_terminal_resize_ack ();
++    }
++}
++
+ /* Read a character from the keyboard; call the redisplay if needed.  */
+ /* commandflag 0 means do not autosave, but do redisplay.
+    -1 means do not redisplay, but do autosave.
+@@ -3697,7 +3728,44 @@
+   return n + (n < 0 ? KBD_BUFFER_SIZE : 0);
+ }
+ #endif	/* Store an event obtained at interrupt level into kbd_buffer, fifo */
++
++
+ 
++/* wasmacs browser input injection spike. */
++__attribute__ ((used, visibility ("default")))
++int
++wasmacs_input_text (const char *utf8)
++{
++  if (!utf8)
++    return 2;
++
++  while (*utf8)
++    {
++      unsigned char byte = (unsigned char) *utf8++;
++      if (byte >= 0x80)
++        return 4;
++
++      struct input_event event;
++      EVENT_INIT (event);
++      event.kind = ASCII_KEYSTROKE_EVENT;
++      event.modifiers = 0;
++      event.code = byte;
++      event.frame_or_window = selected_frame;
++      event.arg = Qnil;
++      event.timestamp = 0;
++      kbd_buffer_store_event (&event);
++    }
++
++  return 0;
++}
++
++__attribute__ ((used, visibility ("default")))
++int
++wasmacs_input_cancel (void)
++{
++  Vunread_command_events = list1i (quit_char);
++  return 0;
++}
+ void
+ kbd_buffer_store_event (register struct input_event *event)
+ {
+@@ -4070,10 +4138,35 @@
+ 	  else
+ 	    {
+ 	      struct timespec duration = timespec_sub (*end_time, now);
++#ifdef __EMSCRIPTEN__
++	      if (kbd_fetch_ptr == kbd_store_ptr)
++		{
++		  unsigned pre_timers_ = timers_run;
++		  struct timespec next_timer_ = timer_check ();
++		  if (pre_timers_ != timers_run)
++		    redisplay_preserve_echo_area (9);
++		  int timeout_ms_ = wasmacs_timespec_to_timeout_ms (next_timer_);
++		  if (wasmacs_host_wait_for_input (timeout_ms_) == 0)
++		    {
++		      unsigned post_timers_ = timers_run;
++		      timer_check ();
++		      if (post_timers_ != timers_run)
++			{
++			  redisplay_preserve_echo_area (9);
++			  wasmacs_host_flush_terminal_output ();
++			}
++		    }
++		  wasmacs_os_maybe_apply_terminal_resize ();
++		  wasmacs_os_timing_checkpoint (11);
++		  gobble_input ();
++		  wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 23 : 24);
++		}
++#else
+ 	      wait_reading_process_output (min (duration.tv_sec,
+ 						WAIT_READING_MAX),
+ 					   duration.tv_nsec,
+ 					   -1, 1, Qnil, NULL, 0);
++#endif
+ 	    }
+ 	}
+       else
+@@ -4091,13 +4184,43 @@
+ 		do_display = false;
+ 	    }
+ 
++#ifdef __EMSCRIPTEN__
++	  if (kbd_fetch_ptr == kbd_store_ptr)
++	    {
++	      unsigned pre_timers_ = timers_run;
++	      struct timespec next_timer_ = timer_check ();
++	      if (pre_timers_ != timers_run)
++		redisplay_preserve_echo_area (9);
++	      int timeout_ms_ = wasmacs_timespec_to_timeout_ms (next_timer_);
++	      if (wasmacs_host_wait_for_input (timeout_ms_) == 0)
++		{
++		  unsigned post_timers_ = timers_run;
++		  timer_check ();
++		  if (post_timers_ != timers_run)
++		    {
++		      redisplay_preserve_echo_area (9);
++		      wasmacs_host_flush_terminal_output ();
++		    }
++		}
++	      wasmacs_os_maybe_apply_terminal_resize ();
++	      wasmacs_os_timing_checkpoint (10);
++	      gobble_input ();
++	      wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 21 : 22);
++	    }
++	  wasmacs_os_timing_checkpoint (kbd_fetch_ptr != kbd_store_ptr ? 31 : 32);
++#else
+ 	  wait_reading_process_output (0, 0, -1, do_display, Qnil, NULL, 0);
++#endif
+ 	}
+ 
+       if (!interrupt_input && kbd_fetch_ptr == kbd_store_ptr)
+ 	gobble_input ();
+     }
+ 
++#ifdef __EMSCRIPTEN__
++  wasmacs_os_timing_checkpoint (33);
++#endif
++
+ #ifdef HAVE_X_WINDOWS
+   /* Handle pending selection requests.  This can happen if Emacs
+      enters a recursive edit inside a nested event loop (probably
+@@ -4140,13 +4263,31 @@
+      mouse movement enabled and available.  */
+   if (kbd_fetch_ptr != kbd_store_ptr)
+     {
++      wasmacs_os_timing_checkpoint (40);
+       union buffered_input_event *event = kbd_fetch_ptr;
++      wasmacs_os_timing_checkpoint (1000 + event->kind);
+ 
++      /* wasmacs os-compat: current_kboard for terminal keystrokes.
++         Avoid event_to_kboard reading a pdmp-restored stale frame_or_window
++         before the real keystroke is converted into a Lisp event. */
++#ifdef __EMSCRIPTEN__
++      if (event->kind == ASCII_KEYSTROKE_EVENT
++          || event->kind == MULTIBYTE_CHAR_KEYSTROKE_EVENT
++          || event->kind == NON_ASCII_KEYSTROKE_EVENT)
++        *kbp = current_kboard;
++      else
++        *kbp = event_to_kboard (&event->ie);
++      wasmacs_os_timing_checkpoint (1100 + event->kind);
++#else
+       *kbp = event_to_kboard (&event->ie);
++#endif
+       if (*kbp == 0)
+ 	*kbp = current_kboard;  /* Better than returning null ptr?  */
+ 
+       obj = Qnil;
++#ifdef __EMSCRIPTEN__
++      wasmacs_os_timing_checkpoint (1120 + event->kind);
++#endif
+ 
+       /* These two kinds of events get special handling
+ 	 and don't actually appear to the command loop.
+@@ -4265,31 +4406,69 @@
+       case SELECT_WINDOW_EVENT:
+         {
+           obj = make_lispy_event (&event->ie);
++		      wasmacs_os_timing_checkpoint (41);
+           kbd_fetch_ptr = next_kbd_event (event);
+         }
+         break;
+       default:
+ 	{
++#ifdef __EMSCRIPTEN__
++		  wasmacs_os_timing_checkpoint (42);
++#endif
+ 	  /* If this event is on a different frame, return a
+ 	     switch-frame this time, and leave the event in the queue
+ 	     for next time.  */
+ 	  Lisp_Object frame;
+ 	  Lisp_Object focus;
+-
+-	  frame = event->ie.frame_or_window;
+-	  if (CONSP (frame))
+-	    frame = XCAR (frame);
+-	  else if (WINDOWP (frame))
+-	    frame = WINDOW_FRAME (XWINDOW (frame));
++#ifdef __EMSCRIPTEN__
++		  /* wasmacs os-compat: selected_frame for lispy tty keystrokes.
++		     For terminal keystrokes the pdmp-restored frame_or_window can
++		     refer to a stale frame object.  Use the active selected frame
++		     before the normal focus lookup touches XFRAME (frame). */
++		  wasmacs_os_timing_checkpoint (420);
++		  if (event->kind == ASCII_KEYSTROKE_EVENT
++		      || event->kind == MULTIBYTE_CHAR_KEYSTROKE_EVENT
++		      || event->kind == NON_ASCII_KEYSTROKE_EVENT)
++		    {
++		      frame = selected_frame;
++		      wasmacs_os_timing_checkpoint (421);
++		    }
++		  else
++		    {
++#endif
++		  frame = event->ie.frame_or_window;
++		  if (CONSP (frame))
++		    frame = XCAR (frame);
++		  else if (WINDOWP (frame))
++		    frame = WINDOW_FRAME (XWINDOW (frame));
+ 
+-	  focus = FRAME_FOCUS_FRAME (XFRAME (frame));
+-	  if (! NILP (focus))
+-	    frame = focus;
++		  focus = FRAME_FOCUS_FRAME (XFRAME (frame));
++		  if (! NILP (focus))
++		    frame = focus;
++#ifdef __EMSCRIPTEN__
++		    }
++#endif
++		  /* wasmacs os-compat: do not synthesize switch-frame for tty keystrokes.
++		     The pdmp-restored terminal frame can compare unequal here even though
++		     the key belongs to the active terminal; returning switch-frame first
++		     leaves the real key queued and the browser page never redisplays it. */
++#ifdef __EMSCRIPTEN__
++		  if (!(event->ie.kind == ASCII_KEYSTROKE_EVENT
++		        || event->ie.kind == MULTIBYTE_CHAR_KEYSTROKE_EVENT
++		        || event->ie.kind == NON_ASCII_KEYSTROKE_EVENT)
++		      && !EQ (frame, internal_last_event_frame)
++		      && !EQ (frame, selected_frame))
++		    obj = make_lispy_switch_frame (frame);
++#else
+ 
+ 	  if (!EQ (frame, internal_last_event_frame)
+ 	      && !EQ (frame, selected_frame))
+ 	    obj = make_lispy_switch_frame (frame);
++#endif
+ 	  internal_last_event_frame = frame;
++#ifdef __EMSCRIPTEN__
++		  wasmacs_os_timing_checkpoint (45);
++#endif
+ 
+ 	  if (EQ (event->ie.device, Qt))
+ 	    Vlast_event_device = ((event->ie.kind == ASCII_KEYSTROKE_EVENT
+@@ -4302,6 +4481,9 @@
+ 
+ 	  /* If we didn't decide to make a switch-frame event, go ahead
+ 	     and build a real event from the queue entry.  */
++#ifdef __EMSCRIPTEN__
++		  wasmacs_os_timing_checkpoint (46);
++#endif
+ 	  if (NILP (obj))
+ 	    {
+ 	      double pinch_dx, pinch_dy, pinch_angle;
+@@ -8124,10 +8306,17 @@
+         cbuf[i] &= ~0x80;
+ 
+       buf.code = cbuf[i];
++      /* wasmacs os-compat: selected_frame for terminal ASCII input.
++         pdmp-restored termcap frames can otherwise synthesize a switch-frame
++         event before the actual key and fail to return to redisplay. */
++#ifdef __EMSCRIPTEN__
++      buf.frame_or_window = selected_frame;
++#else
+       /* Set the frame corresponding to the active tty.  Note that the
+          value of selected_frame is not reliable here, redisplay tends
+          to temporarily change it.  */
+       buf.frame_or_window = tty->top_frame;
++#endif
+       buf.arg = Qnil;
+ 
+       kbd_buffer_store_event (&buf);

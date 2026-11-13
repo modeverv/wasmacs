@@ -190,6 +190,13 @@ First treatment:
   network process behavior should fail clearly or route to later explicit
   browser/remote services.
 
+Update (2026-11-13): subprocesses are no longer deferred. `host.process` stays
+unavailable, but `emacs_spawn`, `get_child_status` and `kill` now end in the
+Process Service, a kernel inside the Emacs worker that runs a bundled userland
+(`doc/process-service.md`). `process.c`'s `pselect`-based waiting needed no
+change: it ends in `poll`, which the kernel serves. Ptys and sockets are still
+unavailable.
+
 ## MVP Surface Table
 
 | area | source files | required for MVP | wasm/browser risk | proposed first treatment |

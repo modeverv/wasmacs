@@ -10,6 +10,13 @@ without moving Emacs editor semantics into JavaScript.
 source scripts such as `tools/scripts/patch-emacs-host-entrypoint-spike.sh` until an
 explicit upstream patch experiment is chosen.
 
+> **Reading note (2026-11-13).** This is a working record of the Asyncify
+> bring-up. Several files it names (`app/src/...`, the pending-command
+> protocol, `small-os-runtime.js`, the textarea app) are no longer live: they
+> were moved to `archive/retired/` (index: `archive/README.md`). The product
+> route today is Atomics + pdump (`src/wasm/xterm-atomics-pdump.html`), and
+> subprocesses are provided by the Process Service (`doc/process-service.md`).
+
 ## Boundary Rule
 
 Emacs owns editor semantics and low-level runtime safety.
@@ -43,6 +50,7 @@ identity, undo, kill-ring, minibuffer, buffer, or window semantics.
 | Preloaded State | pdump/pbootstrap and cold-loadup probes are diagnostic lanes; browser terminal route currently avoids returning to pdmp as the active product path. | Mixed: Emacs/pdumper owns object identity and relocation semantics; copied C/wasm probes expose status; JS may fetch/bootstrap artifacts for diagnostics. | Emacs C core plus C/wasm facade own preloaded-state identity, relocation, pure space, static roots, and retirement of bootstrap roots. JS only provides artifact bytes and diagnostics. | JS artifact handling can be mistaken for ownership of preloaded object identity; pdump diagnostics can accidentally become product startup. | Keep `wasmacs_os_preloaded_state_status` / load probes diagnostic until relocation/static-root semantics and explicit GC pass. |
 | Terminal/Tty | `tools/scripts/wasmacs-asyncify-host-library.js` installs fake TTY, TERM/TERMCAP, winsize, terminal byte queues, and stdout/stderr byte reporting; copied `sysdep.c` blocks tty reads through Asyncify. | Emscripten TTY/FS and JS worker own byte transport; Emacs C core owns terminal startup, redisplay, command loop, and key handling. | C/wasm facade owns terminal compatibility decisions; JS owns byte transport and renderer only. | JS TTY state can silently become a pty substitute; memory/runtime failure after first resume currently blocks real semantics smoke. | Add `wasmacs_os_terminal_state` diagnostic around fd tty status, termios mode, winsize, pending input, output count, and source waitpoint. |
 | Host Capability | JS provides wall-clock-ish runtime, environment, random/urandom, terminal bytes, browser events, and unavailable process/clipboard boundaries. | JS worker/main thread and Emscripten runtime. | JS remains host capability provider; C/wasm facade defines what capability is being requested and how failure is reported. | Broad JS shims can grow into product semantics or hide missing Emacs-required host APIs. | Add per-capability diagnostics only when Emacs source asks for them; keep process/pty/clipboard unavailable until a source-backed contract exists. |
+| Process (added 2026-11-13) | `src/runtime/process/wasmacs-kernel.js` (process table, fd tables, pipes, signals, scheduler) behind `emacs_spawn` / `get_child_status` / `kill` (patch `0006-process-service.patch`) and the `pipe2` / `poll` overrides of `tools/scripts/wasmacs-atomics-host-library.js`; processes are instances of the userland images (`src/userland`). | Emacs C core owns its process objects and child status; the JS kernel in the worker owns everything on the other side of the system calls. | Unchanged: the kernel has to be JS (only JS can create wasm instances and switch between them); it stays free of browser APIs and never touches Emacs objects. | JS owns low-level state (deliberately). | `tools/scripts/probe-process-service.mjs` |
 | Browser GUI Boundary | App UI renders current adapter state, terminal smoke output, file list, unavailable boundaries, and smoke results; xterm.js is still deferred. | Browser main thread/app UI. | Browser main thread owns rendering and user input collection only. Emacs C core owns minibuffer, undo, kill-ring, buffer, and window semantics. | Existing adapter smokes can be confused with real command-loop semantics; UI can accidentally fake editor behavior. | Keep real-route terminal smokes separate from adapter smokes. Add xterm.js only after byte-level tty I/O and OS memory/runtime blocker are stable. |
 
 ## Ambiguous or Unsafe Ownership
@@ -980,3 +988,28 @@ All xterm smoke tests: PASS.
 
 `startXtermSession` → `callMain(['--quick','--no-splash','--nw'])` — cold loadup, no pdump.
 With ASYNCIFY_REMOVE=eval_sub, this route works in browser Worker conditions (~1.5MB JS stack).
+
+## Process Service (2026-11-13)
+
+Processes were the last "explicit unavailable boundary" of the Host Capability
+Service. They are now a service of their own; `host.process` (programs of the
+host machine) remains unavailable.
+
+- Boundary: Emacs's process code is unchanged above `emacs_spawn`,
+  `get_child_status` and `kill`. Below them is a cooperative kernel in the
+  worker, and below that the userland images, each process a separate
+  WebAssembly instance with its own memory.
+- Ownership: the kernel's state (process table, descriptor tables, pipes,
+  signal state, run queue) is JS state. This is the one place where the
+  C/wasm-first rule is deliberately not followed: the operations the kernel
+  performs (instantiate a module, unwind and rewind another instance, copy a
+  memory for `fork`) exist only in JS. The kernel never holds a `Lisp_Object`
+  and never calls into Lisp; it calls exactly two Emacs exports
+  (`wasmacs_os_raise_signal`, `wasmacs_os_request_quit`).
+- Blocking Input Scheduler: the idle wait is now also the place where
+  processes run. `wasmacs_host_wait_for_input` returns 3 when process activity
+  needs Emacs, and `keyboard.c` answers with one `wait_reading_process_output`.
+- Filesystem: one shared Emscripten `FS`; a process may not leave anything
+  registered in it.
+
+Evidence and rules: `doc/process-service.md`.

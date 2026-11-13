@@ -8,6 +8,7 @@ export const SmallOsServices = Object.freeze({
   preloadedState: "preloaded-state",
   terminalTty: "terminal-tty",
   hostCapability: "host-capability",
+  process: "process",
   browserGuiBoundary: "browser-gui-boundary",
 });
 
@@ -40,6 +41,9 @@ export const CrossServiceChecks = Object.freeze({
   networkFilesystem: "Network Fetch x Filesystem",
   networkCapabilityPolicy: "Network Fetch x Capability Policy",
   hostCapabilityBrowserGui: "Host Capability x Browser GUI",
+  processInputScheduler: "Process x Input Scheduler",
+  processFilesystem: "Process x Filesystem",
+  processTerminal: "Process x Terminal",
 });
 
 export const EmacsSourceSurfaces = Object.freeze({
@@ -356,6 +360,38 @@ export const OsCompatibilityBoundaryInventory = Object.freeze({
     ],
     nextFacadeOrProbe: "wasmacs_os_host_capability_state",
   }),
+  // Emacs's process code (process.c, callproc.c) is unchanged and keeps its
+  // own state.  The other side of the system-call boundary -- process table,
+  // descriptor tables, pipes, signals, the scheduler -- is the kernel in
+  // src/runtime/process/wasmacs-kernel.js.  It is JS because creating wasm
+  // instances and switching between them is only possible from JS; it has no
+  // browser dependencies and never touches Emacs objects.
+  process: Object.freeze({
+    service: SmallOsServices.process,
+    currentOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.jsWorker,
+    ],
+    currentStateOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.jsWorker,
+    ],
+    desiredOwners: [
+      OwnershipLayers.emacsC,
+      OwnershipLayers.cWasmFacade,
+      OwnershipLayers.jsWorker,
+    ],
+    jsAllowedRoles: [JsRoles.hostCapabilityProvider, JsRoles.diagnosticHarness],
+    risk: BoundaryRisk.jsOwnsLowLevelState,
+    sourceSurfaces: [
+      EmacsSourceSurfaces.process,
+      EmacsSourceSurfaces.callproc,
+      EmacsSourceSurfaces.sysdep,
+      EmacsSourceSurfaces.keyboard,
+    ],
+    nextFacadeOrProbe: "tools/scripts/probe-process-service.mjs",
+  }),
   browserGuiBoundary: Object.freeze({
     service: SmallOsServices.browserGuiBoundary,
     currentOwners: [
@@ -602,6 +638,31 @@ export const SmallOsFacades = Object.freeze({
     status: FacadeStatus.productScaffold,
     acceptance: "url-retrieve and url-retrieve-synchronously return normal URL response buffers from host.network.fetch, package-refresh-contents can read archive metadata, and package installation writes only under /home/user/.emacs.d/elpa.",
   }),
+  processService: Object.freeze({
+    id: "process-service-facade",
+    capability: "Give Emacs's own process code (emacs_spawn, waitpid, kill, pipes, select) real subprocesses: other wasm programs run by a cooperative kernel inside the Emacs worker, sharing Emacs's filesystem.",
+    ownerServices: [
+      SmallOsServices.process,
+      SmallOsServices.blockingInputScheduler,
+      SmallOsServices.filesystemPersistence,
+      SmallOsServices.hostCapability,
+    ],
+    sourceSurfaces: [
+      EmacsSourceSurfaces.process,
+      EmacsSourceSurfaces.callproc,
+      EmacsSourceSurfaces.sysdep,
+      EmacsSourceSurfaces.keyboard,
+    ],
+    cWasmEntrypoints: [
+      "wasmacs_os_kill",
+      "wasmacs_os_raise_signal",
+      "wasmacs_os_request_quit",
+      "wasmacs_os_service_subprocesses",
+    ],
+    jsRole: JsRoles.hostCapabilityProvider,
+    status: FacadeStatus.productScaffold,
+    acceptance: "call-process and make-process start programs of the bundled userland through emacs_spawn; exit statuses, signals, pipe EOF and SIGCHLD reach Emacs through its unchanged process code; C-g ends a blocking wait with a quit.",
+  }),
 });
 
 export const SmallOsOperations = Object.freeze({
@@ -746,7 +807,28 @@ export const SmallOsOperations = Object.freeze({
       EmacsSourceSurfaces.callproc,
     ],
     treatment: BehaviorTreatment.product,
-    acceptance: "Unsupported process, pty, clipboard, and GUI paths report unavailable states instead of fake semantics.",
+    acceptance: "Unsupported pty, socket, clipboard, and GUI paths report unavailable states instead of fake semantics.",
+  }),
+  subprocess: Object.freeze({
+    id: "subprocess",
+    ownerServices: [
+      SmallOsServices.process,
+      SmallOsServices.blockingInputScheduler,
+      SmallOsServices.filesystemPersistence,
+    ],
+    crossServiceChecks: [
+      CrossServiceChecks.processInputScheduler,
+      CrossServiceChecks.processFilesystem,
+      CrossServiceChecks.processTerminal,
+    ],
+    sourceSurfaces: [
+      EmacsSourceSurfaces.process,
+      EmacsSourceSurfaces.callproc,
+      EmacsSourceSurfaces.sysdep,
+      EmacsSourceSurfaces.keyboard,
+    ],
+    treatment: BehaviorTreatment.product,
+    acceptance: "M-x shell, eshell, vc-git, Magit and M-x grep work against the bundled userland (BusyBox sh, git, GNU grep); an idle Emacs runs process filters and sentinels and sleeps otherwise; C-g interrupts a synchronous subprocess; a dead process leaves nothing reachable in the kernel or in the shared filesystem.",
   }),
 });
 

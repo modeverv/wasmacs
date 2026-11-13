@@ -31,9 +31,10 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
 const repoRoot = new URL("../..", import.meta.url).pathname;
+// The VS Code lane builds into build2/ (tools/scripts/build-emacs-browser-asyncify-spike.sh).
 const artifactDir =
   process.env.WASMACS_ARTIFACT_DIR ??
-  `${repoRoot}/build/artifacts/emacs-browser-asyncify-spike`;
+  `${repoRoot}/build2/artifacts/emacs-browser-asyncify-spike`;
 
 const defaultLogStem = `${repoRoot}/logs/browser-xterm-cold-loadup-failure`;
 const textLogPath =

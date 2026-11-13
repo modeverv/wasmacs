@@ -3,24 +3,39 @@ import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+// Drives the canonical app page in headless Chrome over the DevTools protocol.
+//
+//   node tools/scripts/run-browser-smoke.mjs [scenario...]     (default: xterm)
+//
+// Environment:
+//   CHROME_PATH                        the Chrome binary
+//   WASMACS_BROWSER_URL                page URL (default: the dev server, started if needed)
+//   WASMACS_BROWSER_SMOKE_LOG          log file (default: logs/browser-runner-smoke.txt)
+//   WASMACS_BROWSER_SMOKE_SPAWNS       processes started in a row by "shell" (default 300)
+//   WASMACS_BROWSER_SMOKE_SCREENSHOT   write a PNG of the page at the end of "shell"
+//   WASMACS_BROWSER_JS_FLAGS           extra V8 flags, e.g. --expose-gc
 const chromePath = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const repoRoot = new URL("../..", import.meta.url).pathname;
 const logPath = process.env.WASMACS_BROWSER_SMOKE_LOG || `${repoRoot}/logs/browser-runner-smoke.txt`;
+// Scenarios run against the canonical app page (Atomics + pdump).  The
+// scenarios of the retired textarea app live in
+// archive/retired/textarea-app-command-bridge/tools/scripts/run-browser-smoke.legacy-scenarios.mjs.
+//   xterm    the page boots Emacs from the bundled pdmp and reaches its idle wait
+//   shell    on top of that: M-x shell, git, a pipeline through GNU grep,
+//            C-c C-c, C-g during a blocking call-process, M-x grep, hundreds
+//            of processes in a row, and Emacs really sleeps while idle
+//   persist  a git repository made in /home/user is still there, clean and
+//            with its executable bits, after the page is loaded again
+const knownScenarios = new Set(["xterm", "shell", "persist"]);
 const scenarios = process.argv.slice(2);
 if (scenarios.length === 0) scenarios.push("xterm");
-const legacyScenarios = new Set([
-  "minibuffer",
-  "editing",
-  "files",
-  "boundaries",
-  "asyncify",
-  "interactive-loop",
-  "interactive-semantics",
-]);
-const usesLegacyIndex = scenarios.some((scenario) => legacyScenarios.has(scenario));
-const defaultAppPath = usesLegacyIndex
-  ? "/?clear-storage=1&browser-smoke=minibuffer"
-  : "/app/xterm-atomics-pdump.html?clear-storage=1";
+for (const scenario of scenarios) {
+  if (!knownScenarios.has(scenario)) {
+    console.error(`unknown browser smoke scenario: ${scenario} (known: ${[...knownScenarios].join(", ")})`);
+    process.exit(2);
+  }
+}
+const defaultAppPath = "/app/xterm-atomics-pdump.html?clear-storage=1";
 const appUrl = process.env.WASMACS_BROWSER_URL || `http://127.0.0.1:5173${defaultAppPath}`;
 const evidence = [];
 
@@ -42,7 +57,10 @@ class CdpClient {
 
   receive(data) {
     const message = JSON.parse(data);
-    if (!message.id) return;
+    if (!message.id) {
+      if (this.onEvent && message.method) this.onEvent(message.method, message.params || {}, message.sessionId);
+      return;
+    }
     const pending = this.pending.get(message.id);
     if (!pending) return;
     this.pending.delete(message.id);
@@ -100,20 +118,13 @@ async function waitFor(client, sessionId, expression, timeoutMs = 60_000, label 
   await logEvent(`WAIT_START ${label} timeout=${timeoutMs}`);
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    if (await evaluate(client, sessionId, expression)) {
+    // The page may be reloading (coi-serviceworker does that once): an
+    // evaluation that fails is "not yet".
+    if (await evaluate(client, sessionId, expression).catch(() => false)) {
       await logEvent(`WAIT_PASS ${label} elapsed_ms=${Date.now() - start}`);
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  
-  try {
-    const stateResult = await evaluate(client, sessionId, "window.__wasmacsSmoke ? window.__wasmacsSmoke.state() : 'no smoke'");
-    console.error("Timeout! State dump:", stateResult);
-    await logEvent(`WAIT_TIMEOUT_STATE ${label} ${JSON.stringify(stateResult)}`);
-  } catch (e) {
-    console.error("Timeout! Could not dump state:", e);
-    await logEvent(`WAIT_TIMEOUT_STATE_FAILED ${label} ${e && e.stack ? e.stack : String(e)}`);
   }
   
   throw new Error(`timed out waiting for ${expression}`);
@@ -158,31 +169,6 @@ function assertIncludes(name, value, needle) {
   }
 }
 
-async function smokeState(client, sessionId) {
-  return evaluate(client, sessionId, "window.__wasmacsSmoke.state()");
-}
-
-async function waitForSmokeIdle(client, sessionId, timeoutMs = 30_000) {
-  await logEvent(`WAIT_IDLE_START timeout=${timeoutMs}`);
-  const result = await evaluate(
-    client,
-    sessionId,
-    `Promise.race([
-      window.__wasmacsSmoke.waitForIdle().then(() => ({ passed: true, state: window.__wasmacsSmoke.state() })),
-      new Promise((resolve) => setTimeout(() => resolve({
-        passed: false,
-        error: "waitForIdle timeout",
-        state: window.__wasmacsSmoke.state()
-      }), ${timeoutMs}))
-    ])`,
-  );
-  await logEvent(`WAIT_IDLE_RESULT ${JSON.stringify(result)}`);
-  if (!result?.passed) {
-    throw new Error(`waitForIdle failed: ${JSON.stringify(result)}`);
-  }
-  return result;
-}
-
 const userDataDir = await mkdtemp(join(tmpdir(), "wasmacs-browser-smoke-"));
 const appServer = await ensureAppServer(appUrl);
 await writeFile(logPath, `URL:${appUrl}\nSCENARIOS:${scenarios.join(",")}\n`);
@@ -190,7 +176,7 @@ await logEvent("SMOKE_START");
 const chrome = spawn(chromePath, [
   "--headless=new",
   "--disable-gpu",
-  "--js-flags=--stack_size=65500",
+  `--js-flags=--stack_size=65500${process.env.WASMACS_BROWSER_JS_FLAGS ? ` ${process.env.WASMACS_BROWSER_JS_FLAGS}` : ""}`,
   "--no-first-run",
   "--no-default-browser-check",
   "--remote-debugging-port=0",
@@ -207,15 +193,59 @@ try {
   const { targetId } = await client.send("Target.createTarget", { url: "about:blank" });
   const { sessionId } = await client.send("Target.attachToTarget", { targetId, flatten: true });
   await client.send("Page.enable", {}, sessionId);
-  await logEvent(`PAGE_NAVIGATE ${appUrl}`);
-  await client.send("Page.navigate", { url: appUrl }, sessionId);
-  await waitFor(client, sessionId, "document.readyState === 'complete' || document.readyState === 'interactive'", 30_000, "document-ready");
-
-  if (scenarios.includes("xterm")) {
-    await logEvent("SCENARIO_START xterm");
+  // Warnings and errors of the page and of its workers (Emacs runs in one)
+  // go to the log: that is where a failing scenario explains itself.
+  client.onEvent = (method, params, eventSession) => {
+    if (method === "Target.attachedToTarget") {
+      client.send("Runtime.enable", {}, params.sessionId).catch(() => {});
+      client.send("Runtime.runIfWaitingForDebugger", {}, params.sessionId).catch(() => {});
+    } else if (method === "Runtime.consoleAPICalled" && (params.type === "warning" || params.type === "error")) {
+      const text = (params.args || []).map((arg) => arg.value ?? arg.description ?? "").join(" ");
+      logEvent(`CONSOLE ${eventSession === sessionId ? "page" : "worker"} ${params.type}: ${text.slice(0, 600)}`).catch(() => {});
+    } else if (method === "Runtime.exceptionThrown") {
+      const details = params.exceptionDetails || {};
+      logEvent(`EXCEPTION ${eventSession === sessionId ? "page" : "worker"}: ${(details.exception?.description || details.text || "").slice(0, 600)}`).catch(() => {});
+    }
+  };
+  await client.send("Runtime.enable", {}, sessionId);
+  await client.send("Target.setAutoAttach", { autoAttach: true, waitForDebuggerOnStart: false, flatten: true }, sessionId);
+  // Rows keep the blanks Emacs wrote; compare without them.
+  const screen = async () => (await evaluate(client, sessionId, "window.__wasmacsDebugScreenText()"))
+    .split("\n").map((row) => row.trimEnd()).join("\n");
+  const sendKeys = (text) => evaluate(client, sessionId,
+    `window.__wasmacsDebugSendInputBytes(${JSON.stringify([...Buffer.from(text, "latin1")])}); true`);
+  const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  const waitForScreen = async (pattern, label, timeoutMs = 30_000) => {
+    const start = Date.now();
+    let text = "";
+    while (Date.now() - start < timeoutMs) {
+      text = await screen();
+      if (pattern.test(text)) {
+        await logEvent(`SCREEN_PASS ${label} elapsed_ms=${Date.now() - start}`);
+        evidence.push(`PASS ${label} (${Date.now() - start}ms)`);
+        return text;
+      }
+      await pause(100);
+    }
+    await logEvent(`SCREEN_FAIL ${label}\n${text}`);
+    throw new Error(`timed out waiting for ${label}; screen:\n${text}`);
+  };
+  // Load the page and start Emacs (the Start button), until it is idle.
+  const bootPage = async (label) => {
+    await logEvent(`PAGE_NAVIGATE ${label} ${appUrl}`);
+    await client.send("Page.navigate", { url: appUrl }, sessionId);
+    // On a static host the service worker installs itself and reloads the
+    // page before SharedArrayBuffer is available.
+    await waitFor(client, sessionId, "document.readyState === 'complete' && window.crossOriginIsolated === true", 60_000, "cross-origin-isolated");
     await waitFor(client, sessionId, "Boolean(document.querySelector('#start-btn') && document.querySelector('#xterm-container'))", 30_000, "xterm-page-ready");
     await evaluate(client, sessionId, "document.querySelector('#start-btn').click(); true");
     await waitFor(client, sessionId, "document.querySelector('#status')?.classList.contains('interactive')", 180_000, "xterm-interactive-status");
+    await waitForScreen(/\*scratch\*/, `${label}: emacs is up`, 60_000);
+  };
+
+  {
+    await logEvent("SCENARIO_START xterm");
+    await bootPage("boot");
     const xtermState = await evaluate(client, sessionId, `({
       status: document.querySelector('#status')?.textContent,
       className: document.querySelector('#status')?.className,
@@ -231,215 +261,92 @@ try {
     console.log("browser smoke scenario passed: xterm");
   }
 
-  if (usesLegacyIndex) {
-    await waitFor(client, sessionId, "Boolean(window.__wasmacsSmoke && document.querySelector('#minibuffer'))", 300_000, "smoke-api-and-minibuffer");
-    await waitForSmokeIdle(client, sessionId, 30_000);
+  if (scenarios.includes("shell")) {
+    await logEvent("SCENARIO_START shell");
+    // Idle waits Emacs entered per second (each one posts a message).
+    const idleWaitsPerSecond = async (label) => {
+      const count = () => evaluate(client, sessionId, "window.__wasmacsDebugIdleWaitCount");
+      const before = await count();
+      await pause(3000);
+      const rate = ((await count()) - before) / 3;
+      await logEvent(`IDLE_WAITS ${label} ${rate.toFixed(1)}/s`);
+      // Emacs's own timers wake it a few times per second at most; hundreds
+      // would mean it is spinning instead of sleeping in Atomics.wait.
+      if (rate > 20) throw new Error(`shell scenario: Emacs is not idle (${label}): ${rate.toFixed(1)} waits/s`);
+      evidence.push(`PASS idle ${label} (${rate.toFixed(1)} waits/s)`);
+    };
+
+    await idleWaitsPerSecond("before any process");
+
+    await sendKeys("\x1bxshell\r");
+    await waitForScreen(/^\S* ?[#$]$/m, "M-x shell prompt", 60_000);
+    await sendKeys("echo answer-$((6 * 7))\r");
+    await waitForScreen(/^answer-42$/m, "command output");
+    await sendKeys("git --version\r");
+    await waitForScreen(/^git version 2\./m, "git runs from the shell", 60_000);
+    await sendKeys("cd /tmp && git init -q demo && cd demo && echo hello > a.txt && git add a.txt && git commit -q -m first && git log --oneline | wc -l\r");
+    await waitForScreen(/^1$/m, "git init, add, commit, log");
+    await sendKeys("ls /bin | grep -c .\r");
+    await waitForScreen(/^1[0-9][0-9]$/m, "pipeline through GNU grep", 60_000);
+    await sendKeys("sleep 100\r");
+    await pause(500);
+    await sendKeys("\x03\x03");
+    // The output can land right behind the prompt that the interrupt
+    // brought back, so look for text that only the command's output has.
+    await sendKeys("echo back-$((40 + 2))\r");
+    await waitForScreen(/back-42$/m, "C-c C-c interrupts the job");
+
+    // Emacs blocked in a synchronous subprocess still sees C-g.
+    await sendKeys('\x1b:(call-process "sleep" nil nil nil "30")\r');
+    await pause(700);
+    await sendKeys("\x07");
+    await waitForScreen(/Quit/, "C-g interrupts call-process", 10_000);
+
+    await sendKeys("\x1bxgrep\r");
+    await waitForScreen(/Run grep/, "M-x grep prompt");
+    await sendKeys("root /etc/passwd\r");
+    await waitForScreen(/Grep finished with 1 match found/, "M-x grep finds the line", 60_000);
+
+    // Every process is a new wasm instance with its own memory: a few
+    // hundred in a row must not exhaust the tab.
+    await sendKeys("\x1bxshell\r");
+    await pause(300);
+    const spawnCount = Number(process.env.WASMACS_BROWSER_SMOKE_SPAWNS || 300);
+    await sendKeys(`i=0; n=0; while [ $i -lt ${spawnCount} ]; do git --version > /dev/null && n=$((n + 1)); i=$((i + 1)); done; echo spawned-$((n * 2))\r`);
+    await waitForScreen(/spawned-[0-9]+$/m, `${spawnCount} git processes in a row`, 300_000);
+    const spawned = /spawned-([0-9]+)$/m.exec(await screen());
+    if (!spawned || Number(spawned[1]) !== spawnCount * 2) {
+      throw new Error(`shell scenario: only ${spawned ? Number(spawned[1]) / 2 : "?"} of ${spawnCount} processes ran`);
+    }
+
+    await idleWaitsPerSecond("after the processes");
+    if (process.env.WASMACS_BROWSER_SMOKE_SCREENSHOT) {
+      const shot = await client.send("Page.captureScreenshot", { format: "png" }, sessionId);
+      await writeFile(process.env.WASMACS_BROWSER_SMOKE_SCREENSHOT, Buffer.from(shot.data, "base64"));
+    }
+    await logEvent("SCENARIO_PASS shell");
+    console.log("browser smoke scenario passed: shell");
   }
 
-  if (scenarios.includes("minibuffer")) {
-    await logEvent("SCENARIO_START minibuffer");
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.clearPendingCommandEvents(); true");
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ ctrlKey: true, key: 'x' }); true");
-    const prefixState = await evaluate(client, sessionId, "window.__wasmacsSmoke.state()");
-    await logEvent(`MINIBUFFER_PREFIX_STATE ${JSON.stringify(prefixState)}`);
-    if (prefixState.minibuffer !== "C-x" || prefixState.status !== "C-x") {
-      throw new Error(`expected C-x prefix in minibuffer, got ${JSON.stringify(prefixState)}`);
-    }
+  if (scenarios.includes("persist")) {
+    await logEvent("SCENARIO_START persist");
+    if (scenarios.includes("shell")) await bootPage("fresh boot");
+    await sendKeys("\x1bxshell\r");
+    await waitForScreen(/^\S* ?[#$]$/m, "persist: shell prompt", 60_000);
+    await sendKeys("cd /home/user && git init -q repo && cd repo && printf '#!/bin/sh\\necho ran-$((20 + 3))\\n' > run.sh && chmod +x run.sh && echo text > notes.txt && git add . && git commit -q -m first && echo committed-$(git status --porcelain | wc -l)\r");
+    await waitForScreen(/^committed-0$/m, "persist: repository created and clean");
+    // /home/user is saved when Emacs goes idle; the page stores it.
+    await pause(2500);
 
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ ctrlKey: true, key: 'f' }); true");
-    await waitFor(client, sessionId, "window.__wasmacsSmoke.state().status === 'minibuffer unavailable'", 30_000, "minibuffer-unavailable");
-    const unavailableState = await evaluate(client, sessionId, "window.__wasmacsSmoke.state()");
-    await logEvent(`MINIBUFFER_UNAVAILABLE_STATE ${JSON.stringify(unavailableState)}`);
-    if (!unavailableState.minibuffer.includes("minibuffer unavailable")) {
-      throw new Error(`expected minibuffer unavailable echo, got ${JSON.stringify(unavailableState)}`);
-    }
-    const pendingEvents = await evaluate(client, sessionId, "window.__wasmacsSmoke.pendingCommandEvents()");
-    await logEvent(`MINIBUFFER_PENDING_EVENTS ${JSON.stringify(pendingEvents)}`);
-    const pendingStates = pendingEvents
-      .filter((event) => event.commandType === "find-file")
-      .map((event) => event.state);
-    if (!pendingStates.includes("starting") || !pendingStates.includes("unavailable")) {
-      throw new Error(`expected find-file pending-command starting/unavailable events, got ${JSON.stringify(pendingEvents)}`);
-    }
-    if (!pendingEvents.some((event) => event.commandType === "find-file" && event.minibuffer === "Find file: ")) {
-      throw new Error(`expected find-file pending-command minibuffer prompt, got ${JSON.stringify(pendingEvents)}`);
-    }
-    evidence.push("PASS minibuffer echo boundary");
-    evidence.push("PASS pending-command find-file starting unavailable");
-    await logEvent("SCENARIO_PASS minibuffer");
-    console.log("browser smoke scenario passed: minibuffer");
-  }
-
-  if (scenarios.includes("editing")) {
-    await logEvent("SCENARIO_START editing");
-    assertPassed(
-      "realUndoSmoke",
-      await evaluate(client, sessionId, "window.__wasmacsSmoke.realUndoSmoke()", 300_000),
-    );
-    assertPassed(
-      "repeatedUndoSmoke",
-      await evaluate(client, sessionId, "window.__wasmacsSmoke.repeatedUndoSmoke()", 300_000),
-    );
-    assertPassed(
-      "redoSmoke",
-      await evaluate(client, sessionId, "window.__wasmacsSmoke.redoSmoke()", 300_000),
-    );
-    evidence.push("PASS real undo repeated undo redo browser hooks");
-    await logEvent("SCENARIO_PASS editing");
-    console.log("browser smoke scenario passed: editing");
-  }
-
-  if (scenarios.includes("files")) {
-    await logEvent("SCENARIO_START files");
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.open('/home/user/projects/demo.txt')", 300_000);
-    const project = await evaluate(client, sessionId, "window.__wasmacsSmoke.ensureMarker()", 300_000);
-    assertIncludes("project file marker", project.text, "Saved by Emacs core.");
-    const reloaded = await evaluate(client, sessionId, "window.__wasmacsSmoke.reload()", 300_000);
-    assertIncludes("project file reload", reloaded.text, "Saved by Emacs core.");
-
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.resetFile('/home/user/projects/switch-a.txt', '')", 300_000);
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ key: 'A' }); true");
-    await waitForSmokeIdle(client, sessionId, 30_000);
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.open('/home/user/projects/switch-b.txt')", 300_000);
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ key: 'B' }); true");
-    await waitForSmokeIdle(client, sessionId, 30_000);
-    const switchedBack = await evaluate(client, sessionId, "window.__wasmacsSmoke.switchBuffer('/home/user/projects/switch-a.txt')", 300_000);
-    const files = await evaluate(client, sessionId, "window.__wasmacsSmoke.files()", 30_000);
-    assertIncludes("file switch text", switchedBack.text, "A");
-    if (!files.some((entry) => entry.text === "~/projects/switch-a.txt" && entry.current)) {
-      throw new Error(`expected switch-a current file entry, got ${JSON.stringify(files)}`);
-    }
-
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.resetFile('/home/user/projects/autosave-a.txt', '')", 300_000);
-    const draft = await evaluate(client, sessionId, "window.__wasmacsSmoke.setTextarea('TEXTAREA-DRAFT')", 30_000);
-    if (draft.state !== "modified") throw new Error(`expected textarea modified state, got ${JSON.stringify(draft)}`);
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.open('/home/user/projects/autosave-b.txt')", 300_000);
-    const afterReturn = await evaluate(client, sessionId, "window.__wasmacsSmoke.open('/home/user/projects/autosave-a.txt')", 300_000);
-    if (afterReturn.text !== "TEXTAREA-DRAFT") {
-      throw new Error(`expected textarea draft to survive file switch, got ${JSON.stringify(afterReturn)}`);
-    }
-    evidence.push("PASS project reload file switching textarea autosave");
-    await logEvent("SCENARIO_PASS files");
-    console.log("browser smoke scenario passed: files");
-  }
-
-  if (scenarios.includes("boundaries")) {
-    await logEvent("SCENARIO_START boundaries");
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.resetFile('/home/user/projects/process-boundary.txt', '')", 300_000);
-    const processState = await evaluate(client, sessionId, "window.__wasmacsSmoke.processProbe()", 300_000);
-    if (processState.status !== "process unavailable" || processState.state !== "process unavailable") {
-      throw new Error(`expected process unavailable, got ${JSON.stringify(processState)}`);
-    }
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ key: 'R' }); true");
-    await waitForSmokeIdle(client, sessionId, 30_000);
-    assertIncludes("worker recovery after process unavailable", (await smokeState(client, sessionId)).text, "R");
-
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.resetFile('/home/user/projects/clipboard-boundary.txt', '')", 300_000);
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ key: 'C' }); true");
-    await waitForSmokeIdle(client, sessionId, 30_000);
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ ctrlKey: true, key: 'y' }); true");
-    await waitFor(client, sessionId, "window.__wasmacsSmoke.state().status === 'clipboard unavailable'", 300_000);
-    const clipboardState = await smokeState(client, sessionId);
-    if (clipboardState.state !== "clipboard unavailable" || (clipboardState.text !== "C" && clipboardState.text !== "C\n")) {
-      throw new Error(`expected clipboard unavailable without text loss, got ${JSON.stringify(clipboardState)}`);
-    }
-
-    await evaluate(client, sessionId, "window.__wasmacsSmoke.keydown({ ctrlKey: true, key: 'g' }); true");
-    const quitState = await smokeState(client, sessionId);
-    if (quitState.status !== "keyboard quit") {
-      throw new Error(`expected keyboard quit, got ${JSON.stringify(quitState)}`);
-    }
-    evidence.push("PASS process clipboard keyboard quit boundaries");
-    await logEvent("SCENARIO_PASS boundaries");
-    console.log("browser smoke scenario passed: boundaries");
-  }
-
-  if (scenarios.includes("asyncify")) {
-    await logEvent("SCENARIO_START asyncify");
-    const asyncify = await evaluate(
-      client,
-      sessionId,
-      "window.__wasmacsSmoke.asyncifyMinibufferReadSmoke('wasmacs-input.txt')",
-      300_000,
-    );
-    if (!asyncify?.passed && String(asyncify?.error || "").includes("Maximum call stack size exceeded")) {
-      evidence.push("KNOWN_BLOCKER asyncify browser worker stack");
-      await logEvent(`SCENARIO_KNOWN_BLOCKER asyncify ${JSON.stringify(asyncify)}`);
-      console.log("browser smoke scenario recorded known blocker: asyncify");
-    } else {
-      assertPassed("asyncifyMinibufferReadSmoke", asyncify);
-      if (asyncify.readback !== "wasmacs-input.txt") {
-        throw new Error(`expected asyncify minibuffer readback, got ${JSON.stringify(asyncify)}`);
-      }
-      const asyncifyStates = asyncify.events
-        .filter((event) => event.commandType === "minibuffer-read")
-        .map((event) => event.state);
-      for (const state of ["starting", "pending-input", "resuming", "completed"]) {
-        if (!asyncifyStates.includes(state)) {
-          throw new Error(`expected asyncify minibuffer state ${state}, got ${JSON.stringify(asyncify.events)}`);
-        }
-      }
-      evidence.push("PASS asyncify pending-input minibuffer read");
-      await logEvent(`SCENARIO_PASS asyncify ${JSON.stringify(asyncify)}`);
-      console.log("browser smoke scenario passed: asyncify");
-    }
-  }
-
-  if (scenarios.includes("asyncify-boot")) {
-    await logEvent("SCENARIO_START asyncify-boot");
-    const noLoadup = await evaluate(
-      client,
-      sessionId,
-      "window.__wasmacsSmoke.asyncifyNoLoadupBootSmoke()",
-      120_000,
-    );
-    if (noLoadup?.passed) {
-      evidence.push("PASS asyncify no-loadup browser worker boot");
-      await logEvent(`SCENARIO_PASS asyncify-boot ${JSON.stringify(noLoadup)}`);
-      console.log("browser smoke scenario passed: asyncify-boot");
-    } else {
-      evidence.push(`KNOWN_BLOCKER asyncify no-loadup boot status ${noLoadup?.status ?? "unknown"}`);
-      await logEvent(`SCENARIO_KNOWN_BLOCKER asyncify-boot ${JSON.stringify(noLoadup)}`);
-      console.log("browser smoke scenario recorded known blocker: asyncify-boot");
-    }
-  }
-
-  if (scenarios.includes("interactive-loop")) {
-    await logEvent("SCENARIO_START interactive-loop");
-    const interactiveLoop = await evaluate(
-      client,
-      sessionId,
-      "window.__wasmacsSmoke.asyncifyInteractiveLoopProbeSmoke()",
-      120_000,
-    );
-    if (interactiveLoop?.passed) {
-      evidence.push("PASS asyncify interactive command-loop read-char waitpoint");
-      await logEvent(`SCENARIO_PASS interactive-loop ${JSON.stringify(interactiveLoop)}`);
-      console.log("browser smoke scenario passed: interactive-loop");
-    } else {
-      evidence.push("KNOWN_BLOCKER asyncify interactive command-loop waitpoint");
-      await logEvent(`SCENARIO_KNOWN_BLOCKER interactive-loop ${JSON.stringify(interactiveLoop)}`);
-      console.log("browser smoke scenario recorded known blocker: interactive-loop");
-    }
-  }
-
-  if (scenarios.includes("interactive-semantics")) {
-    await logEvent("SCENARIO_START interactive-semantics");
-    const interactiveSemantics = await evaluate(
-      client,
-      sessionId,
-      "window.__wasmacsSmoke.asyncifyInteractiveSemanticsProbeSmoke()",
-      300_000,
-    );
-    if (interactiveSemantics?.passed) {
-      evidence.push("PASS asyncify real command-loop minibuffer undo buffer window semantics");
-      await logEvent(`SCENARIO_PASS interactive-semantics ${JSON.stringify(interactiveSemantics)}`);
-      console.log("browser smoke scenario passed: interactive-semantics");
-    } else {
-      evidence.push("KNOWN_BLOCKER asyncify real command-loop semantics blocked by OS compatibility memory/runtime layer");
-      await logEvent(`SCENARIO_KNOWN_BLOCKER interactive-semantics ${JSON.stringify(interactiveSemantics)}`);
-      console.log("browser smoke scenario recorded known blocker: interactive-semantics");
-    }
+    await bootPage("second boot");
+    await sendKeys("\x1bxshell\r");
+    await waitForScreen(/^\S* ?[#$]$/m, "persist: shell prompt after reload", 60_000);
+    await sendKeys("cd /home/user/repo && ls -l run.sh | cut -c1-10 && ./run.sh && echo status-$(git status --porcelain | wc -l)-log-$(git log --oneline | wc -l)\r");
+    await waitForScreen(/^-rwxr-xr-x$/m, "persist: executable bit survived");
+    await waitForScreen(/^ran-23$/m, "persist: script runs");
+    await waitForScreen(/^status-0-log-1$/m, "persist: repository is clean after reload");
+    await logEvent("SCENARIO_PASS persist");
+    console.log("browser smoke scenario passed: persist");
   }
 
   console.log(`browser smoke passed: ${scenarios.join(",")} ${appUrl}`);

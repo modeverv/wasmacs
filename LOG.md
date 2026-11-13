@@ -3233,3 +3233,53 @@ Validation:
 - `npm run test:xterm-manual-app-smoke` passed.
 
 **vendor/emacs unchanged.**
+
+## Task M261113a: Canonical route and archive
+
+Request: "テストで守りながら正規の現在ルートを明確にするためoldや捨てられた仕組みはarchiveディレクトリに移動させてください。"
+
+- Identified the product route as Atomics + pdump + xterm.js
+  (`src/wasm/xterm-atomics-pdump.html`, `emacs-atomics-pdump-worker.js`,
+  `wasmacs-atomics-host-library.js`, `build-emacs-browser-atomics-pdump-profile.sh`)
+  and the VS Code `.wasifs` lane as the one live side lane.
+- Moved 145 tracked files to `archive/retired/<mechanism>/<original path>` with
+  `git mv`; rewrote `archive/README.md` as the index.
+- Replaced the stale `src/c/patches/0001` and the inline perl patching of the
+  product build by real unified diffs `0001..0005` plus
+  `src/build/apply-emacs-patches.sh`; the rebuilt `temacs.wasm` was byte
+  identical to the June artifact.
+- Added `tests/runtime/canonical-route.test.js` and
+  `tests/runtime/emacs-patch-layer.test.js`.
+
+Validation: `npm test` 109/110 (PowerShell proxy sample fails on this machine,
+pre-existing); `test:artifacts`, `test:product`, `test:vscode-lane` pass.
+
+**vendor/emacs unchanged.**
+
+## Task M261113b: Process Service (shell, git, grep, Magit)
+
+Request: "M-x shellやgitやemacsからプロセスを起動し使用できるようにos-compatible layerを拡張させてください。"
+and later "grepも動くようにしてほしい。" (target: git, Magit basics, eshell or shell).
+
+- Kernel in the worker (`src/runtime/process/wasmacs-kernel.js`), per-process
+  runtime (`src/runtime/process/child/`), Emacs seam (`0006`, `0007`, host
+  library), userland builds (`src/userland`: BusyBox 1.38.0, git 2.52.1, GNU
+  grep 3.12), worker loader, user image improvements. See
+  `doc/process-service.md` and the PLAN.md phase of the same name.
+- Things that only showed up in a real browser: the idle ping-pong between
+  page and worker (4200 waits/s), memory exhaustion after ~116 git processes
+  (a `SOCKFS` mount per process in the shared FS), both fixed and now tested.
+
+Validation:
+
+- `node tests/process/run-kernel-tests.mjs`: 39/39.
+- `node tools/scripts/probe-process-service.mjs`: 33/33.
+- `node tools/scripts/run-browser-smoke.mjs shell persist`: PASS (headless
+  Chrome 157).
+- `npm test`: 109/110 (same pre-existing PowerShell failure).
+- `npm run test:artifacts`, `test:product`, `test:vscode-lane`: PASS.
+
+Not done: pty / `M-x term`, job control, sockets and git network transports,
+GNU diff for `ediff`.
+
+**vendor/emacs unchanged.**
