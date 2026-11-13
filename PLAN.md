@@ -5214,6 +5214,17 @@ Validation:
   saved contents and zero live processes after exit.
 - Evidence: `logs/ediff-probe.txt`, `logs/ediff-probe-docs.txt`,
   `logs/browser-ediff-smoke.txt`, `logs/browser-ediff-merge.png`.
+- Published Pages verification: Actions run `43439773576` succeeded for
+  commit `66902d7`; all eight new/updated userland assets match the committed
+  bytes (2026-11-13 23:09:38 JST). The public URL also passed the Ediff Chrome
+  scenario, including copy, ancestor conflict resolution, exact saved merge
+  contents and process cleanup. Evidence: `logs/browser-ediff-public-smoke.txt`
+  and `logs/browser-ediff-public-merge.png`.
+- The smoke runner now probes the supplied page URL (Pages lives under
+  `/wasmacs/`, while the domain root is 404) and does not try to start a local
+  server for an unavailable remote origin. The default local URL also passed
+  the Ediff scenario after this change, starting its own server from no existing
+  listener; browser/server processes were cleaned up after both runs.
 - Standalone Process Service harness: 27 executions including context format,
   case/regex options, missing final newline and descriptor/process cleanup.
 - Re-running `src/userland/build.sh diffutils` reused both link outputs;

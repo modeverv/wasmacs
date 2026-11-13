@@ -143,8 +143,12 @@ async function isAppServerReady(url) {
 }
 
 async function ensureAppServer(url) {
-  const origin = new URL(url).origin;
-  if (await isAppServerReady(origin)) return undefined;
+  const target = new URL(url);
+  const origin = target.origin;
+  if (await isAppServerReady(url)) return undefined;
+  if (!["localhost", "127.0.0.1", "[::1]"].includes(target.hostname)) {
+    throw new Error(`app page is unavailable at ${url}; refusing to start a local server for a remote origin`);
+  }
 
   const server = spawn(process.execPath,  ["tools/scripts/serve-app.mjs"], {
     cwd: repoRoot,
@@ -153,7 +157,7 @@ async function ensureAppServer(url) {
   });
   const start = Date.now();
   while (Date.now() - start < 20_000) {
-    if (await isAppServerReady(origin)) return server;
+    if (await isAppServerReady(url)) return server;
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
   server.kill("SIGTERM");
