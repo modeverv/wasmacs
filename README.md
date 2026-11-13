@@ -454,18 +454,6 @@ doc/small-os-for-emacs.md
 - Product behavior and diagnostic behavior are kept separate.
 - The low-level substrate is C/wasm-first. JavaScript remains the browser coordinator, host capability provider, and diagnostic harness.
 
-## In Development: VS Code `.wasifs` Extension
-
-The VS Code `.wasifs` extension is a separate lane from the Pages bundle.
-
-```sh
-make vscode-build
-```
-
-This command generates VS Code-only runtime artifacts under `build2/artifacts/` and the webview app bundle under `vscode/app/`. It does not update `docs/app` or `docs/artifacts`.
-
-This keeps the GitHub Pages browser app and the VS Code webview extension experiment coexisting in the same repository while keeping artifact ownership separate.
-
 ## Development Notes
 
 This project is not only a browser port of Emacs. It is also an attempt to provide, inside the browser, the small compatibility OS that Emacs expects.
