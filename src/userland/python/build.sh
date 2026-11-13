@@ -45,7 +45,8 @@ if [ ! -f "${tarball}" ]; then
 fi
 actual=$(shasum -a 256 "${tarball}" | awk '{print $1}')
 [ "${actual}" = "${PYTHON_SHA256}" ] || die "SHA256 mismatch for ${tarball}: ${actual}"
-source_key=$(shasum -a 256 "${here}"/patches/*.patch | shasum -a 256 | awk '{print $1}')
+source_key=$(shasum -a 256 "${here}"/patches/*.patch "${here}"/Modules/*.c "${here}"/Lib/*.py \
+  | shasum -a 256 | awk '{print $1}')
 if [ "$(cat "${src}/.wasmacs-source-key" 2>/dev/null)" != "${source_key}" ]; then
   say "extracting and patching CPython ${PYTHON_VERSION}"
   rm -rf "${src}" "${bld}"
@@ -53,6 +54,9 @@ if [ "$(cat "${src}/.wasmacs-source-key" 2>/dev/null)" != "${source_key}" ]; the
   for patchfile in "${here}"/patches/*.patch; do
     patch -d "${src}" -p1 < "${patchfile}"
   done
+  # wasmacs's own modules (Setup.local and patches/ refer to them).
+  cp "${here}"/Modules/*.c "${src}/Modules/"
+  cp "${here}"/Lib/*.py "${src}/Lib/"
   printf '%s\n' "${source_key}" > "${src}/.wasmacs-source-key"
 fi
 

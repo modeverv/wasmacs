@@ -197,7 +197,7 @@
         "python3",
         "python"
       ],
-      "wasmBytes": 8869214,
+      "wasmBytes": 8969786,
       "directories": [
         "/usr/lib/python3.14/lib-dynload"
       ],
@@ -205,7 +205,7 @@
         {
           "source": "python314.zip",
           "path": "/usr/lib/python314.zip",
-          "bytes": 10739028
+          "bytes": 10741348
         },
         {
           "source": "python314-os.py",

@@ -8,7 +8,7 @@ import {
   batchEval, interactiveSession, buildArtifactDir, buildUserlandDir,
   docsArtifactDir, docsUserlandDir, repoRoot,
 } from "./lib/pdump-node-harness.mjs";
-import { pythonBatchCases, pythonReplSteps } from "../../tests/process/python-cases.mjs";
+import { fakeBrowserHttp, pythonBatchCases, pythonReplSteps } from "../../tests/process/python-cases.mjs";
 
 const docs = process.env.WASMACS_PROCESS_PROBE_BUNDLE === "docs";
 const boot = { artifactDir: docs ? docsArtifactDir : buildArtifactDir, userland: docs ? docsUserlandDir : buildUserlandDir };
@@ -37,7 +37,11 @@ async function value(form, expected, options = {}) {
   return result;
 }
 for (const testCase of pythonBatchCases) {
-  await check(testCase.name, () => value(testCase.form, testCase.expected));
+  await check(testCase.name, async () => {
+    const host = testCase.http ? fakeBrowserHttp() : null;
+    await value(testCase.form, testCase.expected, host ? { prepare: host.prepare } : {});
+    testCase.after?.(host);
+  });
 }
 await check("run-python: multiline REPL, exception recovery, CPU-loop interruption and cleanup", async () => {
   let mounts, driver;

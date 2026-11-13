@@ -53,10 +53,10 @@ Two portability adaptations are necessary:
 
 `config.site` preserves upstream platform exclusions while enabling the
 working `sigaction` provided by the child libc/runtime. `Setup.local` excludes
-sockets, TLS, GUI and external-library extensions from this first image. C
-modules that remain enabled are statically linked. This does not provide pip,
-native extension wheels, Python networking, multiprocessing or threads. Pure
-Python files can be imported from the user filesystem.
+TLS, GUI and external-library extensions from this image. C modules that remain
+enabled are statically linked. This does not provide pip, native extension
+wheels, multiprocessing or threads. Pure Python files can be imported from the
+user filesystem.
 
 `subprocess` works on the Process Service. Upstream marks `_posixsubprocess`
 n/a for every Emscripten build and `subprocess.py` refuses processes on
@@ -66,6 +66,20 @@ n/a for every Emscripten build and `subprocess.py` refuses processes on
 child executes the program; `os.fork`, `os.execv`, pipes and `waitpid` were
 already provided. A `subprocess.run` costs a few milliseconds plus the
 program's own start.
+
+`urllib.request` reaches http and https URLs through the browser host, the
+same import Git's HTTP helper uses (`doc/process-service.md`, "Process HTTP"):
+the page hands the request to the Chrome companion extension, which applies its
+allowlist and limits (GET and HEAD; POST only for Git). `Modules/_wasmacs_http.c`
+exposes the import as `_wasmacs_http.fetch`, `Lib/_wasmacs_urllib.py` builds
+an http/https handler on it, and
+`patches/0003-urllib-through-the-browser-host.patch` makes `build_opener` use
+that handler on Emscripten. Headers a browser sets itself (`Host`,
+`User-Agent`, `Accept-Encoding`, ...) are dropped; redirects are followed by
+the browser. `build.sh` copies `Modules/*.c` and `Lib/*.py` into the source
+tree. `_socket` is built so that `socket` and the modules importing it load,
+but there are no sockets: `socket.socket()` fails with `EAFNOSUPPORT`, so
+`http.client` connections and socket-based libraries do not work.
 
 Acceptance checks belong to the shared Process Service and actual Emacs
 probes: REPL prompts and multiline input, file I/O, standard-library imports,

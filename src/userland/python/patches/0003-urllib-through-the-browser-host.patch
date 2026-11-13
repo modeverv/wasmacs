@@ -1,0 +1,14 @@
+--- a/Lib/urllib/request.py
++++ b/Lib/urllib/request.py
+@@ -550,6 +550,11 @@
+                        DataHandler]
+     if hasattr(http.client, "HTTPSConnection"):
+         default_classes.append(HTTPSHandler)
++    if sys.platform == "emscripten":
++        # wasmacs: there are no sockets; the browser host (the Chrome
++        # companion extension) performs http and https requests.
++        from _wasmacs_urllib import CompanionHandler
++        default_classes[default_classes.index(HTTPHandler)] = CompanionHandler
+     skip = set()
+     for klass in default_classes:
+         for check in handlers:

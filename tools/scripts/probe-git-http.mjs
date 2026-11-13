@@ -274,8 +274,22 @@ try {
         await keys(`\x1b:(with-temp-file "/home/user/.gitconfig" (insert ${JSON.stringify(config)}))\r`);
         await pause(300);
       }
+      // Python's urllib takes the same route (page -> companion), with the
+      // credential in a file, not on the command line.
+      const pythonHttp = [
+        "import urllib.request",
+        `req = urllib.request.Request(${JSON.stringify(`${fixture.url}/info/refs?service=git-upload-pack`)}, headers=${plainHttp ? "{}" : JSON.stringify({ Authorization: fixture.authorization })})`,
+        "r = urllib.request.urlopen(req)",
+        "print('py-http', r.status, r.headers['content-type'].endswith('advertisement'), b'service=git-upload-pack' in r.read())",
+        "",
+      ].join("\n");
+      await keys(`\x1b:(with-temp-file "/tmp/python-http.py" (insert ${JSON.stringify(pythonHttp)}))\r`);
+      await pause(300);
       await keys("\x1bxshell\r");
       await waitScreen(/^\S* ?[#$]$/m, "M-x shell prompt");
+      await keys("python3 /tmp/python-http.py\r");
+      await waitScreen(/^py-http 200 True True$/m,
+        "Python urllib.request.urlopen through the companion", 120_000);
       await keys(`git clone ${fixture.url} /home/user/http-repo && cd /home/user/http-repo && echo clone-$(git rev-parse HEAD)\r`);
       await waitScreen(new RegExp(`^clone-${fixture.initialCommit}$`, "m"), "clone checks out the exact advertised commit", 120_000);
       const binaryHash = createHash("sha256").update(fixture.binary).digest("hex");

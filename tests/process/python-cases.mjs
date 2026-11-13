@@ -107,7 +107,84 @@ except ChildProcessError:
         (list (process-tty-name p) out (process-exit-status p))))`,
     expected: /^\("\/dev\/pts\/[0-9]+" "\[[^\]]*'bin'[^\]]*\]\nCompletedProcess\(args=\['git', '--version'\], returncode=0, stdout='git version 2\.[0-9.]+\\\\n', stderr=''\)\nTrue\n" 0\)$/,
   },
+  {
+    name: "urllib.request through the browser host: GET, headers, HEAD, HTTPError, URLError; no raw sockets",
+    http: true,
+    form: capture(String.raw`import errno, json, socket, urllib.error, urllib.request
+r = urllib.request.urlopen("https://example.test/data.json")
+print(r.status, r.headers["content-type"], r.geturl(), json.loads(r.read())["answer"])
+req = urllib.request.Request("https://example.test/headers", headers={"Accept": "text/plain", "User-Agent": "dropped"})
+print(urllib.request.urlopen(req).read().decode())
+print("HEAD", urllib.request.urlopen(urllib.request.Request("https://example.test/data.json", method="HEAD")).read())
+try:
+    urllib.request.urlopen("http://example.test/missing")
+except urllib.error.HTTPError as e:
+    print("HTTPError", e.code, e.read().decode())
+try:
+    urllib.request.urlopen("https://blocked.test/")
+except urllib.error.URLError as e:
+    print("URLError", e.reason)
+try:
+    socket.socket()
+except OSError as e:
+    print("socket", errno.errorcode[e.errno])
+`),
+    expected: `(0 "200 application/json https://example.test/final.json 42\naccept\nHEAD b''\nHTTPError 404 missing\nURLError TARGET_NOT_ALLOWED: Target URL is not in the allowlist\nsocket EAFNOSUPPORT\n")`,
+  },
+  {
+    name: "C-c during a urllib request: KeyboardInterrupt, and the browser request is cancelled",
+    http: true,
+    form: `(let* ((out "")
+                (p (make-process :name "python-http" :connection-type 'pipe
+                     :command (list "python3" "-c" ${lispString(String.raw`import urllib.request
+print("waiting", flush=True)
+try:
+    urllib.request.urlopen("https://example.test/hang")
+except KeyboardInterrupt:
+    print("KeyboardInterrupt")
+`)})
+                     :filter (lambda (_p s) (setq out (concat out s))))))
+      (while (not (string-match-p "waiting" out)) (accept-process-output p 0.1))
+      (accept-process-output nil 0.3)
+      (interrupt-process p)
+      (while (process-live-p p) (accept-process-output p 0.1))
+      (list out (process-exit-status p)))`,
+    expected: '("waiting\nKeyboardInterrupt\n" 0)',
+    after: (host) => {
+      const hang = host.requests.find((request) => request.url.endsWith("/hang"));
+      if (!hang || !hang.cancelled) throw new Error(`the pending request was not cancelled: ${JSON.stringify(host.requests)}`);
+    },
+  },
 ];
+
+// A stand-in for the page's HTTP relay (the Chrome companion extension) in
+// the Node probes, for the cases marked `http`: canned responses by URL, and
+// a record of what was asked.  /headers answers with the request header
+// names, /hang never answers.
+export function fakeBrowserHttp() {
+  const requests = [];
+  const base64 = (text) => Buffer.from(text).toString("base64");
+  const start = (request) => {
+    const record = { method: request.method, url: request.url, headers: request.headers, cancelled: false };
+    requests.push(record);
+    const url = new URL(request.url);
+    let response = null;
+    if (url.host === "blocked.test") {
+      response = { error: "TARGET_NOT_ALLOWED: Target URL is not in the allowlist" };
+    } else if (url.pathname === "/data.json") {
+      response = { status: 200, url: "https://example.test/final.json", headers: [["content-type", "application/json"]],
+                   bodyBase64: request.method === "HEAD" ? "" : base64('{"answer": 42}') };
+    } else if (url.pathname === "/headers") {
+      response = { status: 200, url: request.url, headers: [["content-type", "text/plain"]],
+                   bodyBase64: base64(request.headers.map(([name]) => name.toLowerCase()).sort().join(",")) };
+    } else if (url.pathname !== "/hang") {
+      response = { status: 404, url: request.url, headers: [["content-type", "text/plain"]], bodyBase64: base64("missing") };
+    }
+    let polls = 0;
+    return { poll: () => (polls++ && response) || null, cancel() { record.cancelled = true; } };
+  };
+  return { requests, prepare(emacs) { emacs.context.__wasmacsStartProcessHttp = start; } };
+}
 
 // Each expect sees only output since the preceding step, so a previous prompt
 // cannot make a missing new prompt pass. Keys use real inferior-python bindings.

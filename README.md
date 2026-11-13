@@ -207,8 +207,8 @@ The shell also supports `python3 -i`, `python3 script.py` and `python3 -c 'print
 
 Python executes inside the browser and shares files with Emacs. Files saved
 under `/home/user` use the normal user-image persistence. The interpreter and
-standard-library ZIP load on the first Python launch; a Chrome extension or
-host Python installation is not required.
+standard-library ZIP load on the first Python launch; no host Python
+installation is required, and the Chrome extension only for network access.
 
 Python starts processes through the same Process Service as Emacs:
 `subprocess.run` and `Popen` (captured output, exit status, `input=`,
@@ -223,8 +223,21 @@ print(subprocess.run(["git", "--version"], capture_output=True, text=True))
 # CompletedProcess(args=['git', '--version'], returncode=0, stdout='git version 2.52.1\n', stderr='')
 ```
 
-This is a single-threaded CPython build. Pip, native extension wheels, Python
-networking, threads and multiprocessing are not provided. Interpreter polling
+`urllib.request.urlopen` reaches HTTP(S) URLs through the Chrome companion
+extension, like `url.el` (see [Network Access](#network-access)): GET and HEAD
+to the hosts the extension allows. Status, headers, `HTTPError` and `URLError`
+behave as usual. There are no raw sockets (`socket.socket()` fails with
+`EAFNOSUPPORT`), so `http.client`, `requests` and other socket-based clients do
+not work.
+
+```python
+import json, urllib.request
+with urllib.request.urlopen("https://raw.githubusercontent.com/modeverv/wasmacs/master/package.json") as r:
+    print(r.status, json.load(r)["name"])
+```
+
+This is a single-threaded CPython build. Pip, native extension wheels, sockets,
+threads and multiprocessing are not provided. Interpreter polling
 lets Python loops yield and receive interrupts; long C operations without a
 signal check can still delay interruption.
 
@@ -261,12 +274,12 @@ extension, `package-refresh-contents`, `git clone` and other network features
 fail with an error that names the extension; browsers that cannot load it have
 no network access.
 
-The Emacs core does not receive raw sockets. The checked-in `wasmacs-url-fetch` Lisp overlay routes `url.el` HTTP(S) requests through `host.network.fetch`. This lets `package-refresh-contents`, `package-install`, `use-package :ensure`, and similar features run as request/response services. Git's HTTP helper uses the same request/response boundary through a restartable process import.
+The Emacs core does not receive raw sockets. The checked-in `wasmacs-url-fetch` Lisp overlay routes `url.el` HTTP(S) requests through `host.network.fetch`. This lets `package-refresh-contents`, `package-install`, `use-package :ensure`, and similar features run as request/response services. Git's HTTP helper and Python's `urllib.request` use the same request/response boundary through a restartable process import.
 
 Every request takes the same path:
 
 ```text
-Emacs (url.el / git-remote-http)
+Emacs (url.el / git-remote-http / Python urllib.request)
   -> host.network.fetch in the Emacs worker
   -> page relay (the worker waits on a SharedArrayBuffer result slot)
   -> content-script bridge (WASMACS_PROXY_* messages)

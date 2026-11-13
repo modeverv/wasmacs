@@ -196,7 +196,7 @@ char モードでは `C-c C-c` で `^C` を端末に送り、`C-c C-j` / `C-c C-
 
 Python はブラウザ内で動き、Emacs とファイルを共有します。`/home/user` 以下に
 保存したファイルは通常の user image に保存されます。Python 本体と標準ライブラリの
-ZIP は初回起動時に読み込みます。Chrome 拡張やホスト側の Python は不要です。
+ZIP は初回起動時に読み込みます。ホスト側の Python は不要で、Chrome 拡張が必要なのは通信だけです。
 
 Python も Emacs と同じ Process Service でプロセスを起動します。
 `subprocess.run` と `Popen`（出力の取得、終了コード、`input=`、`check=`、`cwd`、
@@ -211,7 +211,20 @@ print(subprocess.run(["git", "--version"], capture_output=True, text=True))
 # CompletedProcess(args=['git', '--version'], returncode=0, stdout='git version 2.52.1\n', stderr='')
 ```
 
-単一スレッドの CPython です。pip、ネイティブ拡張 wheel、Python の通信、スレッド、
+`urllib.request.urlopen` は、`url.el` と同じく Chrome companion 拡張を経由して
+HTTP(S) の URL を取得します（[ネットワークアクセス](#ネットワークアクセス) を参照）。
+拡張が許可したホストへの GET と HEAD です。ステータス、ヘッダー、`HTTPError`、
+`URLError` は通常どおり動きます。raw socket はない（`socket.socket()` は
+`EAFNOSUPPORT` で失敗する）ので、`http.client` や `requests` などソケットを
+使うクライアントは動きません。
+
+```python
+import json, urllib.request
+with urllib.request.urlopen("https://raw.githubusercontent.com/modeverv/wasmacs/master/package.json") as r:
+    print(r.status, json.load(r)["name"])
+```
+
+単一スレッドの CPython です。pip、ネイティブ拡張 wheel、ソケット、スレッド、
 multiprocessing は提供しません。Python のループは定期的に制御を戻して割り込みを
 受け付けますが、signal check のない長時間の C 処理は中断が遅れる場合があります。
 
@@ -237,12 +250,12 @@ GNU diffutils 3.12 の `diff` と `diff3` を wasm として同梱していま�
 
 wasmacs では、ネットワークアクセスをブラウザ host capability として明示的に扱います。その唯一の経路が `extension/` の Chrome companion 拡張です。ページ自身が remote URL を fetch することはなく、proxy への fallback もありません。拡張がなければ `package-refresh-contents`、`git clone` などのネットワーク機能は、拡張の名前を示すエラーで失敗します。拡張を読み込めないブラウザではネットワークは使えません。
 
-Emacs core に raw socket を渡して package download をさせるのではありません。代わりに、checked-in の `wasmacs-url-fetch` Lisp overlay が `url.el` の HTTP(S) リクエストを `host.network.fetch` に流します。これにより、`package-refresh-contents`、`package-install`、`use-package :ensure` などは request/response service として実行できます。Git の HTTP helper も、再開可能な process import を通じて同じ request/response の境界を使用します。
+Emacs core に raw socket を渡して package download をさせるのではありません。代わりに、checked-in の `wasmacs-url-fetch` Lisp overlay が `url.el` の HTTP(S) リクエストを `host.network.fetch` に流します。これにより、`package-refresh-contents`、`package-install`、`use-package :ensure` などは request/response service として実行できます。Git の HTTP helper と Python の `urllib.request` も、再開可能な process import を通じて同じ request/response の境界を使用します。
 
 すべてのリクエストは同じ経路を通ります。
 
 ```text
-Emacs (url.el / git-remote-http)
+Emacs (url.el / git-remote-http / Python urllib.request)
   -> Emacs worker の host.network.fetch
   -> page relay（worker は SharedArrayBuffer の result slot で待つ）
   -> content-script bridge（WASMACS_PROXY_* メッセージ）

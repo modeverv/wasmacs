@@ -57,7 +57,7 @@ programs                           src/userland/{busybox,git,grep,diffutils,pyth
 | Missing | Consequence |
 |---|---|
 | Job control | `ash` is built without it: `&`, `wait`, `kill` work, `fg`/`bg`/`C-z` do not. Processes are never stopped (`SIGTSTP`, `SIGTTIN`, `SIGTTOU` are ignored). |
-| Sockets | `socket()` fails with `EAFNOSUPPORT`. Git Smart HTTP(S) uses the explicit host HTTP service; SSH and `git://` are unavailable. |
+| Sockets | `socket()` fails with `EAFNOSUPPORT`. Git Smart HTTP(S) and Python's `urllib.request` use the explicit host HTTP service; SSH and `git://` are unavailable. |
 | Threads in processes | Programs are single-threaded. |
 | Preemption | Scheduling is cooperative. A program that computes without a system call or polling point keeps running. CPython's interpreter has explicit polling points. |
 | Other programs | Only what `src/userland` builds exists. `/bin/<name>` for anything else is "not found". |
@@ -249,8 +249,9 @@ Promise-based Emscripten startup and async I/O are excluded. Long C operations
 that do not check signals may still defer interruption. Python's `subprocess`
 (`run`, `Popen`, `os.system`, `os.popen`) starts processes through the same
 kernel: `_posixsubprocess` forks the interpreter and execs the program
-(`src/userland/python/README.md`). Python sockets, threads, multiprocessing,
-pip and native wheel loading are outside this build.
+(`src/userland/python/README.md`). `urllib.request` opens http and https URLs
+through the host HTTP service (Process HTTP below). Python sockets, threads,
+multiprocessing, pip and native wheel loading are outside this build.
 
 `WasmacsUserland.EMACS_SETTINGS` (`src/runtime/process/wasmacs-userland.js`)
 holds the three Emacs settings that follow from the above; the worker evaluates
@@ -310,6 +311,11 @@ The HTTP ABI returns status, response headers, bytes and final URL allocated in
 the calling process's heap. HTTP errors such as 401 are responses, while a
 transport failure is a separate return code. The helper frees all buffers.
 Limits and authentication are documented in `src/userland/git/README.md`.
+
+Two programs use it: Git's `remote-curl.c` adapter and CPython's
+`_wasmacs_http` module, on which `urllib.request`'s http/https handler is
+built. A signal that interrupts the wait cancels the request; in Python, C-c
+then raises `KeyboardInterrupt`.
 
 ## Memory
 

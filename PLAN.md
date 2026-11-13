@@ -5465,3 +5465,49 @@ Validation:
 - 200 `subprocess.run` calls from one interpreter while Emacs is idle: heap
   9.0 -> 9.1 MB, wasm/array buffers unchanged, no live process left.
 - Kernel 52/52, process service probe 37/37.
+
+## Implementation: Python urllib through the companion (2026-11-14)
+
+Status: done. The user asked for Python network access through the Chrome
+companion extension, if it could be done simply.
+
+- It reuses what Git's HTTP helper already has: the restartable child import
+  `wasmacs_host_http_fetch` (`doc/process-service.md`, "Process HTTP"). No
+  kernel, page or extension change.
+- `src/userland/python/Modules/_wasmacs_http.c` exposes the import as
+  `_wasmacs_http.fetch(url, method, headers, body)`;
+  `Lib/_wasmacs_urllib.py` builds an http/https handler on it, and
+  `patches/0003-urllib-through-the-browser-host.patch` makes
+  `urllib.request.build_opener` use that handler on Emscripten. `build.sh`
+  copies `Modules/*.c` and `Lib/*.py` into the source tree.
+- `_socket` is now built (it was disabled), because `urllib.request` imports
+  `http.client`, which imports `socket`. `python.js` still has no SOCKFS:
+  `socket.socket()` fails with `EAFNOSUPPORT`.
+- Works: `urlopen` with status, headers, final URL after redirects, HEAD,
+  `HTTPError` (with its body) and `URLError` carrying the extension's reason.
+  C-c during a request raises `KeyboardInterrupt` and cancels the browser
+  request.
+- The Node harness gained `atob`/`btoa` in the worker context (a real worker
+  has them; the process HTTP import uses them). Without them a request failed
+  with no diagnostic.
+
+Validation:
+
+- `node tools/scripts/probe-python.mjs`: 12/12 (2 new cases with a stand-in
+  browser host: GET/headers/HEAD/HTTPError/URLError/no raw sockets, and C-c
+  cancelling a request). `tests/runtime/python-bundle.test.js` runs the first
+  against the Pages bundle (`npm test` 118/118).
+- `npm run test:git-http` (real Chrome, real extension): a new step runs a
+  Python script that `urlopen`s the fixture's Smart HTTP discovery with an
+  Authorization header; the audit shows 23 requests, none fetched by the page.
+  The README example (`raw.githubusercontent.com`) was run once the same way.
+- Kernel 52/52, process service probe 37/37.
+
+Limits: the extension's policy applies, so only allowlisted hosts and GET/HEAD
+(POST is Git-only); the body is buffered (25 MiB, 30 s). `http.client`
+connections, `requests` and other socket-based clients do not work.
+
+Fixed alongside (its own commit): `b5ade32` moved the VS Code extension to
+`archive/extensions/vscode-wasifs`, and its two tests, still in
+`tests/runtime/`, failed CI from then on. They moved into the archive with it
+(`archive/extensions/vscode-wasifs/tests/`, runnable with `node --test`).

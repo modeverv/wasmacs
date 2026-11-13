@@ -1,14 +1,18 @@
-# The first Python image is an offline, single-threaded interpreter.
-# Do not pull in socket mounts, a dynamic loader, external native libraries,
-# GUI bindings, or test extension modules.
+# The first Python image is a single-threaded interpreter.  Do not pull in
+# socket mounts, a dynamic loader, external native libraries, GUI bindings,
+# or test extension modules.  _socket is built so that socket, http.client
+# and urllib.request import; the child runtime stubs the socket calls out
+# (no SOCKFS), so socket.socket() fails with EAFNOSUPPORT.
 
 # subprocess: the Process Service provides fork, exec, pipes and waitpid.
 # configure marks the module n/a for every Emscripten build, so name it here.
 *static*
 _posixsubprocess _posixsubprocess.c
+# HTTP(S) through the browser host (Modules/_wasmacs_http.c, copied into the
+# source tree by build.sh); urllib.request uses it (Lib/_wasmacs_urllib.py).
+_wasmacs_http _wasmacs_http.c
 
 *disabled*
-_socket
 _ssl
 _hashlib
 _ctypes

@@ -5,7 +5,8 @@ import { test } from "node:test";
 
 // Run in a disposable Node process so a broken CPU-loop polling hook cannot
 // hang CI's own event loop. Missing deployed Python/stdlib assets must fail.
-for (const filter of ["a Python script shares UTF-8 files", "run-python:", "a script on a pseudoterminal"]) {
+for (const filter of ["a Python script shares UTF-8 files", "run-python:", "a script on a pseudoterminal",
+                      "urllib.request through the browser host"]) {
   test(`Pages bundle: ${filter}`, () => {
     const result = spawnSync(process.execPath, ["tools/scripts/probe-python.mjs", filter], {
       cwd: fileURLToPath(new URL("../..", import.meta.url)),

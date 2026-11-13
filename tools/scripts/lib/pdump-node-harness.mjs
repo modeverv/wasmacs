@@ -102,6 +102,7 @@ export async function bootEmacs({
       onRuntimeInitialized() { resolveReady(); },
     },
     Buffer, TextDecoder, TextEncoder, URL, WebAssembly, SharedArrayBuffer, Atomics: WrappedAtomics,
+    atob, btoa,   // a worker has them; the process HTTP import uses them
     __dirname: artifactDir, __filename: temacsJs,
     clearTimeout, console, performance, process, require, setTimeout,
   };
