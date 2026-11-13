@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ediffSetup, fixtureContents } from "../../tests/process/ediff-cases.mjs";
 
 // Drives the canonical app page in headless Chrome over the DevTools protocol.
 //
@@ -26,7 +27,9 @@ const logPath = process.env.WASMACS_BROWSER_SMOKE_LOG || `${repoRoot}/logs/brows
 //            of processes in a row, and Emacs really sleeps while idle
 //   persist  a git repository made in /home/user is still there, clean and
 //            with its executable bits, after the page is loaded again
-const knownScenarios = new Set(["xterm", "shell", "persist"]);
+//   ediff    real diff/diff3 drive rendered Ediff comparisons and an ancestor
+//            merge; navigate/copy/resolve through Ediff's actual key bindings
+const knownScenarios = new Set(["xterm", "shell", "persist", "ediff"]);
 const scenarios = process.argv.slice(2);
 if (scenarios.length === 0) scenarios.push("xterm");
 for (const scenario of scenarios) {
@@ -347,6 +350,63 @@ try {
     await waitForScreen(/^status-0-log-1$/m, "persist: repository is clean after reload");
     await logEvent("SCENARIO_PASS persist");
     console.log("browser smoke scenario passed: persist");
+  }
+
+  if (scenarios.includes("ediff")) {
+    await logEvent("SCENARIO_START ediff");
+    const evalLisp = (form) => sendKeys(`\x1b:${form.replace(/\n/g, " ")}\r`);
+    const fixtureForms = Object.entries(fixtureContents).map(([path, text]) =>
+      `(write-region ${JSON.stringify(text)} nil ${JSON.stringify(path)} nil 'silent)`).join(" ");
+    await evalLisp(`(progn ${fixtureForms} ${ediffSetup}
+      (setq wasmacs-ediff-control (ediff-buffers
+        (wasmacs-ediff-buffer "*ediff-test-A*" "/tmp/ediff-A.txt")
+        (wasmacs-ediff-buffer "*ediff-test-B*" "/tmp/ediff-B.txt"))))`);
+    await waitForScreen(/Ediff/, "Ediff control panel is rendered", 60_000);
+    const initial = await screen();
+    assertIncludes("Ediff buffer A is visible", initial, "ediff-test-A");
+    assertIncludes("Ediff buffer B is visible", initial, "ediff-test-B");
+    await sendKeys("n");
+    await evalLisp('(message "ediff-first-%d-of-%d" ediff-current-difference ediff-number-of-differences)');
+    await waitForScreen(/ediff-first-0-of-2/, "Ediff n selects the first of two differences");
+    await sendKeys("a");
+    await evalLisp(`(message "ediff-copy-one-%s" (string= (with-current-buffer ediff-buffer-B (buffer-string)) ${JSON.stringify("start\nred\nmid\ntwo\ntail\n")}))`);
+    await waitForScreen(/ediff-copy-one-t/, "Ediff a copies only the selected A region into B");
+    await sendKeys("na");
+    await evalLisp('(message "ediff-copy-all-%s-%d" (string= (with-current-buffer ediff-buffer-A (buffer-string)) (with-current-buffer ediff-buffer-B (buffer-string))) ediff-current-difference)');
+    await waitForScreen(/ediff-copy-all-t-1/, "Ediff next difference and copy make the buffers equal");
+    await sendKeys("q");
+    await waitForScreen(/Quit this Ediff session/, "Ediff quit confirmation");
+    await sendKeys("y");
+    await pause(200);
+
+    await evalLisp(`(setq wasmacs-ediff-control (ediff-merge-buffers-with-ancestor
+      (wasmacs-ediff-buffer "*merge-test-A*" "/tmp/merge-A.txt")
+      (wasmacs-ediff-buffer "*merge-test-B*" "/tmp/merge-B.txt")
+      (wasmacs-ediff-buffer "*merge-test-base*" "/tmp/merge-base.txt")
+      nil nil "/tmp/ediff-merged.txt"))`);
+    await waitForScreen(/Ediff/, "Ediff ancestor merge control is rendered", 60_000);
+    await evalLisp('(setq ediff-show-clashes-only t)');
+    await sendKeys("n");
+    await evalLisp('(message "ediff-conflict-%d-of-%d-%s" ediff-current-difference ediff-number-of-differences (ediff-get-state-of-merge ediff-current-difference))');
+    await waitForScreen(/ediff-conflict-2-of-3-combined/, "Ediff selects the common-ancestor conflict");
+    await sendKeys("b");
+    await evalLisp(`(message "ediff-merge-resolved-%s" (string= (with-current-buffer ediff-buffer-C (buffer-string)) ${JSON.stringify("head\nA-only\nmiddle-one\nB-only\nmiddle-two\nB-conflict\ntail\n")}))`);
+    await waitForScreen(/ediff-merge-resolved-t/, "Ediff b resolves conflict while keeping both independent changes");
+    await sendKeys("wc");
+    await evalLisp(`(message "ediff-merge-saved-%s" (with-temp-buffer (insert-file-contents "/tmp/ediff-merged.txt") (string= (buffer-string) ${JSON.stringify("head\nA-only\nmiddle-one\nB-only\nmiddle-two\nB-conflict\ntail\n")})))`);
+    await waitForScreen(/ediff-merge-saved-t/, "Ediff wc saves the resolved merge contents");
+    if (process.env.WASMACS_BROWSER_SMOKE_SCREENSHOT) {
+      const shot = await client.send("Page.captureScreenshot", { format: "png" }, sessionId);
+      await writeFile(process.env.WASMACS_BROWSER_SMOKE_SCREENSHOT, Buffer.from(shot.data, "base64"));
+    }
+    await sendKeys("q");
+    await waitForScreen(/Quit this Ediff session/, "Ediff merge quit confirmation");
+    await sendKeys("y");
+    await pause(200);
+    await evalLisp('(message "ediff-cleanup-%d" (length (process-list)))');
+    await waitForScreen(/ediff-cleanup-0/, "Ediff leaves no live process after quit");
+    await logEvent("SCENARIO_PASS ediff");
+    console.log("browser smoke scenario passed: ediff");
   }
 
   console.log(`browser smoke passed: ${scenarios.join(",")} ${appUrl}`);

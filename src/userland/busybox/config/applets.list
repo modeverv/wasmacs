@@ -119,7 +119,8 @@ XARGS
 # --- editors ---
 AWK
 CMP
-DIFF
+# diff is GNU diffutils (src/userland/diffutils): Ediff parses normal format.
+# The standalone shell must resolve /bin/diff instead of the BusyBox applet.
 ED
 PATCH
 SED

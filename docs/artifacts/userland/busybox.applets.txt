@@ -30,7 +30,6 @@ date
 dc
 dd
 df
-diff
 dirname
 dos2unix
 du

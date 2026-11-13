@@ -4,7 +4,7 @@
 
 This is not a project to build an "Emacs-like editor." Its goal is to run the real Emacs on WebAssembly by keeping the GNU Emacs 30.2 C core and Elisp runtime at the center, while the browser side provides display, input, persistence, and portable filesystem images.
 
-The current main route is the browser runtime built on `SharedArrayBuffer`, `Atomics.wait`, pdump, and xterm.js. It has reached `*scratch*`, Dired, Org mode, Elisp loading through `load-file`, import/export of `.wasifs` images, and subprocesses: `M-x shell`, eshell, git, grep, and Magit run inside the browser tab.
+The current main route is the browser runtime built on `SharedArrayBuffer`, `Atomics.wait`, pdump, and xterm.js. It has reached `*scratch*`, Dired, Org mode, Elisp loading through `load-file`, import/export of `.wasifs` images, and subprocesses: `M-x shell`, eshell, git, grep, Magit and Ediff run inside the browser tab.
 
 ## Current Capabilities
 
@@ -19,12 +19,12 @@ The current main route is the browser runtime built on `SharedArrayBuffer`, `Ato
 - Use a user-operated self-hosted proxy for package archives that cannot be fetched directly because of CORS
 - Copy yanked text to the browser clipboard
 - Start subprocesses from Emacs: `call-process`, `make-process`, `shell-command`, `M-x shell`, eshell with external commands and pipelines
-- Run a POSIX shell (BusyBox `ash`) and about 150 command line tools, git 2.52 (local repositories), and GNU grep 3.12 as real processes with pipes, signals, `fork` and `exec`
+- Run a POSIX shell (BusyBox `ash`) and about 150 command line tools, git 2.52, GNU grep 3.12 and GNU diffutils 3.12 as real processes with pipes, signals, `fork` and `exec`
 - Use `M-x grep`, `rgrep`, `lgrep`, the xref/project search commands, `vc-git`, and Magit (status, staging, commit with the message edited in Emacs, log, diff)
 
 ## Current Limitations
 
-- Processes are provided by wasmacs's own process service, not by the host: only the bundled programs (BusyBox tools, git, GNU grep) can run. See [Subprocesses](#subprocesses-shell-git-grep).
+- Processes are provided by wasmacs's own process service, not by the host: only the bundled programs (BusyBox tools, git, GNU grep, GNU diffutils) can run. See [Subprocesses](#subprocesses-shell-git-grep).
 - There are no pseudoterminals or raw sockets. `M-x term` / `ansi-term` do not work; `M-x shell` and eshell do. Git `clone`, `fetch` and `push` support Smart HTTP(S) through the Chrome companion, as well as local repositories.
 - Scheduling is cooperative on one thread. A program that computes for a long time without any system call cannot be interrupted until it makes one.
 - Network features such as `package-refresh-contents` are constrained by browser fetch, CORS, and proxy configuration.
@@ -41,7 +41,7 @@ src/build/  docs and artifact generation scripts
 src/c/      Emacs C-side patch layer
 src/runtime/ host/runtime libraries used by tests and tools
 src/runtime/process/ process service: kernel, per-process runtime, filesystem layout of the userland
-src/userland/ builds of the programs that run as processes (BusyBox, git, GNU grep)
+src/userland/ builds of the programs that run as processes (BusyBox, git, GNU grep, GNU diffutils)
 tools/      build / validation / probe / inspection tools
 proxy/      self-hosted fetch proxy samples for package archives
 vendor/     pinned upstream GNU Emacs source; read-only
@@ -135,7 +135,7 @@ make dev
 
 `make build` regenerates the Emacs wasm / pdmp / wasifs artifacts and the process userland under `build/artifacts/`, then refreshes the GitHub Pages bundle under `docs/`.
 
-`make userland` builds only the programs that run as processes (`build/artifacts/userland/`). The first run downloads the BusyBox, git and GNU grep release tarballs into `build/userland/dl/`; their sha256 sums are pinned in the build scripts.
+`make userland` builds only the programs that run as processes (`build/artifacts/userland/`). The first run downloads the BusyBox, git, GNU grep and GNU diffutils release tarballs under `build/userland/`; their sha256 sums are pinned in the build scripts.
 
 `make test` (`npm test`) is what CI runs: the runtime contract tests, including one that boots the checked-in `docs/` bundle under Node and lets Emacs run `sh`, `git` and `grep`. `make test-process` runs the full process suites (kernel tests, then real Emacs driving real subprocesses); `npm run browser:smoke:processes` drives the page in headless Chrome.
 
@@ -153,6 +153,7 @@ Emacs (callproc.c, process.c)        emacs_spawn / waitpid / kill / pipe / poll
        -> /bin/sh, /bin/ls, ...      BusyBox (one image, ~150 commands)
        -> /bin/git                   git 2.52
        -> /bin/grep                  GNU grep 3.12
+       -> /bin/diff, /bin/diff3       GNU diffutils 3.12
 ```
 
 What that gives Emacs:
@@ -168,10 +169,27 @@ What it does not give:
 - no pseudoterminals: programs see pipes, so `M-x term` does not work and full-screen programs are of no use
 - no raw sockets: Git HTTP(S) uses the browser host capability; SSH and `git://` are unavailable
 - no other programs than the bundled ones; there is no compiler, no Python, no package manager
-- `ediff` needs GNU `diff` output formats that the BusyBox `diff` does not produce (`M-x diff` and `vc-diff` are fine)
 - the whole of `/home/user` is saved as one image whenever it changed, so very large repositories make saving slow
 
 Magit is not bundled. Install it with `package.el` (see Network Access below), or bring it in a packed `.wasifs` image.
+
+### Comparing and merging with Ediff
+
+`M-x ediff-files` and `M-x ediff-buffers` use the bundled GNU `diff`.
+Three-way comparison and common-ancestor merges use the bundled `diff3`:
+`M-x ediff-files3` and `M-x ediff-merge-files-with-ancestor`.
+Ediff remains Emacs's own comparison UI: use `n` / `p` to move between
+changes and `q` to leave the session. In two-way comparison and merge, `a` /
+`b` copies a side; in three-way comparison use the panel's commands such as
+`ab` (A to B) or `ac` (A to C).
+
+Both commands run inside the browser against the shared filesystem. No
+host installation, network extension or special Ediff options are needed.
+GNU diffutils supplies normal, context and unified diff formats; the BusyBox
+`diff` applet is disabled so shell commands also resolve the GNU implementation.
+
+`npm run test:ediff` exercises real Emacs; `npm run browser:smoke:ediff`
+checks the rendered Ediff control panel, navigation, copying and merge.
 
 The design is described in `doc/process-service.md`.
 

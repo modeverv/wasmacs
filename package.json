@@ -19,6 +19,8 @@
     "test:process": "npm run test:process:kernel && npm run test:process:emacs",
     "test:process:kernel": "tests/process/build-test-programs.sh && node tests/process/run-kernel-tests.mjs",
     "test:process:emacs": "node tools/scripts/probe-process-service.mjs",
+    "test:ediff": "node tools/scripts/probe-ediff.mjs",
+    "browser:smoke:ediff": "node tools/scripts/run-browser-smoke.mjs ediff",
     "test:git-http": "node tools/scripts/probe-git-http.mjs",
     "test:git-http:transport": "node src/userland/git/test-http.mjs",
     "test:product": "npm run test:xterm-pdump-dired && npm run test:xterm-terminal-profile && npm run test:xterm-clipboard-osc52",

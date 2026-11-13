@@ -35,7 +35,6 @@
         "dc",
         "dd",
         "df",
-        "diff",
         "dirname",
         "dos2unix",
         "du",
@@ -157,7 +156,7 @@
         "yes",
         "zcat"
       ],
-      "wasmBytes": 1105524
+      "wasmBytes": 1091428
     },
     "git": {
       "applets": [
@@ -180,6 +179,18 @@
         "git-remote-https"
       ],
       "wasmBytes": 1349994
+    },
+    "diff": {
+      "applets": [
+        "diff"
+      ],
+      "wasmBytes": 289164
+    },
+    "diff3": {
+      "applets": [
+        "diff3"
+      ],
+      "wasmBytes": 83007
     }
   }
 }

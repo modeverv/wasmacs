@@ -26,8 +26,9 @@ kernel                             src/runtime/process/wasmacs-kernel.js
 process                            src/runtime/process/child/
   one WebAssembly instance per process, own linear memory, Asyncify
     |
-programs                           src/userland/{busybox,git,grep}
+programs                           src/userland/{busybox,git,grep,diffutils}
   /bin/sh and ~150 tools (BusyBox), /bin/git, /bin/grep (GNU grep)
+  /bin/diff, /bin/diff3 (GNU diffutils)
 ```
 
 ## What Emacs gets
@@ -57,9 +58,11 @@ programs                           src/userland/{busybox,git,grep}
 | Other programs | Only what `src/userland` builds exists. `/bin/<name>` for anything else is "not found". |
 | Users | Everything runs as uid 0 (`root`, home `/home/user`). |
 
-`ediff` does not work yet: it parses the classic `diff` output format, and the
-BusyBox `diff` prints the unified format only. `M-x diff` and `vc-diff` are
-unaffected.
+Ediff uses GNU diffutils `diff` (normal format) and `diff3` (three-way
+comparison / common-ancestor merge). BusyBox's unified-only `diff` applet is
+disabled so the standalone shell cannot shadow GNU `diff`. `M-x diff` and
+`vc-diff` also use the GNU implementation. Ediff's existing parser and UI run
+unchanged; no browser-specific output conversion is involved.
 
 ## The seam in Emacs
 
@@ -159,11 +162,12 @@ fallback).
 | `git` | git 2.52.1, `src/userland/git` | Unpatched. No libcurl, OpenSSL, Perl, Python, Tcl, iconv or threads. `/etc/gitconfig` sets a default identity, `core.pager=cat` and `color.ui=false`. |
 | `git-http` | same pinned Git source | Original `remote-curl.c` with a browser HTTP adapter. Provides `git-remote-http` and `git-remote-https` for Smart HTTP clone/fetch/push. |
 | `grep` | GNU grep 3.12, `src/userland/grep` | Unpatched. Emacs uses `--null`, `--color`, `--exclude` and `--directories=skip`, which the BusyBox applet lacks. `egrep` and `fgrep` are two-line shell scripts. |
+| `diff`, `diff3` | GNU diffutils 3.12, `src/userland/diffutils` | Separate process images. Normal/context/unified diff and three-way comparison for Emacs's existing Ediff implementation. |
 
 `src/userland/build.sh` builds the programs and Git HTTP helper and writes
 `build/artifacts/userland/manifest.json`; `src/build/build-site.mjs` publishes
-the directory with the Pages bundle. Release tarballs are downloaded once into
-`build/userland/dl/`, and each build script pins the sha256.
+the directory with the Pages bundle. Release tarballs are cached under
+`build/userland/`, and each build script pins the sha256.
 
 `WasmacsUserland.EMACS_SETTINGS` (`src/runtime/process/wasmacs-userland.js`)
 holds the three Emacs settings that follow from the above; the worker evaluates
@@ -250,6 +254,8 @@ tree: a very large repository makes every save slow.
 | `npm test` | CI. Includes `tests/runtime/process-service-bundle.test.js`: the checked-in `docs/` bundle boots under Node and Emacs runs `sh`, `git`, `grep`. |
 | `npm run test:process:kernel` | `tests/process/run-kernel-tests.mjs`: the kernel alone, with a stand-in for Emacs. Needs `emcc` for the test programs. |
 | `npm run test:process:emacs` | `tools/scripts/probe-process-service.mjs`: the real Emacs build under Node, batch and interactive (keystrokes into the real command loop). The Magit checks use the packages installed on the machine (`~/.emacs.d/elpa`) and are skipped without them. |
+| `npm run test:ediff` | Real Emacs: diff output/exit status, two-/three-way Ediff, copy and ancestor merge, repeated process cleanup. |
+| `npm run browser:smoke:ediff` | Real Chrome: rendered Ediff control panel, difference navigation, copying and merge resolution. |
 | `npm run browser:smoke:processes` | `tools/scripts/run-browser-smoke.mjs shell persist`: the page in headless Chrome. |
 
 Development aids: `WASMACS_KERNEL_JS=<file>` makes the Node harness use that
@@ -262,5 +268,4 @@ kernel.
 
 - A pseudoterminal in the kernel (line discipline, `isatty`, window size):
   `M-x term`, job control, programs that buffer differently on a terminal.
-- GNU diffutils, for `ediff`.
 - Saving `/home/user` incrementally instead of as one image.

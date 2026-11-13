@@ -217,7 +217,7 @@ src/build/  docs and generated artifact build scripts
 src/c/      Emacs C-side patch layer
 src/runtime/ host/runtime libraries used by tests and tools
 src/runtime/process/ Process Service: kernel, per-process runtime, userland layout
-src/userland/ builds of the programs that run as processes (BusyBox, git, GNU grep)
+src/userland/ builds of the programs that run as processes (BusyBox, git, GNU grep, GNU diffutils)
 tools/      build, validation, probe, and inspection tools
 build/      copied Emacs source/build workspaces and generated artifacts
 build/artifacts/ generated wasm, pdmp, wasifs, and userland build products
@@ -309,6 +309,7 @@ Emacs (pid 1, Asyncify なし)
     |
   process = Emscripten + Asyncify でビルドしたプログラムの instance
     /bin/sh ほか (BusyBox)、/bin/git、/bin/grep (GNU grep)
+    /bin/diff、/bin/diff3 (GNU diffutils)
 ```
 
 - ファイルシステムは1つだけである。全プロセスが Emacs の Emscripten `FS`
@@ -324,6 +325,12 @@ Emacs (pid 1, Asyncify なし)
 - プロセスが死んだあとに何かが kernel や共有 `FS` に残ると、その instance と
   メモリ（プロセスごとに独立した wasm memory）が回収されなくなる。これは
   テストで監視している。
+
+Ediff の内部解析には normal 形式の diff が必要で、BusyBox が出す unified
+形式だけでは満たせない。GNU diffutils 3.12 の `diff` と `diff3` を独立した
+process image として同梱し、Emacs の既存の差分解析・マージ処理を使う。
+BusyBox の standalone shell が GNU 版を隠さないよう、`diff` applet は
+ビルド時に無効にする。比較結果の変換 adapter や Ediff の独自実装は置かない。
 
 擬似端末、job control、socket は提供しない。詳細、規則、テストは
 `doc/process-service.md` にある。

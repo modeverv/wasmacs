@@ -4,7 +4,7 @@
 
 これは「Emacs 風のエディタ」を作るプロジェクトではありません。GNU Emacs 30.2 の C core と Elisp runtime を中心に置き、表示、入力、永続化、可搬ファイルシステムイメージをブラウザ側で支えることで、本物の Emacs を WebAssembly 上で動かすことを目指しています。
 
-現在の主ルートは、`SharedArrayBuffer` / `Atomics.wait` / pdump / xterm.js を使うブラウザ実行ルートです。`*scratch*`、Dired、Org-mode、`load-file` による Elisp 読み込み、`.wasifs` の import/export に加えて、サブプロセスも動きます。`M-x shell`、eshell、git、grep、Magit がブラウザのタブの中で動作します。
+現在の主ルートは、`SharedArrayBuffer` / `Atomics.wait` / pdump / xterm.js を使うブラウザ実行ルートです。`*scratch*`、Dired、Org-mode、`load-file` による Elisp 読み込み、`.wasifs` の import/export に加えて、サブプロセスも動きます。`M-x shell`、eshell、git、grep、Magit、Ediff がブラウザのタブの中で動作します。
 
 ## 現在できること
 
@@ -19,13 +19,13 @@
 - CORS で直接 fetch できない package archive については、ユーザー管理の self-hosted proxy を使える
 - emacsでのヤンクをブラウザ clipboard に流す
 - Emacs からサブプロセスを起動する（`call-process`、`make-process`、`shell-command`、`M-x shell`、外部コマンドとパイプを使う eshell）
-- POSIX シェル（BusyBox の `ash`）と約150個のコマンド、git 2.52（ローカルリポジトリ）、GNU grep 3.12 を、パイプ・シグナル・`fork`・`exec` を備えた本物のプロセスとして動かす
+- POSIX シェル（BusyBox の `ash`）と約150個のコマンド、git 2.52、GNU grep 3.12、GNU diffutils 3.12 を、パイプ・シグナル・`fork`・`exec` を備えた本物のプロセスとして動かす
 - `M-x grep`、`rgrep`、`lgrep`、xref / project の検索、`vc-git`、Magit（status、stage、Emacs でメッセージを編集する commit、log、diff）を使う
 
 ## まだ制限があること
 
-- プロセスは host のものではなく、wasmacs 自身の process service が提供します。動かせるのは同梱したプログラム（BusyBox のコマンド群、git、GNU grep）だけです。[サブプロセス](#サブプロセス-shellgitgrep) を参照してください
-- 擬似端末（pty）と socket はありません。`M-x term` / `ansi-term` は動きません（`M-x shell` と eshell は動きます）。git にネットワーク通信はなく、`clone` / `fetch` / `push` はローカルのリポジトリ間だけで使えます
+- プロセスは host のものではなく、wasmacs 自身の process service が提供します。動かせるのは同梱したプログラム（BusyBox のコマンド群、git、GNU grep、GNU diffutils）だけです。[サブプロセス](#サブプロセス-shellgitgrep) を参照してください
+- 擬似端末（pty）と socket はありません。`M-x term` / `ansi-term` は動きません（`M-x shell` と eshell は動きます）。Git の `clone` / `fetch` / `push` は Chrome 拡張経由の Smart HTTP(S) とローカルリポジトリに対応します
 - スケジューリングは1スレッド上の協調型です。システムコールを一切せずに長時間計算するプログラムは、次にシステムコールをするまで中断できません
 - `package-refresh-contents` などのネットワーク機能は、ブラウザ fetch / CORS / proxy の制約を受けます
 - GUI Emacs の native frame を移植しているわけではなく、現状は xterm.js 上の terminal Emacs です
@@ -135,7 +135,7 @@ make dev
 
 `make build` は Emacs wasm / pdmp / wasifs artifact と process userland を `build/artifacts/` 以下に再生成し、その後 GitHub Pages 用 bundle を `docs/` に反映します。
 
-`make userland` は、プロセスとして動くプログラムだけをビルドします（`build/artifacts/userland/`）。初回は BusyBox、git、GNU grep のリリース tarball を `build/userland/dl/` にダウンロードします。sha256 はビルドスクリプトに固定してあります。
+`make userland` は、プロセスとして動くプログラムだけをビルドします（`build/artifacts/userland/`）。初回は BusyBox、git、GNU grep、GNU diffutils のリリース tarball を `build/userland/` 以下にダウンロードします。sha256 はビルドスクリプトに固定してあります。
 
 `make test`（`npm test`）は CI が実行するものです。runtime contract のテストに加えて、checked-in の `docs/` bundle を Node 上で起動し、Emacs から `sh`・`git`・`grep` を実行するテストを含みます。`make test-process` は process service の全テスト（kernel のテストと、本物の Emacs が本物のサブプロセスを動かすテスト）を実行します。`npm run browser:smoke:processes` は headless Chrome で実際のページを操作します。
 
@@ -153,6 +153,7 @@ Emacs (callproc.c, process.c)        emacs_spawn / waitpid / kill / pipe / poll
        -> /bin/sh, /bin/ls, ...      BusyBox（1つの image に約150コマンド）
        -> /bin/git                   git 2.52
        -> /bin/grep                  GNU grep 3.12
+       -> /bin/diff, /bin/diff3       GNU diffutils 3.12
 ```
 
 これで Emacs からできること:
@@ -166,12 +167,24 @@ Emacs (callproc.c, process.c)        emacs_spawn / waitpid / kill / pipe / poll
 できないこと:
 
 - 擬似端末はありません。プログラムから見えるのはパイプなので、`M-x term` は動かず、全画面を使うプログラムは使えません
-- socket はありません。ネットワーク接続は一切開けず、git はローカルのリポジトリだけを扱えます
+- raw socket はありません。Git の clone/fetch/push は Chrome 拡張経由の Smart HTTP(S) に対応します。SSH と `git://` は使えません
 - 同梱したもの以外のプログラムは動きません。コンパイラ、Python、パッケージマネージャはありません
-- `ediff` は GNU `diff` の出力形式を必要とし、BusyBox の `diff` はそれを出しません（`M-x diff` と `vc-diff` は使えます）
 - `/home/user` は、変更があるたびに全体を1つの image として保存します。非常に大きなリポジトリでは保存が遅くなります
 
 Magit は同梱していません。`package.el` でインストールするか（下の「ネットワークアクセス」を参照）、pack した `.wasifs` image で持ち込んでください。
+
+### Ediff による比較・マージ
+
+`M-x ediff-files` / `M-x ediff-buffers` で2つのファイル・バッファを比較できます。
+`M-x ediff-files3` は3方向比較、`M-x ediff-merge-files-with-ancestor` は
+共通祖先を使ったマージです。Emacs 標準の画面で `n` / `p` による差分移動、
+`q` による終了が使えます。2方向比較・マージの反映は `a` / `b`、
+3方向比較では `ab`（AからB）や `ac`（AからC）などパネルに表示される操作を使います。
+
+GNU diffutils 3.12 の `diff` と `diff3` を wasm として同梱しています。
+ホスト側へのインストールや通信拡張、Ediff の追加設定は不要です。
+シェルも GNU 版を使うよう、BusyBox の `diff` applet は無効にしています。
+検証は `npm run test:ediff` と `npm run browser:smoke:ediff` で実行します。
 
 設計は `doc/process-service.md` に書いてあります。
 
@@ -179,7 +192,7 @@ Magit は同梱していません。`package.el` でインストールするか�
 
 wasmacs では、ネットワークアクセスをブラウザ host capability として明示的に扱います。
 
-Emacs core に raw socket を渡して package download をさせるのではありません。Emacs のサブプロセスにもネットワークはありません。代わりに、checked-in の `wasmacs-url-fetch` Lisp overlay が `url.el` の HTTP(S) リクエストを `host.network.fetch` に流します。これにより、`package-refresh-contents`、`package-install`、`use-package :ensure` などは request/response service として実行できます。
+Emacs core に raw socket を渡して package download をさせるのではありません。Git の HTTP helper も同じ request/response の境界を使用します。代わりに、checked-in の `wasmacs-url-fetch` Lisp overlay が `url.el` の HTTP(S) リクエストを `host.network.fetch` に流します。これにより、`package-refresh-contents`、`package-install`、`use-package :ensure` などは request/response service として実行できます。
 
 ただし、ブラウザの直接 `fetch` は CORS の制約を受けます。remote package archive が page origin を許可していない場合、JavaScript から response body を読むことはできません。Service Worker は app cache や COOP/COEP には使えますが、CORS で読めない cross-origin response を読めるようにはできません。
 

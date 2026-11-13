@@ -2367,17 +2367,17 @@ Everything that led there and is no longer used lives under `archive/retired/`
 
 Subprocesses work (see "Phase: Process Service" below): `M-x shell`, eshell,
 git with `vc-git` and Magit, `M-x grep` / `rgrep` / `lgrep` / xref search, on a
-bundled userland of BusyBox, git and GNU grep. Git Smart HTTP(S) clone/fetch/push
-now uses the companion extension (see the implementation record below).
+bundled userland of BusyBox, git, GNU grep and GNU diffutils. Git Smart HTTP(S)
+clone/fetch/push uses the companion extension. Ediff comparison and ancestor
+merge use GNU diff/diff3 (see the implementation records below).
 
 Next candidates, in the order they would matter to a user:
 
 1. A pseudoterminal in the process kernel (line discipline, `isatty`, window
    size): `M-x term`, job control, programs that behave differently on a tty.
-2. GNU diffutils as a fourth userland image, for `ediff`.
-3. Incremental persistence of `/home/user` (today the whole tree is saved as
+2. Incremental persistence of `/home/user` (today the whole tree is saved as
    one image whenever it changed; large repositories make that slow).
-4. Bring the VS Code lane onto the numbered patch layer (`src/c/patches`), so
+3. Bring the VS Code lane onto the numbered patch layer (`src/c/patches`), so
    that `tools/scripts/patch-emacs-host-entrypoint-spike.sh` can be retired too.
 
 Validation commands for the current state:
@@ -5177,3 +5177,48 @@ Emacs patch layer, Git Smart HTTP, documentation and rebuilt Pages artifacts.
 Local executable-bit-only drift is excluded; `vendor/emacs` remains pinned to
 Emacs 30.2 with no content changes. The verified push result is recorded as a
 new project event in Drive after publication.
+
+## Implementation: GNU diffutils and Ediff (2026-11-13)
+
+Status: complete. User selected the GNU diffutils next-step candidate.
+
+- [x] Build unmodified, release-pinned GNU diffutils 3.12 as two Process Service
+  images: `diff` and `diff3`. Verify the official SHA256 and detached signature
+  (Jim Meyering, fingerprint 155D3FC500C834486D1EEA677FD9FCCB000BEEEE).
+- [x] Configure gnulib's strcasecmp for the cross build and enable the existing
+  child runtime's working fork; diff3 uses fork/exec/wait to invoke GNU diff.
+  No new ABI, Emacs source patch or Ediff configuration override is needed.
+- [x] Remove BusyBox's `diff` applet and rebuild BusyBox. The standalone shell
+  now resolves GNU `/bin/diff`; this is checked by real execution, not just
+  manifest contents.
+- [x] Publish `diff.{js,wasm}` and `diff3.{js,wasm}` through the manifest and
+  Pages bundle. The wasm sizes are 289,164 and 83,007 bytes respectively.
+- [x] Check normal/unified output, equal/different/error status (0/1/2), diff3
+  comparisons and clean/conflicting merges through real Emacs.
+- [x] Check Ediff two-/three-way comparison, difference navigation, A-to-B
+  copying, common-ancestor merge and conflict resolution. Browser keys exercise
+  the actual terminal/control panel; saved merge contents are compared exactly.
+- [x] Update English/Japanese capability documentation and architecture.
+
+Validation:
+
+- `rtk proxy mise exec powershell@7.6.2 -- npm test`: 127/127, including two
+  new checked-in Pages bundle Ediff regressions; artifact policy passed.
+- `rtk npm run test:process`: kernel 40/40 and real Emacs 33/33, including
+  existing shell/eshell/Git/grep/Magit coverage and new GNU diff/diff3 checks.
+- `rtk npm run test:ediff`: 9/9 on the build bundle; also 9/9 with
+  `WASMACS_PROCESS_PROBE_BUNDLE=docs`. Normal/unified output, errors, merges,
+  and 100 repeated diff/diff3 invocations with no surviving processes/mounts.
+- `rtk npm run browser:smoke:ediff`: real Chrome passes rendered two-way Ediff,
+  n/a/q keys, ancestor conflict selection and b resolution, wc save, exact
+  saved contents and zero live processes after exit.
+- Evidence: `logs/ediff-probe.txt`, `logs/ediff-probe-docs.txt`,
+  `logs/browser-ediff-smoke.txt`, `logs/browser-ediff-merge.png`.
+- Standalone Process Service harness: 27 executions including context format,
+  case/regex options, missing final newline and descriptor/process cleanup.
+- Re-running `src/userland/build.sh diffutils` reused both link outputs;
+  `npm run build` refreshed the distribution bundle. `vendor/emacs` is unchanged.
+
+The new programs use the same cooperative scheduler and shared filesystem as
+other userland programs. Only `diff` and `diff3` are added from diffutils;
+GNU `sdiff` is not bundled. This does not add ptys or raw sockets.

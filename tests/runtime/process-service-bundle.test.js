@@ -18,15 +18,18 @@ const skip = !(haveEmacs && haveUserland) && "docs/artifacts has no Emacs build 
 
 test("Pages bundle: every program of the userland manifest is published", { skip }, () => {
   const manifest = JSON.parse(readFileSync(`${docsUserlandDir}/manifest.json`, "utf8"));
-  assert.deepEqual(Object.keys(manifest.programs).sort(), ["busybox", "git", "git-http", "grep"]);
+  assert.deepEqual(Object.keys(manifest.programs).sort(), ["busybox", "diff", "diff3", "git", "git-http", "grep"]);
   assert.deepEqual(manifest.programs["git-http"].applets, ["git-remote-http", "git-remote-https"]);
   for (const [name, program] of Object.entries(manifest.programs)) {
     assert.equal(existsSync(`${docsUserlandDir}/${name}.js`), true, `${name}.js`);
     assert.equal(existsSync(`${docsUserlandDir}/${name}.wasm`), true, `${name}.wasm`);
     assert.equal(program.applets.length > 0, true, `${name} provides no command`);
   }
-  // The shell must find GNU grep through PATH, not a BusyBox applet of that name.
+  // The standalone shell must find the GNU programs through PATH.
   assert.equal(manifest.programs.busybox.applets.includes("grep"), false);
+  assert.equal(manifest.programs.busybox.applets.includes("diff"), false);
+  assert.deepEqual(manifest.programs.diff.applets, ["diff"]);
+  assert.deepEqual(manifest.programs.diff3.applets, ["diff3"]);
   assert.equal(manifest.programs.busybox.applets.includes("sh"), true);
   assert.equal(
     readFileSync(`${docsUserlandDir}/wasmacs-userland.js`, "utf8"),

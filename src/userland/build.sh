@@ -2,10 +2,10 @@
 # Build the wasmacs userland: the program images that run as processes under
 # the kernel (src/runtime/process).
 #
-#   src/userland/build.sh            build busybox (sh + tools), git and GNU grep
+#   src/userland/build.sh            build BusyBox, git, GNU grep and diffutils
 #   src/userland/build.sh busybox    build only the named programs
 #
-# Output: build/artifacts/userland/{busybox,git,grep}.{js,wasm} and manifest.json.
+# Output: build/artifacts/userland/<program>.{js,wasm} and manifest.json.
 # src/build/build-site.mjs publishes that directory with the Pages bundle.
 set -euo pipefail
 
@@ -15,7 +15,7 @@ out="${repo_root}/build/artifacts/userland"
 
 programs=("$@")
 if [ "${#programs[@]}" -eq 0 ]; then
-  programs=(busybox git grep)
+  programs=(busybox git grep diffutils)
 fi
 for program in "${programs[@]}"; do
   [ -x "${here}/${program}/build.sh" ] || { echo "unknown userland program: ${program}" >&2; exit 2; }
@@ -54,6 +54,11 @@ if (fs.existsSync(`${out}/git-http.wasm`)) {
     applets: ["git-remote-http", "git-remote-https"],
     wasmBytes: fs.statSync(`${out}/git-http.wasm`).size,
   };
+}
+for (const name of ["diff", "diff3"]) {
+  if (fs.existsSync(`${out}/${name}.wasm`)) {
+    programs[name] = { applets: [name], wasmBytes: fs.statSync(`${out}/${name}.wasm`).size };
+  }
 }
 fs.writeFileSync(`${out}/manifest.json`, JSON.stringify({ version: 1, programs }, null, 2) + "\n");
 console.log(`userland manifest: ${Object.keys(programs).join(", ")} (${Object.values(programs).reduce((n, p) => n + p.applets.length, 0)} commands)`);

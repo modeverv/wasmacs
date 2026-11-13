@@ -491,7 +491,7 @@ if (haveBusybox) {
     noLeak();
   });
 
-  test("busybox tools: find, sed, awk, diff, tar, gzip", () => {
+  test("shell tools: find, sed, awk, diff, tar, gzip", () => {
     const r = sh('mkdir -p t/a t/b && echo one > t/a/1.txt && echo two > t/b/2.txt && ' +
                  'find t -name "*.txt" | sort && sed -e s/one/ONE/ t/a/1.txt && ' +
                  "awk '{ print NR \":\" $0 }' t/b/2.txt && " +
@@ -692,6 +692,27 @@ if (haveBusybox && haveGit) {
   });
 } else {
   console.log("SKIP git tests (run src/userland/build.sh)");
+}
+
+if (haveBusybox && existsSync(`${userlandDir}/diff.wasm`) && existsSync(`${userlandDir}/diff3.wasm`)) {
+  test("GNU diffutils: shell selects GNU diff and diff3 reaps its diff children", () => {
+    has(sh("diff --version | head -1").out, "(GNU diffutils)");
+    FS.writeFile("/work/diff-base", "base\nunchanged\n");
+    FS.writeFile("/work/diff-left", "left\nunchanged\n");
+    FS.writeFile("/work/diff-right", "right\nunchanged\n");
+    const normal = sh("diff diff-base diff-left");
+    eq(normal.code, 1, "different files");
+    eq(normal.out, "1c1\n< base\n---\n> left\n", "normal format for Ediff");
+    const merged = run(["/bin/diff3", "--diff-program=/bin/diff", "-m",
+      "/work/diff-left", "/work/diff-base", "/work/diff-right"]);
+    eq(merged.code, 1, "conflicting merge");
+    has(merged.out, "<<<<<<< /work/diff-left\nleft\n");
+    has(merged.out, "||||||| /work/diff-base\nbase\n");
+    has(merged.out, ">>>>>>> /work/diff-right\nunchanged\n");
+    noLeak();
+  });
+} else {
+  console.log("SKIP diffutils tests (run src/userland/build.sh)");
 }
 
 console.log(`\n${ran - failures}/${ran} kernel tests passed`);
