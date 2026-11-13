@@ -1,0 +1,4 @@
+# Keep upstream Emscripten feature exclusions, with the one feature provided
+# by the Process Service and required for normal Python SIGINT handling.
+. "${WASMACS_CPYTHON_SOURCE}/Platforms/emscripten/config.site-wasm32-emscripten"
+ac_cv_func_sigaction=yes

@@ -2371,7 +2371,10 @@ bundled userland of BusyBox, git, GNU grep and GNU diffutils. Git Smart HTTP(S)
 clone/fetch/push uses the companion extension. Ediff comparison and ancestor
 merge use GNU diff/diff3 (see the implementation records below).
 
-Next candidates, in the order they would matter to a user:
+CPython is bundled and provides an interactive REPL through `M-x run-python`
+(see "Implementation: Python REPL" below).
+
+Other candidates, in the order they would matter to a user:
 
 1. A pseudoterminal in the process kernel (line discipline, `isatty`, window
    size): `M-x term`, job control, programs that behave differently on a tty.
@@ -5233,3 +5236,84 @@ Validation:
 The new programs use the same cooperative scheduler and shared filesystem as
 other userland programs. Only `diff` and `diff3` are added from diffutils;
 GNU `sdiff` is not bundled. This does not add ptys or raw sockets.
+
+## Research: bundled Python feasibility (2026-11-13)
+
+Status: initial feasibility review, prompted by the user's question about cost.
+The user subsequently selected the REPL implementation recorded below; the
+observations here describe the state before that implementation began.
+
+- CPython 3.14 has an upstream Emscripten build path. The existing Process
+  Service could supply shared files, pipes, stdio and process lifetime handling.
+  A narrow candidate is `python3 -c`, `.py` scripts and selected standard
+  library modules; basic REPL and Emacs `run-python` need separate validation.
+- This is more work than diffutils: package the standard library and adapt
+  CPython's Emscripten startup/read/poll glue to the synchronous child runtime.
+  Upstream Promise-based startup and functions retained on shared FS conflict
+  with the Process Service rules and cannot be included unchanged.
+- CPython already polls an Emscripten signal buffer. Connecting that hook to
+  cancellation is feasible, but CPU-loop interruption, scheduler fairness and
+  long C operations still need verification. Repeated execution must leave no
+  child processes, shared-FS closures or mounts behind.
+- Upstream disables subprocess on Emscripten, so our fork/exec ABI alone does
+  not enable it. Raw sockets, Python HTTP integration, threads, multiprocessing,
+  pip and native extension packages are separate work. Git's HTTP bridge does
+  not automatically provide Python networking.
+- Evidence: upstream [PEP 776](https://peps.python.org/pep-0776/), pinned
+  [CPython startup glue](https://github.com/python/cpython/blob/v3.14.0/Python/emscripten_syscalls.c),
+  [signal polling](https://github.com/python/cpython/blob/v3.14.0/Python/emscripten_signal.c),
+  and `vendor/emacs/lisp/progmodes/python.el` (`python-shell-make-comint`).
+  Source review only: no Python build, runtime test, size or effort measurement
+  has been performed. No product artifact changed.
+
+## Implementation: Python REPL (2026-11-13)
+
+Status: complete locally. The user requested using the Python REPL after the
+feasibility review. The target is real CPython inside the Process Service and
+Emacs's existing `run-python`/comint interface.
+
+- [x] Build release-pinned CPython with the child runtime; package the standard
+  library separately and load it synchronously on first Python execution.
+- [x] Connect interpreter polling to cooperative scheduling and existing signal
+  delivery; adapt upstream browser startup without promises or shared-FS hooks.
+- [x] Install Python command markers and the settings needed for a pipe REPL.
+- [x] Validate expressions, multiline input, exceptions, imports, shared files,
+  CPU-loop interruption and continued use of the same REPL, exit and cleanup.
+- [x] Rebuild the Pages bundle, run real Emacs and Chrome checks, update docs.
+
+Validation target: `npm run test:python`, `npm run browser:smoke:python`, the
+existing process suite and `npm test`. No arbitrary pip/native packages, Python
+networking, threads or subprocess support is included in this milestone.
+
+
+Python validation and integration evidence:
+
+- CPython 3.14.10 release SHA256 is pinned in `src/userland/python/build.sh`.
+  The wasm is 8,858,031 bytes, JS 70,086 bytes, stdlib ZIP 10,738,821 bytes;
+  upstream `os.py` (41,958 bytes) supplies the prefix-search landmark.
+- Build integration retains CPython's trampoline exports/runtime dependencies,
+  excludes its Promise-based syscall object, and sets upstream `host_prefix`
+  and `host_exec_prefix` to `/usr`. No global PYTHONHOME or Emacs patch is used.
+- CPython opening a script exposed missing ioctl(FIOCLEX/FIONCLEX) support.
+  The child runtime now implements per-descriptor close-on-exec semantics,
+  including EBADF, using the same stream flags as fcntl.
+- `rtk proxy mise exec powershell@7.6.2 -- npm test`: 135/135 and artifact policy.
+  The Pages regression runs real Emacs/Python in bounded Node subprocesses.
+- `rtk npm run test:process`: kernel 40/40 and real Emacs 33/33. The added
+  ioctl close-on-exec regression then passed the kernel suite at 41/41.
+  Existing shell/eshell/Git/grep/Magit pass.
+- `rtk npm run test:python`: 7/7, including scripts, UTF-8 files, JSON/math,
+  stdin/argv/cwd, exceptions/exit codes, real multiline REPL, CPU-loop SIGINT
+  followed by another expression in the same interpreter, and 20 repeated
+  processes without surviving processes or FS mounts.
+- `rtk npm run browser:smoke:python`: real Chrome passes rendered `run-python`,
+  multiline input, JSON, shared files, exception recovery, C-c C-c on a loop
+  whose iteration counter advanced, continued use, two restarts and cleanup.
+  Screenshot inspected: `logs/browser-python-repl.png`; full evidence in
+  `logs/python-probe.txt` and `logs/browser-python-smoke.txt`.
+- Native CPython 3.14 was used to check the final status after KeyboardInterrupt:
+  it preserves SIGINT as the eventual exit status even after REPL recovery.
+  Tests accept this upstream behavior and verify fresh sessions exit normally.
+- Parallel work on networking was detected and confirmed by the user. Python
+  changes were isolated on `feature/python-repl`; unrelated edits are excluded.
+  `vendor/emacs` content and pin remain unchanged.

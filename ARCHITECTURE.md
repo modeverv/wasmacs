@@ -332,6 +332,15 @@ process image として同梱し、Emacs の既存の差分解析・マージ処
 BusyBox の standalone shell が GNU 版を隠さないよう、`diff` applet は
 ビルド時に無効にする。比較結果の変換 adapter や Ediff の独自実装は置かない。
 
+Python REPL も同じ Process Service 上の CPython を使い、Emacs の `run-python`
+と comint を入口にする。Python の標準ライブラリ ZIP は manifest の data file として
+公開し、Python image の初回ロード時に同期的に共有 FS の `/usr/lib` に配置する。
+child の startup で mount、fetch、Promise、FS への callback 登録をしない。
+CPython の evaluator にある定期チェックから restartable import を呼び、既存の
+time slice と signal delivery を使う。これによりシステムコールをしない Python
+ループも yield し、SIGINT は CPython 自身の `KeyboardInterrupt` になる。
+これは一般的な preemption ではなく、長い C 処理が check をしない場合には適用されない。
+
 擬似端末、job control、socket は提供しない。詳細、規則、テストは
 `doc/process-service.md` にある。
 

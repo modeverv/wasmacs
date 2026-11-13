@@ -147,6 +147,7 @@ export async function bootEmacs({
         const dir = searchDirs.find((candidate) => existsSync(`${candidate}/${name}.wasm`));
         if (!dir) throw new Error(`program image ${name} not found in ${searchDirs.join(", ")}`);
         vm.runInContext(readFileSync(`${dir}/${name}.js`, "utf8"), context, { filename: `${name}.js` });
+        layout.installProgramFiles(FS, userlandManifest, name, (source) => readFileSync(`${dir}/${source}`));
         images.set(name, { factory: context[`wasmacsProgram_${name}`], wasm: readFileSync(`${dir}/${name}.wasm`) });
       }
       return images.get(name);

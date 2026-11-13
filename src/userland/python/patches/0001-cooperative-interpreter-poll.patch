@@ -1,0 +1,12 @@
+--- a/Python/emscripten_signal.c
++++ b/Python/emscripten_signal.c
+@@ -9,0 +10,4 @@
++
++/* A synchronous, restartable Process Service scheduling point. Signal
++   delivery uses the normal libc/Python signal handlers after resumption. */
++extern void wasmacs_host_python_poll(void);
+@@ -31,0 +36 @@
++    wasmacs_host_python_poll();
+@@ -51 +56 @@
+-    else if (Py_EMSCRIPTEN_SIGNAL_HANDLING) {
++    else {

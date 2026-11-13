@@ -3,6 +3,7 @@ import { appendFile, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ediffSetup, fixtureContents } from "../../tests/process/ediff-cases.mjs";
+import { pythonCommands } from "../../tests/process/python-cases.mjs";
 
 // Drives the canonical app page in headless Chrome over the DevTools protocol.
 //
@@ -29,7 +30,9 @@ const logPath = process.env.WASMACS_BROWSER_SMOKE_LOG || `${repoRoot}/logs/brows
 //            with its executable bits, after the page is loaded again
 //   ediff    real diff/diff3 drive rendered Ediff comparisons and an ancestor
 //            merge; navigate/copy/resolve through Ediff's actual key bindings
-const knownScenarios = new Set(["xterm", "shell", "persist", "ediff"]);
+//   python   M-x run-python: multiline input, standard library and shared files,
+//            exception recovery, C-c C-c during a CPU loop and repeated exit
+const knownScenarios = new Set(["xterm", "shell", "persist", "ediff", "python"]);
 const scenarios = process.argv.slice(2);
 if (scenarios.length === 0) scenarios.push("xterm");
 for (const scenario of scenarios) {
@@ -411,6 +414,64 @@ try {
     await waitForScreen(/ediff-cleanup-0/, "Ediff leaves no live process after quit");
     await logEvent("SCENARIO_PASS ediff");
     console.log("browser smoke scenario passed: ediff");
+  }
+
+  if (scenarios.includes("python")) {
+    await logEvent("SCENARIO_START python");
+    const evalLisp = (form) => sendKeys(`\x1b:${form}\r`);
+    const command = async (text) => {
+      await waitForScreen(/^(?:\.\.\. )*>>> ?$/m, "Python is ready for the next command");
+      await sendKeys(`${text}\r`);
+    };
+    await sendKeys("\x1bxrun-python\r");
+    await waitForScreen(/^>>>/m, "M-x run-python displays the CPython prompt", 60_000);
+    await command(pythonCommands.calculation);
+    await waitForScreen(/^python-calc-42$/m, "Python calculation result");
+    await command("def triple(n):");
+    await waitForScreen(/^\.\.\./m, "Python multiline continuation prompt");
+    await sendKeys("    return n * 3\r");
+    await waitForScreen(/^\.\.\. +return n \* 3\n\.\.\. ?$/m, "Python is ready to finish the multiline definition");
+    await sendKeys("\r");
+    await command(pythonCommands.multilineResult);
+    await waitForScreen(/^python-multi-21$/m, "Python multiline function result");
+    await command(pythonCommands.json);
+    await waitForScreen(/^python-json-42$/m, "Python imports json from the bundled standard library");
+    await command(pythonCommands.file);
+    await waitForScreen(/^python-file-shared-file$/m, "Python writes and reads the shared filesystem");
+    await command("1 / 0");
+    await waitForScreen(/ZeroDivisionError/, "Python displays an exception traceback");
+    await command(pythonCommands.recovery);
+    await waitForScreen(/^python-recovered-42$/m, "Python REPL continues after an exception");
+    await command("while True: loop_iterations += 1");
+    await waitForScreen(/^>>> while True: loop_iterations \+= 1\n\.\.\. ?$/m, "Python CPU loop continuation prompt");
+    await sendKeys("\r");
+    await pause(300);
+    await sendKeys("\x03\x03");
+    await waitForScreen(/KeyboardInterrupt/, "C-c C-c interrupts the running Python CPU loop", 15_000);
+    await command(pythonCommands.afterInterrupt);
+    await waitForScreen(/^python-interrupt-recovered-42-loop-True$/m, "Same Python REPL continues after interrupting a loop that ran");
+    if (process.env.WASMACS_BROWSER_SMOKE_SCREENSHOT) {
+      const png = await client.send("Page.captureScreenshot", { format: "png" }, sessionId);
+      await writeFile(process.env.WASMACS_BROWSER_SMOKE_SCREENSHOT, Buffer.from(png.data, "base64"));
+    }
+    await command("exit()");
+    await waitForScreen(/Process Python interrupt/, "Python exits with its native post-KeyboardInterrupt status");
+    await evalLisp('(message "python-file-shared-%s" (with-temp-buffer (insert-file-contents "/home/user/python-repl.txt") (string= (buffer-string) "shared-file\\n")))');
+    await waitForScreen(/python-file-shared-t/, "Emacs reads the exact file Python wrote");
+    for (let i = 1; i <= 2; i++) {
+      await sendKeys("\x1bxrun-python\r");
+      await command(`print('python-restart-' + str(${i}))`);
+      await waitForScreen(new RegExp(`^python-restart-${i}$`, "m"), `Python restart ${i} executes code`);
+      await command("exit()");
+      await waitForScreen(/Process Python finished/, `Python restart ${i} exits normally`);
+      // Wait for the new process to disappear, rather than matching an old
+      // "finished" message retained in the comint buffer.
+      await pause(200);
+      await evalLisp(`(message "python-cleanup-${i}-%d" (length (process-list)))`);
+      await waitForScreen(new RegExp(`python-cleanup-${i}-0`), `Python restart ${i} leaves no live process`);
+    }
+    await logEvent("SCENARIO_PASS python");
+    console.log("browser smoke scenario passed: python");
   }
 
   console.log(`browser smoke passed: ${scenarios.join(",")} ${appUrl}`);

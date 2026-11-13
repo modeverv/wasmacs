@@ -695,7 +695,7 @@ async function installProcessUserland(FS) {
       wakeSAB: INPUT_SAB,
     });
   }
-  installProgramLoader(manifest);
+  installProgramLoader(FS, manifest);
   post("status", { text: `process userland ready (${commandCount} commands)` });
   return manifest;
 }
@@ -703,7 +703,7 @@ async function installProcessUserland(FS) {
 // The kernel calls this while Emacs is blocked inside a system call (the
 // worker's event loop is not running), so loading has to be synchronous:
 // a synchronous XHR for the wasm binary and importScripts for its glue.
-function installProgramLoader(manifest) {
+function installProgramLoader(FS, manifest) {
   const images = new Map();
   globalThis.__wasmacsLoadProgram = function wasmacsLoadProgram(name) {
     if (images.has(name)) return images.get(name);
@@ -725,6 +725,14 @@ function installProgramLoader(manifest) {
     if (typeof factory !== "function") {
       throw new Error(`${name}.js did not define wasmacsProgram_${name}`);
     }
+    self.WasmacsUserland.installProgramFiles(FS, manifest, name, (source) => {
+      const data = new XMLHttpRequest();
+      data.open("GET", `${USERLAND_DIR}/${source}?v=${ARTIFACT_CACHE_BUST}`, false);
+      data.responseType = "arraybuffer";
+      data.send();
+      if (data.status !== 200 || !data.response) throw new Error(`${source}: HTTP ${data.status}`);
+      return new Uint8Array(data.response);
+    });
     const image = { factory, wasm };
     images.set(name, image);
     post("status", { text: `loaded ${name} (${(xhr.response.byteLength / 1024 / 1024).toFixed(1)} MB)` });

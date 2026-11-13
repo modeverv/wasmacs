@@ -1,0 +1,23 @@
+# The first Python image is an offline, single-threaded interpreter.
+# Do not pull in socket mounts, a dynamic loader, external native libraries,
+# subprocess support, GUI bindings, or test extension modules.
+*disabled*
+_socket
+_ssl
+_hashlib
+_ctypes
+_decimal
+_bz2
+_lzma
+_zstd
+zlib
+_sqlite3
+_dbm
+_gdbm
+_tkinter
+readline
+_posixsubprocess
+_multiprocessing
+_posixshmem
+_asyncio
+_remote_debugging

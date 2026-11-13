@@ -4,7 +4,7 @@
 
 This is not a project to build an "Emacs-like editor." Its goal is to run the real Emacs on WebAssembly by keeping the GNU Emacs 30.2 C core and Elisp runtime at the center, while the browser side provides display, input, persistence, and portable filesystem images.
 
-The current main route is the browser runtime built on `SharedArrayBuffer`, `Atomics.wait`, pdump, and xterm.js. It has reached `*scratch*`, Dired, Org mode, Elisp loading through `load-file`, import/export of `.wasifs` images, and subprocesses: `M-x shell`, eshell, git, grep, Magit and Ediff run inside the browser tab.
+The current main route is the browser runtime built on `SharedArrayBuffer`, `Atomics.wait`, pdump, and xterm.js. It has reached `*scratch*`, Dired, Org mode, Elisp loading through `load-file`, import/export of `.wasifs` images, and subprocesses: `M-x shell`, eshell, git, grep, Magit, Ediff and the Python REPL run inside the browser tab.
 
 ## Current Capabilities
 
@@ -19,14 +19,14 @@ The current main route is the browser runtime built on `SharedArrayBuffer`, `Ato
 - Use a user-operated self-hosted proxy for package archives that cannot be fetched directly because of CORS
 - Copy yanked text to the browser clipboard
 - Start subprocesses from Emacs: `call-process`, `make-process`, `shell-command`, `M-x shell`, eshell with external commands and pipelines
-- Run a POSIX shell (BusyBox `ash`) and about 150 command line tools, git 2.52, GNU grep 3.12 and GNU diffutils 3.12 as real processes with pipes, signals, `fork` and `exec`
+- Run a POSIX shell (BusyBox `ash`) and about 150 command line tools, git 2.52, GNU grep 3.12, GNU diffutils 3.12 and CPython 3.14 as real processes with pipes, signals, `fork` and `exec`
 - Use `M-x grep`, `rgrep`, `lgrep`, the xref/project search commands, `vc-git`, and Magit (status, staging, commit with the message edited in Emacs, log, diff)
 
 ## Current Limitations
 
-- Processes are provided by wasmacs's own process service, not by the host: only the bundled programs (BusyBox tools, git, GNU grep, GNU diffutils) can run. See [Subprocesses](#subprocesses-shell-git-grep).
+- Processes are provided by wasmacs's own process service, not by the host: only the bundled programs (BusyBox tools, git, GNU grep, GNU diffutils, CPython) can run. See [Subprocesses](#subprocesses-shell-git-grep).
 - There are no pseudoterminals or raw sockets. `M-x term` / `ansi-term` do not work; `M-x shell` and eshell do. Git `clone`, `fetch` and `push` support Smart HTTP(S) through the Chrome companion, as well as local repositories.
-- Scheduling is cooperative on one thread. A program that computes for a long time without any system call cannot be interrupted until it makes one.
+- Scheduling is cooperative on one thread. Computation without system calls or explicit polling points delays interruption. CPython's interpreter includes polling points for Python loops.
 - Network features such as `package-refresh-contents` are constrained by browser fetch, CORS, and proxy configuration.
 - This is not a port of native GUI Emacs frames. The current route is terminal Emacs running on xterm.js.
 - Pages artifacts under `docs/` are split and constrained so they can be hosted by GitHub Pages.
@@ -41,7 +41,7 @@ src/build/  docs and artifact generation scripts
 src/c/      Emacs C-side patch layer
 src/runtime/ host/runtime libraries used by tests and tools
 src/runtime/process/ process service: kernel, per-process runtime, filesystem layout of the userland
-src/userland/ builds of the programs that run as processes (BusyBox, git, GNU grep, GNU diffutils)
+src/userland/ builds of the programs that run as processes (BusyBox, git, GNU grep, GNU diffutils, CPython)
 tools/      build / validation / probe / inspection tools
 proxy/      self-hosted fetch proxy samples for package archives
 vendor/     pinned upstream GNU Emacs source; read-only
@@ -135,7 +135,7 @@ make dev
 
 `make build` regenerates the Emacs wasm / pdmp / wasifs artifacts and the process userland under `build/artifacts/`, then refreshes the GitHub Pages bundle under `docs/`.
 
-`make userland` builds only the programs that run as processes (`build/artifacts/userland/`). The first run downloads the BusyBox, git, GNU grep and GNU diffutils release tarballs under `build/userland/`; their sha256 sums are pinned in the build scripts.
+`make userland` builds only the programs that run as processes (`build/artifacts/userland/`). The first run downloads the BusyBox, git, GNU grep, GNU diffutils and CPython release tarballs under `build/userland/`; their sha256 sums are pinned in the build scripts.
 
 `make test` (`npm test`) is what CI runs: the runtime contract tests, including one that boots the checked-in `docs/` bundle under Node and lets Emacs run `sh`, `git` and `grep`. `make test-process` runs the full process suites (kernel tests, then real Emacs driving real subprocesses); `npm run browser:smoke:processes` drives the page in headless Chrome.
 
@@ -154,6 +154,7 @@ Emacs (callproc.c, process.c)        emacs_spawn / waitpid / kill / pipe / poll
        -> /bin/git                   git 2.52
        -> /bin/grep                  GNU grep 3.12
        -> /bin/diff, /bin/diff3       GNU diffutils 3.12
+       -> /bin/python3, /bin/python  CPython 3.14
 ```
 
 What that gives Emacs:
@@ -168,10 +169,31 @@ What it does not give:
 
 - no pseudoterminals: programs see pipes, so `M-x term` does not work and full-screen programs are of no use
 - no raw sockets: Git HTTP(S) uses the browser host capability; SSH and `git://` are unavailable
-- no other programs than the bundled ones; there is no compiler, no Python, no package manager
+- no other programs than the bundled ones; there is no compiler or package manager
 - the whole of `/home/user` is saved as one image whenever it changed, so very large repositories make saving slow
 
 Magit is not bundled. Install it with `package.el` (see Network Access below), or bring it in a packed `.wasifs` image.
+
+### Python REPL
+
+Run `M-x run-python` to open the bundled CPython REPL in `*Python*`.
+Enter expressions at `>>>`; use `C-c C-c` to interrupt a running Python loop
+and return to the prompt, and `exit()` to finish. From a Python source buffer,
+`C-c C-z` switches to the REPL and `C-c C-c` sends the buffer for execution.
+The shell also supports `python3 -i`, `python3 script.py` and `python3 -c 'print(1 + 2)'`.
+
+Python executes inside the browser and shares files with Emacs. Files saved
+under `/home/user` use the normal user-image persistence. The interpreter and
+standard-library ZIP load on the first Python launch; a Chrome extension or
+host Python installation is not required.
+
+This is a single-threaded, pipe-based CPython build. Pip, native extension
+wheels, Python networking, threads and subprocesses are not provided.
+Interpreter polling lets Python loops yield and receive interrupts; long C
+operations without a signal check can still delay interruption.
+
+Validation: `npm run test:python` and `npm run browser:smoke:python`.
+Build details: [src/userland/python/README.md](src/userland/python/README.md).
 
 ### Comparing and merging with Ediff
 

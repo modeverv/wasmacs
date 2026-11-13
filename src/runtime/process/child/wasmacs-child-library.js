@@ -32,7 +32,7 @@
 // Emscripten's own implementations of the system calls we wrap.  They are
 // re-registered under private names so that the wrappers can call them.
 var wasmacsOrigSyscalls = {};
-for (const name of ['__syscall_openat', '__syscall_dup', '__syscall_dup3', '__syscall_fcntl64',
+for (const name of ['__syscall_openat', '__syscall_dup', '__syscall_dup3', '__syscall_fcntl64', '__syscall_ioctl',
                     '__syscall_stat64', '__syscall_lstat64', '__syscall_newfstatat', '__syscall_getdents64']) {
   wasmacsOrigSyscalls[`$wasmacs_orig${name}`] = LibraryManager.library[name];
   wasmacsOrigSyscalls[`$wasmacs_orig${name}__deps`] = LibraryManager.library[`${name}__deps`] || [];
@@ -302,6 +302,13 @@ addToLibrary({
   },
 
   // ======================= process system calls ===========================
+  // CPython's evaluator calls this periodically even when Python code makes
+  // no system calls. Yield through the same restartable path as read/poll;
+  // pending SIGINT invokes Python's own handler and becomes KeyboardInterrupt.
+  wasmacs_host_python_poll__deps: ['$WK'],
+  wasmacs_host_python_poll__async: true,
+  wasmacs_host_python_poll: () => WK.sys((k, p) => k.preempt(p) || 0, 0),
+
   wasmacs_k_fork__deps: ['$WK'],
   wasmacs_k_fork__async: true,
   wasmacs_k_fork: () => WK.sys((k, p) => k.sys_fork(p, false), -{{{ cDefs.EINTR }}}),
@@ -475,6 +482,19 @@ addToLibrary({
     WK.sys((k, p) => k.sys_poll(p, fds, nfds, timeout), -{{{ cDefs.EINTR }}}),
 
   // ---- FD_CLOEXEC ----------------------------------------------------------
+  // CPython first tries ioctl(FIOCLEX) when opening script files. These ioctl
+  // operations apply to all descriptors, including ordinary files and pipes.
+  __syscall_ioctl__deps: ['$FS', '$wasmacs_orig__syscall_ioctl'],
+  __syscall_ioctl: (fd, request, varargs) => {
+    if (request === 0x5451 /* FIOCLEX */ || request === 0x5450 /* FIONCLEX */) {
+      var stream = FS.getStream(fd);
+      if (!stream) return -{{{ cDefs.EBADF }}};
+      stream.cloexec = request === 0x5451 /* FIOCLEX */;
+      return 0;
+    }
+    return wasmacs_orig__syscall_ioctl(fd, request, varargs);
+  },
+
   // Emscripten ignores close-on-exec ("makes no sense for a single process").
   // It is tracked per descriptor in stream.cloexec and honoured by exec/spawn.
   __syscall_openat__deps: ['$WK', '$FS', '$wasmacs_orig__syscall_openat'],

@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -334,6 +335,46 @@ static int mode_cloexec(const char *self) {
   return WEXITSTATUS(status);
 }
 
+/* FIOCLEX/FIONCLEX affect descriptor flags, including files and pipes. */
+static int mode_ioctl_cloexec(const char *self) {
+  int file = open("/bin/ktest", O_RDONLY);
+  if (file < 0) return fail("open");
+  int duplicate = dup(file), pfd[2];
+  if (duplicate < 0 || pipe(pfd) != 0) return fail("dup/pipe");
+  if (ioctl(file, FIOCLEX) != 0 || ioctl(duplicate, FIOCLEX) != 0
+      || ioctl(duplicate, FIONCLEX) != 0 || ioctl(pfd[0], FIOCLEX) != 0
+      || ioctl(pfd[1], FIOCLEX) != 0 || ioctl(pfd[1], FIONCLEX) != 0) {
+    return fail("ioctl close-on-exec");
+  }
+  printf("ioctl flags file=%d duplicate=%d pipe-read=%d pipe-write=%d\n",
+         fcntl(file, F_GETFD), fcntl(duplicate, F_GETFD),
+         fcntl(pfd[0], F_GETFD), fcntl(pfd[1], F_GETFD));
+
+  int bad = dup(file);
+  if (bad < 0 || close(bad) != 0) return fail("close bad fd");
+  errno = 0;
+  if (ioctl(bad, FIOCLEX) != -1 || errno != EBADF) return fail("FIOCLEX EBADF");
+  errno = 0;
+  if (ioctl(bad, FIONCLEX) != -1 || errno != EBADF) return fail("FIONCLEX EBADF");
+  printf("ioctl invalid set=EBADF clear=EBADF\n");
+  fflush(stdout);
+
+  char a[16], b[16], c[16], d[16];
+  snprintf(a, sizeof a, "%d", file);
+  snprintf(b, sizeof b, "%d", duplicate);
+  snprintf(c, sizeof c, "%d", pfd[0]);
+  snprintf(d, sizeof d, "%d", pfd[1]);
+  pid_t pid = fork();
+  if (pid < 0) return fail("fork");
+  if (pid == 0) {
+    execl(self, "ktest", "fdcheck4", a, b, c, d, (char *)0);
+    _exit(127);
+  }
+  int status;
+  if (waitpid(pid, &status, 0) != pid) return fail("waitpid");
+  return WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+}
+
 /* ---- poll: timeout and readiness on a pipe ------------------------------------------ */
 static int mode_poll(void) {
   struct pollfd p = { 0, POLLIN, 0 };
@@ -384,6 +425,7 @@ int main(int argc, char **argv) {
     return 0;
   }
   if (!strcmp(mode, "cloexec")) return mode_cloexec(argv[2]);
+  if (!strcmp(mode, "ioctl-cloexec")) return mode_ioctl_cloexec(argv[2]);
   if (!strcmp(mode, "poll")) return mode_poll();
   if (!strcmp(mode, "big")) return mode_big(atol(argv[2]));
   printf("ktest: unknown mode %s\n", mode);

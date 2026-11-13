@@ -191,6 +191,28 @@
         "diff3"
       ],
       "wasmBytes": 83007
+    },
+    "python": {
+      "applets": [
+        "python3",
+        "python"
+      ],
+      "wasmBytes": 8858031,
+      "directories": [
+        "/usr/lib/python3.14/lib-dynload"
+      ],
+      "files": [
+        {
+          "source": "python314.zip",
+          "path": "/usr/lib/python314.zip",
+          "bytes": 10738821
+        },
+        {
+          "source": "python314-os.py",
+          "path": "/usr/lib/python3.14/os.py",
+          "bytes": 41958
+        }
+      ]
     }
   }
 }

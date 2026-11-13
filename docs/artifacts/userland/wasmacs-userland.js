@@ -141,5 +141,31 @@
     return list.length;
   }
 
-  root.WasmacsUserland = { install, commands, marker, ENVIRONMENT, EMACS_SETTINGS, ETC_FILES, SCRIPTS, BIN_DIR };
+  // Program data belongs to the shared filesystem, not to a child instance.
+  // The host calls this synchronously once, before caching a program image.
+  // readFile returns bytes, never a Promise; no process closures are retained.
+  function installProgramFiles(FS, manifest, name, readFile) {
+    const program = manifest.programs[name];
+    if (!program) return; // development harnesses may supply extra test images
+    const files = (program.files || []).map(({ source, path, bytes: expectedBytes }) => {
+      if (!/^[A-Za-z0-9_.-]+$/.test(source) || source === '.' || source === '..'
+          || !path.startsWith('/') || path.split('/').includes('..')) {
+        throw new Error(`invalid program data path: ${name}`);
+      }
+      const bytes = readFile(source);
+      if (!ArrayBuffer.isView(bytes)) throw new Error(`program data must be synchronous bytes: ${source}`);
+      if (expectedBytes !== undefined && bytes.byteLength !== expectedBytes) {
+        throw new Error(`program data size mismatch: ${source}`);
+      }
+      return { path, bytes };
+    });
+    for (const dir of program.directories || []) mkdirp(FS, dir);
+    for (const { path, bytes } of files) {
+      mkdirp(FS, path.slice(0, path.lastIndexOf('/')));
+      FS.writeFile(path, bytes);
+      FS.chmod(path, 0o444);
+    }
+  }
+
+  root.WasmacsUserland = { install, installProgramFiles, commands, marker, ENVIRONMENT, EMACS_SETTINGS, ETC_FILES, SCRIPTS, BIN_DIR };
 })(typeof globalThis !== 'undefined' ? globalThis : self);

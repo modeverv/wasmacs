@@ -4,7 +4,7 @@
 
 これは「Emacs 風のエディタ」を作るプロジェクトではありません。GNU Emacs 30.2 の C core と Elisp runtime を中心に置き、表示、入力、永続化、可搬ファイルシステムイメージをブラウザ側で支えることで、本物の Emacs を WebAssembly 上で動かすことを目指しています。
 
-現在の主ルートは、`SharedArrayBuffer` / `Atomics.wait` / pdump / xterm.js を使うブラウザ実行ルートです。`*scratch*`、Dired、Org-mode、`load-file` による Elisp 読み込み、`.wasifs` の import/export に加えて、サブプロセスも動きます。`M-x shell`、eshell、git、grep、Magit、Ediff がブラウザのタブの中で動作します。
+現在の主ルートは、`SharedArrayBuffer` / `Atomics.wait` / pdump / xterm.js を使うブラウザ実行ルートです。`*scratch*`、Dired、Org-mode、`load-file` による Elisp 読み込み、`.wasifs` の import/export に加えて、サブプロセスも動きます。`M-x shell`、eshell、git、grep、Magit、Ediff、Python REPL がブラウザのタブの中で動作します。
 
 ## 現在できること
 
@@ -19,14 +19,14 @@
 - CORS で直接 fetch できない package archive については、ユーザー管理の self-hosted proxy を使える
 - emacsでのヤンクをブラウザ clipboard に流す
 - Emacs からサブプロセスを起動する（`call-process`、`make-process`、`shell-command`、`M-x shell`、外部コマンドとパイプを使う eshell）
-- POSIX シェル（BusyBox の `ash`）と約150個のコマンド、git 2.52、GNU grep 3.12、GNU diffutils 3.12 を、パイプ・シグナル・`fork`・`exec` を備えた本物のプロセスとして動かす
+- POSIX シェル（BusyBox の `ash`）と約150個のコマンド、git 2.52、GNU grep 3.12、GNU diffutils 3.12、CPython 3.14 を、パイプ・シグナル・`fork`・`exec` を備えた本物のプロセスとして動かす
 - `M-x grep`、`rgrep`、`lgrep`、xref / project の検索、`vc-git`、Magit（status、stage、Emacs でメッセージを編集する commit、log、diff）を使う
 
 ## まだ制限があること
 
-- プロセスは host のものではなく、wasmacs 自身の process service が提供します。動かせるのは同梱したプログラム（BusyBox のコマンド群、git、GNU grep、GNU diffutils）だけです。[サブプロセス](#サブプロセス-shellgitgrep) を参照してください
+- プロセスは host のものではなく、wasmacs 自身の process service が提供します。動かせるのは同梱したプログラム（BusyBox のコマンド群、git、GNU grep、GNU diffutils、CPython）だけです。[サブプロセス](#サブプロセス-shellgitgrep) を参照してください
 - 擬似端末（pty）と socket はありません。`M-x term` / `ansi-term` は動きません（`M-x shell` と eshell は動きます）。Git の `clone` / `fetch` / `push` は Chrome 拡張経由の Smart HTTP(S) とローカルリポジトリに対応します
-- スケジューリングは1スレッド上の協調型です。システムコールを一切せずに長時間計算するプログラムは、次にシステムコールをするまで中断できません
+- スケジューリングは1スレッド上の協調型です。システムコールや定期チェックを行わない長時間の計算では中断が遅れます。CPython のインタープリターには Python のループ用の定期チェックを追加しています
 - `package-refresh-contents` などのネットワーク機能は、ブラウザ fetch / CORS / proxy の制約を受けます
 - GUI Emacs の native frame を移植しているわけではなく、現状は xterm.js 上の terminal Emacs です
 - `docs/` に置く Pages 用 artifact は、GitHub Pages で扱える形に分割・制限しています
@@ -135,7 +135,7 @@ make dev
 
 `make build` は Emacs wasm / pdmp / wasifs artifact と process userland を `build/artifacts/` 以下に再生成し、その後 GitHub Pages 用 bundle を `docs/` に反映します。
 
-`make userland` は、プロセスとして動くプログラムだけをビルドします（`build/artifacts/userland/`）。初回は BusyBox、git、GNU grep、GNU diffutils のリリース tarball を `build/userland/` 以下にダウンロードします。sha256 はビルドスクリプトに固定してあります。
+`make userland` は、プロセスとして動くプログラムだけをビルドします（`build/artifacts/userland/`）。初回は BusyBox、git、GNU grep、GNU diffutils、CPython のリリース tarball を `build/userland/` 以下にダウンロードします。sha256 はビルドスクリプトに固定してあります。
 
 `make test`（`npm test`）は CI が実行するものです。runtime contract のテストに加えて、checked-in の `docs/` bundle を Node 上で起動し、Emacs から `sh`・`git`・`grep` を実行するテストを含みます。`make test-process` は process service の全テスト（kernel のテストと、本物の Emacs が本物のサブプロセスを動かすテスト）を実行します。`npm run browser:smoke:processes` は headless Chrome で実際のページを操作します。
 
@@ -154,6 +154,7 @@ Emacs (callproc.c, process.c)        emacs_spawn / waitpid / kill / pipe / poll
        -> /bin/git                   git 2.52
        -> /bin/grep                  GNU grep 3.12
        -> /bin/diff, /bin/diff3       GNU diffutils 3.12
+       -> /bin/python3, /bin/python  CPython 3.14
 ```
 
 これで Emacs からできること:
@@ -168,10 +169,29 @@ Emacs (callproc.c, process.c)        emacs_spawn / waitpid / kill / pipe / poll
 
 - 擬似端末はありません。プログラムから見えるのはパイプなので、`M-x term` は動かず、全画面を使うプログラムは使えません
 - raw socket はありません。Git の clone/fetch/push は Chrome 拡張経由の Smart HTTP(S) に対応します。SSH と `git://` は使えません
-- 同梱したもの以外のプログラムは動きません。コンパイラ、Python、パッケージマネージャはありません
+- 同梱したもの以外のプログラムは動きません。コンパイラ、パッケージマネージャはありません
 - `/home/user` は、変更があるたびに全体を1つの image として保存します。非常に大きなリポジトリでは保存が遅くなります
 
 Magit は同梱していません。`package.el` でインストールするか（下の「ネットワークアクセス」を参照）、pack した `.wasifs` image で持ち込んでください。
+
+### Python REPL
+
+`M-x run-python` で `*Python*` バッファに同梱の CPython を起動します。
+`>>>` に式を入力して実行できます。実行中の Python のループは `C-c C-c` で
+中断してプロンプトに戻り、`exit()` で終了します。Python ソースのバッファでは
+`C-c C-z` で REPL に移動し、`C-c C-c` でバッファを実行できます。
+シェルからは `python3 -i`、`python3 script.py`、`python3 -c 'print(1 + 2)'` も使えます。
+
+Python はブラウザ内で動き、Emacs とファイルを共有します。`/home/user` 以下に
+保存したファイルは通常の user image に保存されます。Python 本体と標準ライブラリの
+ZIP は初回起動時に読み込みます。Chrome 拡張やホスト側の Python は不要です。
+
+単一スレッド・パイプ接続の CPython です。pip、ネイティブ拡張 wheel、Python の
+通信、スレッド、subprocess は提供しません。Python のループは定期的に制御を戻して
+割り込みを受け付けますが、signal check のない長時間の C 処理は中断が遅れる場合があります。
+
+検証は `npm run test:python` と `npm run browser:smoke:python`。
+ビルドの詳細は [src/userland/python/README.md](src/userland/python/README.md) を参照してください。
 
 ### Ediff による比較・マージ
 

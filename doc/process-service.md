@@ -26,9 +26,10 @@ kernel                             src/runtime/process/wasmacs-kernel.js
 process                            src/runtime/process/child/
   one WebAssembly instance per process, own linear memory, Asyncify
     |
-programs                           src/userland/{busybox,git,grep,diffutils}
+programs                           src/userland/{busybox,git,grep,diffutils,python}
   /bin/sh and ~150 tools (BusyBox), /bin/git, /bin/grep (GNU grep)
   /bin/diff, /bin/diff3 (GNU diffutils)
+  /bin/python3, /bin/python (CPython)
 ```
 
 ## What Emacs gets
@@ -45,6 +46,8 @@ programs                           src/userland/{busybox,git,grep,diffutils}
   quit, the child is killed).
 - `M-x shell` and eshell; `vc-git`; Magit, including the commit message edited
   in an Emacs buffer; `M-x grep`, `rgrep`, `lgrep`, `xref-matches-in-files`.
+- `M-x run-python` with the bundled CPython and standard library; Python
+  scripts use the same filesystem as Emacs.
 
 ## What it does not provide
 
@@ -54,7 +57,7 @@ programs                           src/userland/{busybox,git,grep,diffutils}
 | Job control | `ash` is built without it: `&`, `wait`, `kill` work, `fg`/`bg`/`C-z` do not. |
 | Sockets | `socket()` fails with `EAFNOSUPPORT`. Git Smart HTTP(S) uses the explicit host HTTP service; SSH and `git://` are unavailable. |
 | Threads in processes | Programs are single-threaded. |
-| Preemption | Scheduling is cooperative. A program that computes without any system call runs until it makes one. |
+| Preemption | Scheduling is cooperative. A program that computes without a system call or polling point keeps running. CPython's interpreter has explicit polling points. |
 | Other programs | Only what `src/userland` builds exists. `/bin/<name>` for anything else is "not found". |
 | Users | Everything runs as uid 0 (`root`, home `/home/user`). |
 
@@ -163,11 +166,27 @@ fallback).
 | `git-http` | same pinned Git source | Original `remote-curl.c` with a browser HTTP adapter. Provides `git-remote-http` and `git-remote-https` for Smart HTTP clone/fetch/push. |
 | `grep` | GNU grep 3.12, `src/userland/grep` | Unpatched. Emacs uses `--null`, `--color`, `--exclude` and `--directories=skip`, which the BusyBox applet lacks. `egrep` and `fgrep` are two-line shell scripts. |
 | `diff`, `diff3` | GNU diffutils 3.12, `src/userland/diffutils` | Separate process images. Normal/context/unified diff and three-way comparison for Emacs's existing Ediff implementation. |
+| `python` | CPython 3.14.10, `src/userland/python` | `python3` and `python` aliases; basic pipe REPL, static modules and standard-library ZIP. Startup/I/O glue and evaluator polling adapted to the child runtime. |
 
 `src/userland/build.sh` builds the programs and Git HTTP helper and writes
 `build/artifacts/userland/manifest.json`; `src/build/build-site.mjs` publishes
 the directory with the Pages bundle. Release tarballs are cached under
 `build/userland/`, and each build script pins the sha256.
+
+An image may also declare `files` (`source`, absolute FS `path`, byte count)
+and `directories` in its manifest entry. The host installs these synchronously
+before caching the image. Python uses this for `/usr/lib/python314.zip`; no
+standard-library bytes are downloaded until Python is first executed. Data
+files contain bytes only and do not keep child instances alive. The browser
+loader and Node harness use the same `installProgramFiles` implementation.
+
+CPython's evaluator calls `wasmacs_host_python_poll` periodically. This runs
+through `WK.sys`, yields at the normal time-slice boundary and delivers pending
+signals using the existing child signal dispositions. SIGINT becomes Python's
+own `KeyboardInterrupt`, so the REPL remains usable. CPython's upstream
+Promise-based Emscripten startup and async I/O are excluded. Long C operations
+that do not check signals may still defer interruption. Python sockets,
+threads, subprocesses, pip and native wheel loading are outside this build.
 
 `WasmacsUserland.EMACS_SETTINGS` (`src/runtime/process/wasmacs-userland.js`)
 holds the three Emacs settings that follow from the above; the worker evaluates
@@ -256,6 +275,8 @@ tree: a very large repository makes every save slow.
 | `npm run test:process:emacs` | `tools/scripts/probe-process-service.mjs`: the real Emacs build under Node, batch and interactive (keystrokes into the real command loop). The Magit checks use the packages installed on the machine (`~/.emacs.d/elpa`) and are skipped without them. |
 | `npm run test:ediff` | Real Emacs: diff output/exit status, two-/three-way Ediff, copy and ancestor merge, repeated process cleanup. |
 | `npm run browser:smoke:ediff` | Real Chrome: rendered Ediff control panel, difference navigation, copying and merge resolution. |
+| `npm run test:python` | Real Emacs: Python expressions, multiline input, imports/files, exceptions, interruption/recovery and process cleanup. |
+| `npm run browser:smoke:python` | Real Chrome: `run-python` interaction, CPU-loop interruption and continued REPL use. |
 | `npm run browser:smoke:processes` | `tools/scripts/run-browser-smoke.mjs shell persist`: the page in headless Chrome. |
 
 Development aids: `WASMACS_KERNEL_JS=<file>` makes the Node harness use that

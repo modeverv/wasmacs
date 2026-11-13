@@ -275,6 +275,16 @@ test("close-on-exec is honoured by exec", () => {
   eq(lines.map((l) => l.split(" ")[2]).join(","), "open,closed,closed,open", "descriptors after exec");
 });
 
+test("ioctl close-on-exec sets and clears descriptor flags across exec", () => {
+  const r = run(["/bin/ktest", "ioctl-cloexec", "/bin/ktest"]);
+  eq(r.code, 0, r.out);
+  has(r.out, "ioctl flags file=1 duplicate=0 pipe-read=1 pipe-write=0\n");
+  has(r.out, "ioctl invalid set=EBADF clear=EBADF\n");
+  const lines = r.out.split("\n").filter((l) => l.startsWith("fd "));
+  eq(lines.map((l) => l.split(" ")[2]).join(","), "closed,open,closed,open", "ioctl flags honoured after exec");
+  noLeak();
+});
+
 test("signals: handler interrupts a blocked read (EINTR), twice", () => {
   const [inR, inW] = pipe();
   const [outR, outW] = pipe();
