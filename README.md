@@ -210,12 +210,26 @@ under `/home/user` use the normal user-image persistence. The interpreter and
 standard-library ZIP load on the first Python launch; a Chrome extension or
 host Python installation is not required.
 
-This is a single-threaded, pipe-based CPython build. Pip, native extension
-wheels, Python networking, threads and subprocesses are not provided.
-Interpreter polling lets Python loops yield and receive interrupts; long C
-operations without a signal check can still delay interruption.
+Python starts processes through the same Process Service as Emacs:
+`subprocess.run` and `Popen` (captured output, exit status, `input=`,
+`check=`, `cwd`, `env`, `shell=True`, timeouts, pipelines), `os.system` and
+`os.popen` run the bundled programs. A Python script run in `M-x term` sees a
+terminal (`sys.stdin.isatty()` is true); under `M-x shell` or `run-python` it
+sees pipes.
 
-Validation: `npm run test:python` and `npm run browser:smoke:python`.
+```python
+import subprocess
+print(subprocess.run(["git", "--version"], capture_output=True, text=True))
+# CompletedProcess(args=['git', '--version'], returncode=0, stdout='git version 2.52.1\n', stderr='')
+```
+
+This is a single-threaded CPython build. Pip, native extension wheels, Python
+networking, threads and multiprocessing are not provided. Interpreter polling
+lets Python loops yield and receive interrupts; long C operations without a
+signal check can still delay interruption.
+
+Validation: `npm run test:python`, `npm run browser:smoke:python` and
+`npm run browser:smoke:term`.
 Build details: [src/userland/python/README.md](src/userland/python/README.md).
 
 ### Comparing and merging with Ediff

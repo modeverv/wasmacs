@@ -53,10 +53,19 @@ Two portability adaptations are necessary:
 
 `config.site` preserves upstream platform exclusions while enabling the
 working `sigaction` provided by the child libc/runtime. `Setup.local` excludes
-sockets, TLS, subprocess, GUI and external-library extensions from this first
-image. C modules that remain enabled are statically linked. This does not
-provide pip, native extension wheels, Python networking, multiprocessing or
-threads. Pure Python files can be imported from the user filesystem.
+sockets, TLS, GUI and external-library extensions from this first image. C
+modules that remain enabled are statically linked. This does not provide pip,
+native extension wheels, Python networking, multiprocessing or threads. Pure
+Python files can be imported from the user filesystem.
+
+`subprocess` works on the Process Service. Upstream marks `_posixsubprocess`
+n/a for every Emscripten build and `subprocess.py` refuses processes on
+`sys.platform == "emscripten"`; `Setup.local` builds the module statically and
+`patches/0002-subprocess-on-the-process-service.patch` lifts the refusal.
+`fork_exec` then forks the interpreter (the kernel copies its memory), and the
+child executes the program; `os.fork`, `os.execv`, pipes and `waitpid` were
+already provided. A `subprocess.run` costs a few milliseconds plus the
+program's own start.
 
 Acceptance checks belong to the shared Process Service and actual Emacs
 probes: REPL prompts and multiline input, file I/O, standard-library imports,

@@ -246,8 +246,11 @@ through `WK.sys`, yields at the normal time-slice boundary and delivers pending
 signals using the existing child signal dispositions. SIGINT becomes Python's
 own `KeyboardInterrupt`, so the REPL remains usable. CPython's upstream
 Promise-based Emscripten startup and async I/O are excluded. Long C operations
-that do not check signals may still defer interruption. Python sockets,
-threads, subprocesses, pip and native wheel loading are outside this build.
+that do not check signals may still defer interruption. Python's `subprocess`
+(`run`, `Popen`, `os.system`, `os.popen`) starts processes through the same
+kernel: `_posixsubprocess` forks the interpreter and execs the program
+(`src/userland/python/README.md`). Python sockets, threads, multiprocessing,
+pip and native wheel loading are outside this build.
 
 `WasmacsUserland.EMACS_SETTINGS` (`src/runtime/process/wasmacs-userland.js`)
 holds the three Emacs settings that follow from the above; the worker evaluates

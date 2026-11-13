@@ -1,0 +1,13 @@
+--- a/Lib/subprocess.py
++++ b/Lib/subprocess.py
+@@ -75,7 +75,9 @@
+     _mswindows = True
+ 
+ # some platforms do not support subprocesses
+-_can_fork_exec = sys.platform not in {"emscripten", "wasi", "ios", "tvos", "watchos"}
++# wasmacs: processes of this Emscripten build run on the Process Service,
++# which provides fork, exec, pipes and waitpid (_posixsubprocess is built).
++_can_fork_exec = sys.platform not in {"wasi", "ios", "tvos", "watchos"}
+ 
+ if _mswindows:
+     import _winapi

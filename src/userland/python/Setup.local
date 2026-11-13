@@ -1,6 +1,12 @@
 # The first Python image is an offline, single-threaded interpreter.
 # Do not pull in socket mounts, a dynamic loader, external native libraries,
-# subprocess support, GUI bindings, or test extension modules.
+# GUI bindings, or test extension modules.
+
+# subprocess: the Process Service provides fork, exec, pipes and waitpid.
+# configure marks the module n/a for every Emscripten build, so name it here.
+*static*
+_posixsubprocess _posixsubprocess.c
+
 *disabled*
 _socket
 _ssl
@@ -16,7 +22,6 @@ _dbm
 _gdbm
 _tkinter
 readline
-_posixsubprocess
 _multiprocessing
 _posixshmem
 _asyncio

@@ -340,6 +340,8 @@ CPython の evaluator にある定期チェックから restartable import を�
 time slice と signal delivery を使う。これによりシステムコールをしない Python
 ループも yield し、SIGINT は CPython 自身の `KeyboardInterrupt` になる。
 これは一般的な preemption ではなく、長い C 処理が check をしない場合には適用されない。
+Python の `subprocess`（`run`、`Popen`、`os.system`、`os.popen`）も同じ Process Service
+を使う。`_posixsubprocess` が interpreter を fork し、子が対象のプログラムを exec する。
 
 擬似端末は kernel のデバイス（`/dev/ptmx`、`/dev/pts/N`、`/dev/tty`）として
 提供し、`M-x term` / `ansi-term` が使う。job control と socket は提供しない。

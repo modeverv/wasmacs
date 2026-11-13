@@ -5432,3 +5432,36 @@ Validation (rebased onto the CPython commit e049d19; the child runtime's one
 - `npm test` 125/125, `test:python` 7/7, `test:ediff` 9/9, `test:git-http`
   16 PASS; before the rebase also `test:product`, `test:artifacts`,
   `test:vscode-lane`.
+
+## Implementation: Python subprocess on the Process Service (2026-11-14)
+
+Status: done. The user chose "plan A": connect Python's `subprocess.Popen` to
+the Process Service, so that a script using `os.listdir`, `subprocess.run(
+["git", "--version"], capture_output=True, text=True)` and `sys.stdin.isatty()`
+works when run in `M-x term`.
+
+- Before: `os.fork`, `os.execv`, pipes and `waitpid` already worked from Python
+  (a hand-written fork/exec of git took about 60 ms), but `subprocess` raised
+  `OSError: [Errno 138] emscripten does not support processes`: upstream marks
+  `_posixsubprocess` n/a for every Emscripten build and `subprocess.py` sets
+  `_can_fork_exec = False` there.
+- `src/userland/python/Setup.local` builds `_posixsubprocess` statically;
+  `patches/0002-subprocess-on-the-process-service.patch` lifts the refusal.
+  No kernel or Emacs change. `fork_exec` forks the interpreter (memory copy)
+  and execs the program: about 7 ms per `subprocess.run(["true"])`.
+- Works: `run`/`Popen` with captured output, exit status, `input=`, `check=`,
+  `cwd`, `env`, `shell=True`, timeouts, streaming reads, pipelines,
+  `terminate()`, `os.system`, `os.popen`, `FileNotFoundError` for a missing
+  program. `sys.stdin.isatty()` is true in `M-x term`, false on pipes.
+
+Validation:
+
+- `node tools/scripts/probe-python.mjs`: 10/10 (3 new cases: `subprocess.run`,
+  `Popen` with "no child left behind", the user's script on a pseudoterminal).
+  `tests/runtime/python-bundle.test.js` runs the pseudoterminal case against
+  the Pages bundle (`npm test` 126/126).
+- `npm run browser:smoke:term` runs the user's script in M-x term in headless
+  Chrome; `browser:smoke:python` passes.
+- 200 `subprocess.run` calls from one interpreter while Emacs is idle: heap
+  9.0 -> 9.1 MB, wasm/array buffers unchanged, no live process left.
+- Kernel 52/52, process service probe 37/37.

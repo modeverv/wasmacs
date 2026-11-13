@@ -198,11 +198,24 @@ Python はブラウザ内で動き、Emacs とファイルを共有します。`
 保存したファイルは通常の user image に保存されます。Python 本体と標準ライブラリの
 ZIP は初回起動時に読み込みます。Chrome 拡張やホスト側の Python は不要です。
 
-単一スレッド・パイプ接続の CPython です。pip、ネイティブ拡張 wheel、Python の
-通信、スレッド、subprocess は提供しません。Python のループは定期的に制御を戻して
-割り込みを受け付けますが、signal check のない長時間の C 処理は中断が遅れる場合があります。
+Python も Emacs と同じ Process Service でプロセスを起動します。
+`subprocess.run` と `Popen`（出力の取得、終了コード、`input=`、`check=`、`cwd`、
+`env`、`shell=True`、タイムアウト、パイプライン）、`os.system`、`os.popen` で
+同梱のプログラムを実行できます。`M-x term` で実行した Python スクリプトからは
+端末に見え（`sys.stdin.isatty()` が真）、`M-x shell` や `run-python` ではパイプに
+見えます。
 
-検証は `npm run test:python` と `npm run browser:smoke:python`。
+```python
+import subprocess
+print(subprocess.run(["git", "--version"], capture_output=True, text=True))
+# CompletedProcess(args=['git', '--version'], returncode=0, stdout='git version 2.52.1\n', stderr='')
+```
+
+単一スレッドの CPython です。pip、ネイティブ拡張 wheel、Python の通信、スレッド、
+multiprocessing は提供しません。Python のループは定期的に制御を戻して割り込みを
+受け付けますが、signal check のない長時間の C 処理は中断が遅れる場合があります。
+
+検証は `npm run test:python`、`npm run browser:smoke:python`、`npm run browser:smoke:term`。
 ビルドの詳細は [src/userland/python/README.md](src/userland/python/README.md) を参照してください。
 
 ### Ediff による比較・マージ

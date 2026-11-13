@@ -227,12 +227,13 @@ try {
   const sendKeys = (text) => evaluate(client, sessionId,
     `window.__wasmacsDebugSendInputBytes(${JSON.stringify([...Buffer.from(text, "latin1")])}); true`);
   const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  // PATTERN: a RegExp, or a function of the screen text.
   const waitForScreen = async (pattern, label, timeoutMs = 30_000) => {
     const start = Date.now();
     let text = "";
     while (Date.now() - start < timeoutMs) {
       text = await screen();
-      if (pattern.test(text)) {
+      if (typeof pattern === "function" ? pattern(text) : pattern.test(text)) {
         await logEvent(`SCREEN_PASS ${label} elapsed_ms=${Date.now() - start}`);
         evidence.push(`PASS ${label} (${Date.now() - start}ms)`);
         return text;
@@ -478,6 +479,10 @@ try {
 
   if (scenarios.includes("term")) {
     await logEvent("SCENARIO_START term");
+    // A Python script for the terminal, written while still in *scratch*.
+    const termScript = 'import os\nprint(os.listdir("/"))\n\nimport subprocess\nprint(subprocess.run(["git", "--version"], capture_output=True, text=True))\n\nimport sys\nprint(sys.stdin.isatty())\n';
+    await sendKeys(`\x1b:(write-region ${JSON.stringify(termScript)} nil "/tmp/term-script.py")\r`);
+    await pause(300);
     await sendKeys("\x1bxterm\r");
     await waitForScreen(/Run program: /, "M-x term asks for the program");
     await sendKeys("\r");
@@ -496,6 +501,13 @@ try {
     await sendKeys("q");
     await sendKeys("echo after-less-$((2 + 2))\r");
     await waitForScreen(/^after-less-4$/m, "less quits back to the shell");
+    // Long lines wrap in the terminal: look at the rows joined.
+    const joined = (re) => (text) => re.test(text.replace(/\n/g, ""));
+    await sendKeys("python3 /tmp/term-script.py\r");
+    await waitForScreen(joined(/CompletedProcess\(args=\['git', '--version'\], returncode=0, stdout='git version 2\.[0-9.]+\\n', stderr=''\)/),
+      "Python's subprocess.run runs git in M-x term", 60_000);
+    await waitForScreen(/^True$/m, "Python sees the terminal: sys.stdin.isatty()");
+    await waitForScreen(joined(/\['[^\]]*'bin'[^\]]*\]/), "Python lists / with os.listdir");
     await sendKeys("sleep 100\r");
     await pause(500);
     // C-c C-c sends ^C into the terminal; its line discipline sends SIGINT.
