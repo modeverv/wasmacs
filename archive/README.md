@@ -9,6 +9,8 @@ not depend on it; `tests/runtime/canonical-route.test.js` enforces that.
 ```text
 archive/
   retired/     mechanisms retired on 2026-11-13, one directory per mechanism
+  extensions/  the VS Code .wasifs extension (moved here 2026-11-14) with its
+               tests; run them with node --test archive/extensions/vscode-wasifs/tests/
   old-app/     earlier backups of the app directory
   old-logs/    validation and probe evidence from before the ignored-logs policy
 ```
@@ -24,8 +26,9 @@ untracked.
   `build/artifacts/emacs-browser-atomics-pdump`, built by
   `src/build/build-emacs-browser-atomics-pdump-profile.sh` from `vendor/emacs` +
   `src/c/patches` with `tools/scripts/wasmacs-atomics-host-library.js`.
-- **VS Code `.wasifs` lane (in development): Asyncify.**
-  `extensions/vscode-wasifs`, `src/wasm/src/asyncify-minibuffer-worker.js`,
+- **VS Code `.wasifs` lane (in development): Asyncify.** The extension itself
+  is archived (`archive/extensions/vscode-wasifs`); the runtime route remains:
+  `src/wasm/src/asyncify-minibuffer-worker.js`,
   `tools/scripts/build-emacs-browser-asyncify-spike.sh` (with the perl patcher
   `tools/scripts/patch-emacs-host-entrypoint-spike.sh` and
   `tools/scripts/wasmacs-asyncify-host-library.js`), artifacts under `build2/`.

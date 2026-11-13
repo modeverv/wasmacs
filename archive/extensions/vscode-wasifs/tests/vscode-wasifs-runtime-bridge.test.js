@@ -9,7 +9,7 @@ const {
   selectRuntimeRoute,
   runtimeRouteReason,
   startPlanForRoute,
-} = require("../../extensions/vscode-wasifs/src/runtime-bridge.js");
+} = require("../src/runtime-bridge.js");
 
 test("VS Code runtime bridge selects webview Atomics only when SAB and Worker are available", () => {
   assert.equal(

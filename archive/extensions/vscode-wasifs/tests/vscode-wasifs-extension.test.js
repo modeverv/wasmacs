@@ -3,8 +3,8 @@ import { join } from "node:path";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const repoRoot = new URL("../..", import.meta.url).pathname;
-const extensionRoot = join(repoRoot, "extensions/vscode-wasifs");
+const repoRoot = new URL("../../../..", import.meta.url).pathname;
+const extensionRoot = join(repoRoot, "archive/extensions/vscode-wasifs");
 
 test("VS Code wasifs extension registers .wasifs custom editor", async () => {
   const manifest = JSON.parse(await readFile(join(extensionRoot, "package.json"), "utf8"));
