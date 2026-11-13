@@ -5322,6 +5322,29 @@ Python validation and integration evidence:
   changes were isolated on `feature/python-repl`; unrelated edits are excluded.
   `vendor/emacs` content and pin remain unchanged.
 
+## Usage verification: Python REPL in eshell (2026-11-14)
+
+The user reported that Python did not appear interactive in eshell. On the
+published e049d19 bundle, real Emacs key-driven tests confirm both `python3 -i`
+and `python -i` display `>>>`, evaluate `6 * 7` to `42`, and return to a working
+eshell prompt after `exit()`. No runtime change is needed for this use.
+
+Emacs 30.2 has no special eshell Python command or default visual-command
+entry. Eshell uses the existing process pipes and sends input to the active
+process; CPython requires `-i` to force interactive mode when stdin is not a
+terminal. Bare `python3` reads a script from stdin until EOF. `run-python`
+already supplies `-i` itself.
+
+Validation: disposable `build/eshell-python-probe.mjs` against the checked-in
+Pages artifacts; both interactive sessions completed. Findings are also
+recorded in the shared Drive project event. This is a usage clarification,
+not a new feature or an Emacs source patch.
+
+The public Pages URL also passed the real-Chrome eshell scenario: `python3 -i`,
+42, multiline function definition/call, `exit()` and a subsequent eshell echo.
+Evidence: `logs/browser-eshell-python-public-pass.txt` and
+`logs/browser-eshell-python-public.png` (2026-11-14 00:06 JST).
+
 ## Implementation: Companion as the only network transport (2026-11-13)
 
 Status: done. The user asked to move the proxy mechanism to `archive/` and make
