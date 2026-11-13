@@ -182,10 +182,11 @@ worker that runs the bundled userland (BusyBox `sh` and tools, git, GNU grep)
 as separate WebAssembly instances. The imports Emacs uses for it are:
 
 ```text
-wasmacs_host_proc_spawn(argv, envp, cwd, stdin_fd, stdout_fd, stderr_fd) -> pid | -errno
+wasmacs_host_proc_spawn(argv, envp, cwd, stdin_fd, stdout_fd, stderr_fd, pty_name) -> pid | -errno
 wasmacs_host_proc_waitpid(pid, status_ptr, options) -> pid | 0 | -errno
 wasmacs_host_proc_kill(pid, signal) -> 0 | -errno
 __syscall_pipe2, __syscall_poll        libc system calls, overridden
+__syscall_ioctl                        overridden for pseudoterminals
 wasmacs_host_wait_for_input(timeout_ms) -> 0 timeout | 1 input | 2 resize | 3 process activity
 ```
 
@@ -200,8 +201,11 @@ The only thing the kernel asks of the browser host is a program image by name
 (`globalThis.__wasmacsLoadProgram(name) -> { factory, wasm }`), loaded
 synchronously from the same origin as the page.
 
-Ptys and sockets stay unavailable: `allocate_pty` fails and Emacs falls back to
-pipes; `socket()` in a subprocess fails with `EAFNOSUPPORT`.
+Pseudoterminals are kernel devices: `allocate_pty` opens `/dev/ptmx`, and for a
+pty process `pty_name` names the slave side, which the kernel opens for the
+descriptors given as -1 and makes the controlling terminal of the child's new
+session. Terminal `ioctl`s on them go to the kernel. Sockets stay unavailable:
+`socket()` in a subprocess fails with `EAFNOSUPPORT`.
 
 ## Emscripten Compatibility
 

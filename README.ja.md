@@ -4,7 +4,7 @@
 
 これは「Emacs 風のエディタ」を作るプロジェクトではありません。GNU Emacs 30.2 の C core と Elisp runtime を中心に置き、表示、入力、永続化、可搬ファイルシステムイメージをブラウザ側で支えることで、本物の Emacs を WebAssembly 上で動かすことを目指しています。
 
-現在の主ルートは、`SharedArrayBuffer` / `Atomics.wait` / pdump / xterm.js を使うブラウザ実行ルートです。`*scratch*`、Dired、Org-mode、`load-file` による Elisp 読み込み、`.wasifs` の import/export に加えて、サブプロセスも動きます。`M-x shell`、eshell、git、grep、Magit、Ediff、Python REPL がブラウザのタブの中で動作します。
+現在の主ルートは、`SharedArrayBuffer` / `Atomics.wait` / pdump / xterm.js を使うブラウザ実行ルートです。`*scratch*`、Dired、Org-mode、`load-file` による Elisp 読み込み、`.wasifs` の import/export に加えて、サブプロセスも動きます。`M-x shell`、eshell、`M-x term`、git、grep、Magit、Ediff、Python REPL がブラウザのタブの中で動作します。
 
 ## 現在できること
 
@@ -19,13 +19,14 @@
 - package archive と Git remote に、唯一のネットワーク経路である Chrome companion 拡張を通じてアクセスする
 - emacsでのヤンクをブラウザ clipboard に流す
 - Emacs からサブプロセスを起動する（`call-process`、`make-process`、`shell-command`、`M-x shell`、外部コマンドとパイプを使う eshell）
+- `M-x term` / `ansi-term` を使う。擬似端末上のシェルで、行編集、`vi`、`less`、`stty`、ウィンドウサイズの変更に対応します
 - POSIX シェル（BusyBox の `ash`）と約150個のコマンド、git 2.52、GNU grep 3.12、GNU diffutils 3.12、CPython 3.14 を、パイプ・シグナル・`fork`・`exec` を備えた本物のプロセスとして動かす
 - `M-x grep`、`rgrep`、`lgrep`、xref / project の検索、`vc-git`、Magit（status、stage、Emacs でメッセージを編集する commit、log、diff）を使う
 
 ## まだ制限があること
 
 - プロセスは host のものではなく、wasmacs 自身の process service が提供します。動かせるのは同梱したプログラム（BusyBox のコマンド群、git、GNU grep、GNU diffutils、CPython）だけです。[サブプロセス](#サブプロセス-shellgitgrep) を参照してください
-- 擬似端末（pty）と socket はありません。`M-x term` / `ansi-term` は動きません（`M-x shell` と eshell は動きます）。Git の `clone` / `fetch` / `push` は Chrome 拡張経由の Smart HTTP(S) とローカルリポジトリに対応します
+- raw socket とジョブ制御（`C-z`、`fg`、`bg`）はありません。Git の `clone` / `fetch` / `push` は Chrome 拡張経由の Smart HTTP(S) とローカルリポジトリに対応します
 - スケジューリングは1スレッド上の協調型です。システムコールや定期チェックを行わない長時間の計算では中断が遅れます。CPython のインタープリターには Python のループ用の定期チェックを追加しています
 - ネットワークアクセスには Chrome companion 拡張（`extension/`）が必要で、接続先は拡張が許可する host に限られます。拡張がなければ `package-refresh-contents` や `git clone` などのネットワーク機能は失敗します。[ネットワークアクセス](#ネットワークアクセス) を参照してください
 - GUI Emacs の native frame を移植しているわけではなく、現状は xterm.js 上の terminal Emacs です
@@ -137,7 +138,7 @@ make dev
 
 `make userland` は、プロセスとして動くプログラムだけをビルドします（`build/artifacts/userland/`）。初回は BusyBox、git、GNU grep、GNU diffutils、CPython のリリース tarball を `build/userland/` 以下にダウンロードします。sha256 はビルドスクリプトに固定してあります。
 
-`make test`（`npm test`）は CI が実行するものです。runtime contract のテストに加えて、checked-in の `docs/` bundle を Node 上で起動し、Emacs から `sh`・`git`・`grep` を実行するテストを含みます。`make test-process` は process service の全テスト（kernel のテストと、本物の Emacs が本物のサブプロセスを動かすテスト）を実行します。`npm run browser:smoke:processes` は headless Chrome で実際のページを操作します。
+`make test`（`npm test`）は CI が実行するものです。runtime contract のテストに加えて、checked-in の `docs/` bundle を Node 上で起動し、Emacs から `sh`・`git`・`grep` を実行するテストを含みます。`make test-process` は process service の全テスト（kernel のテストと、本物の Emacs が本物のサブプロセスを動かすテスト）を実行します。`npm run browser:smoke:processes` と `npm run browser:smoke:term` は headless Chrome で実際のページを操作します。
 
 `make dev` は開発サーバーを起動します。開発サーバーでは runtime file を `/artifacts/...` として公開し、Pages と同じ URL contract で worker / smoke URL が動くようにしています。
 
@@ -160,6 +161,7 @@ Emacs (callproc.c, process.c)        emacs_spawn / waitpid / kill / pipe / poll
 これで Emacs からできること:
 
 - `M-x shell` と eshell。パイプ、リダイレクト、バックグラウンドジョブ、`C-c C-c` を含みます
+- `M-x term` と `ansi-term`（下記）
 - 同期サブプロセスを `C-g` で中断する
 - ファイルシステム上のリポジトリに対する git。`vc-git` と Magit が動きます。`/home/user` 以下のリポジトリはページを再読み込みしても残ります（実行ビットと更新時刻を user image と一緒に保存します）
 - `M-x grep`、`rgrep`、`lgrep`、`project-find-regexp`、`xref-find-references` を、Emacs の既定値のまま使う
@@ -167,12 +169,22 @@ Emacs (callproc.c, process.c)        emacs_spawn / waitpid / kill / pipe / poll
 
 できないこと:
 
-- 擬似端末はありません。プログラムから見えるのはパイプなので、`M-x term` は動かず、全画面を使うプログラムは使えません
+- ジョブ制御はありません。`&`、`wait`、`kill` は使えますが、プロセスを停止させること（`C-z`、`fg`、`bg`）はできません
 - raw socket はありません。Git の clone/fetch/push は Chrome 拡張経由の Smart HTTP(S) に対応します。SSH と `git://` は使えません
 - 同梱したもの以外のプログラムは動きません。コンパイラ、パッケージマネージャはありません
 - `/home/user` は、変更があるたびに全体を1つの image として保存します。非常に大きなリポジトリでは保存が遅くなります
 
 Magit は同梱していません。`package.el` でインストールするか（下の「ネットワークアクセス」を参照）、pack した `.wasifs` image で持ち込んでください。
+
+### 端末エミュレータ: `M-x term`
+
+`M-x term`（または `ansi-term`）は実行するプログラム（既定は `/bin/sh`）を尋ね、擬似端末の上で動かします。kernel が `/dev/ptmx`、`/dev/pts/N`、`/dev/tty` を提供し、その間に Linux にならった line discipline（canonical モードの行編集、エコー、シグナルとしての `^C` / `^\`、出力処理）があります。プログラムからは本物の端末に見えます: `isatty`、`tty`、`stty`、BusyBox `ash` の行編集と履歴、`vi`、`less`。ウィンドウの大きさを変えると端末の大きさも変わります（`SIGWINCH`）。
+
+char モードでは `C-c C-c` で `^C` を端末に送り、`C-c C-j` / `C-c C-k` で line モードと char モードを切り替えます（`term` の通常の操作です）。char モードの ESC は meta prefix なので、ESC と次のキーはひと続きのシーケンスとしてプログラムに届きます。BusyBox `vi` はこれを未知のエスケープシーケンスとして捨てます（Linux 上でも同じです）。`vi` では ESC を使わないコマンド（`dd`、`x`、`ZZ` など）に限られるので、ファイルの編集は Emacs 自身で行ってください。
+
+`M-x shell`、`compile`、`run-python`、Magit はこれまでどおりパイプを使います（`process-connection-type` は nil）。pty を求めるプログラムには pty が渡ります。
+
+検証: `npm run test:process`（kernel と Emacs）と `npm run browser:smoke:term`。
 
 ### Python REPL
 
@@ -378,7 +390,7 @@ doc/small-os-for-emacs.md
 - Browser UI は表示と入力の host であり、undo、kill-ring、region、minibuffer、file-visiting semantics を偽装しない
 - `.wasifs` は可搬 workspace の単位として扱う
 - `vendor/emacs` は read-only とする
-- process は host ではなく compatibility layer（`src/runtime/process`）の service として提供する。Emacs 自身の process code はそのまま動く。pty と socket は明示的に unavailable boundary のままとする
+- process は host ではなく compatibility layer（`src/runtime/process`）の service として提供する。Emacs 自身の process code はそのまま動く。擬似端末もこの layer が提供する。socket は明示的に unavailable boundary のままとする
 - product behavior と diagnostic behavior を分ける
 - low-level substrate は C/wasm-first とし、JavaScript は browser coordinator / host capability provider / diagnostic harness に留める
 

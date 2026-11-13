@@ -341,7 +341,9 @@ time slice と signal delivery を使う。これによりシステムコール�
 ループも yield し、SIGINT は CPython 自身の `KeyboardInterrupt` になる。
 これは一般的な preemption ではなく、長い C 処理が check をしない場合には適用されない。
 
-擬似端末、job control、socket は提供しない。詳細、規則、テストは
+擬似端末は kernel のデバイス（`/dev/ptmx`、`/dev/pts/N`、`/dev/tty`）として
+提供し、`M-x term` / `ansi-term` が使う。job control と socket は提供しない。
+詳細、規則、テストは
 `doc/process-service.md` にある。
 
 ### Emacs Core
@@ -683,8 +685,8 @@ Emacs は subprocess, pty, shell, compiler, grep, language server との連携�
   `rgrep`、xref 検索は Emacs の既定値のまま）
 - git は本物の git を使う（`vc-git`、Magit）。HTTP(S) の clone/fetch/push は
   下記の Git Smart HTTP transport を通す
-- LSP、コンパイラなど同梱していないプログラムは動かない。pty と socket は
-  ない
+- LSP、コンパイラなど同梱していないプログラムは動かない。socket はない
+  （pty は `M-x term` 用に kernel が提供する）
 - package install は archive download + VFS write として実装
 
 Package install の Phase 1 は `host.process` や `make-network-process` を
@@ -812,7 +814,7 @@ this does not enable `make-network-process`, SSH, UDP or listening sockets.
 
 - OS の任意ディレクトリを透明に mount する
 - 完全な native Emacs 互換
-- host の subprocess、pty、job control、socket の再現（同梱 userland のプロセスは Process Service が提供する）
+- host の subprocess、job control、socket の再現（同梱 userland のプロセスと擬似端末は Process Service が提供する）
 - TRAMP の完全再現
 - 複数ユーザー同時編集
 - package ecosystem の完全互換

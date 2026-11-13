@@ -1,8 +1,8 @@
 {
   "file": "temacs.data",
-  "size": 145921467,
+  "size": 145920395,
   "chunkSize": 33554432,
-  "sha256": "540a39194f8204c86505857542dcc289d74e41e5c23794088100e6241873bf50",
+  "sha256": "4a4dc28c953d52c454d8d5b868d32477bdea605bd5e5b5fbf68b05a6e04254b9",
   "parts": [
     {
       "name": "part-000",
@@ -26,8 +26,8 @@
     },
     {
       "name": "part-004",
-      "size": 11703739,
-      "sha256": "76e549826a09e287f0628e06a372235455c415593e9aacba22fceb010aedbc94"
+      "size": 11702667,
+      "sha256": "047db85cc45cf1dee2a2117905d9e1efbdd78c4b15279a333a0caf8f9f7d3faf"
     }
   ]
 }

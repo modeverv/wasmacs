@@ -160,6 +160,8 @@ test("constants match the Emscripten headers", () => {
   }
   eq(headers.sizeof_pollfd, 8, "sizeof(struct pollfd)");
   eq(headers.F_DUPFD_CLOEXEC, 1030, "F_DUPFD_CLOEXEC");
+  eq(headers.sizeof_termios, 60, "sizeof(struct termios)");
+  eq(headers.termios_c_cc, 17, "offsetof(struct termios, c_cc)");
 });
 
 test("spawn: argv, environment, cwd, ids, exit status", () => {
@@ -465,6 +467,219 @@ test("300 spawn/exit cycles", () => {
   noLeak();
 });
 
+// ---- pseudoterminals: the "Emacs side" holds the master ---------------------
+function ptyIoctl(fd, op, arg) {
+  const stream = FS.getStream(fd);
+  return stream.stream_ops.ioctl(stream, op, arg);
+}
+// What allocate_pty does: open /dev/ptmx, unlockpt, ptsname.
+function openPty() {
+  const master = FS.open("/dev/ptmx", C.O_RDWR | C.O_NOCTTY);
+  host.HEAP32[scratch >> 2] = 0;
+  eq(ptyIoctl(master.fd, C.TIOCSPTLCK, scratch), 0, "unlockpt");
+  eq(ptyIoctl(master.fd, C.TIOCGPTN, scratch), 0, "ptsname");
+  master.flags |= C.O_NONBLOCK;
+  return { fd: master.fd, name: `/dev/pts/${host.HEAP32[scratch >> 2]}` };
+}
+function setWinsize(fd, rows, cols) {
+  host.HEAP16.fill(0, scratch >> 1, (scratch >> 1) + 4);
+  host.HEAP16[scratch >> 1] = rows;
+  host.HEAP16[(scratch >> 1) + 1] = cols;
+  eq(ptyIoctl(fd, C.TIOCSWINSZ, scratch), 0, "TIOCSWINSZ");
+}
+function ptySpawn(argv, pty, env = ["PATH=/bin", "TERM=dumb"]) {
+  const pid = kernel.emacsSpawn(argv, env, "/work", [-1, -1, -1], pty.name);
+  if (pid < 0) throw new Error(`spawn on ${pty.name} failed: ${pid}`);
+  return pid;
+}
+// The master's output.  expect() runs the processes until PATTERN matches
+// what arrived since the last match; expectEnd() until every slave
+// descriptor is closed (EIO).
+function terminal(pty) {
+  let text = "", ended = false;
+  const buf = new Uint8Array(65536);
+  const poll = () => {
+    try {
+      const n = FS.read(FS.getStream(pty.fd), buf, 0, buf.length);
+      text += Buffer.from(buf.subarray(0, n)).toString("latin1");
+      return;
+    } catch (e) {
+      if (e.errno === C.EIO) ended = true;
+      else if (e.errno !== C.EAGAIN) throw e;
+    }
+    const delay = kernel.emacsIdle();
+    if (delay > 0) Atomics.wait(sleepCell, 0, 0, Math.min(delay, 5));
+  };
+  const deadline = (ms) => performance.now() + ms;
+  return {
+    expect(pattern, timeoutMs = 10000) {
+      const until = deadline(timeoutMs);
+      for (;;) {
+        const m = pattern.exec(text);
+        if (m) {
+          const out = text.slice(0, m.index + m[0].length);
+          text = text.slice(m.index + m[0].length);
+          return out;
+        }
+        if (ended || performance.now() > until) {
+          throw new Error(`${ended ? "EIO" : "timed out"} waiting for ${pattern}; got ${JSON.stringify(text)}`);
+        }
+        poll();
+      }
+    },
+    expectEnd(timeoutMs = 10000) {
+      const until = deadline(timeoutMs);
+      while (!ended) {
+        if (performance.now() > until) throw new Error(`no EIO; got ${JSON.stringify(text)}`);
+        poll();
+      }
+      const out = text;
+      text = "";
+      return out;
+    },
+    run(ms) {
+      const until = deadline(ms);
+      while (performance.now() < until) poll();
+    },
+  };
+}
+
+test("pty: /dev/ptmx, unlockpt, ptsname, output processing, the slave node", () => {
+  const nodes = fsNodeCount();
+  const master = FS.open("/dev/ptmx", C.O_RDWR | C.O_NOCTTY);
+  host.HEAP32[scratch >> 2] = -1;
+  eq(ptyIoctl(master.fd, C.TIOCGPTN, scratch), 0, "TIOCGPTN");
+  const name = `/dev/pts/${host.HEAP32[scratch >> 2]}`;
+  eq(FS.isChrdev(FS.stat(name).mode), true, "slave node");
+  let error = null;
+  try { FS.open(name, C.O_RDWR); } catch (e) { error = e.errno; }
+  eq(error, C.EIO, "a locked slave");
+  host.HEAP32[scratch >> 2] = 0;
+  eq(ptyIoctl(master.fd, C.TIOCSPTLCK, scratch), 0, "unlockpt");
+  const slave = FS.open(name, C.O_RDWR | C.O_NOCTTY);
+  eq(ptyIoctl(slave.fd, C.TIOCGPTN, scratch), -C.ENOTTY, "TIOCGPTN on the slave");
+  FS.write(slave, Buffer.from("a\nb"), 0, 3);
+  const buf = new Uint8Array(16);
+  eq(Buffer.from(buf.subarray(0, FS.read(master, buf, 0, 16))).toString(), "a\r\nb", "ONLCR");
+  FS.close(slave);
+  error = null;
+  try { FS.read(master, buf, 0, 16); } catch (e) { error = e.errno; }
+  eq(error, C.EIO, "master read once the slave is closed");
+  FS.close(master);
+  eq(kernel.ptys.size, 0, "pseudoterminals");
+  eq(fsNodeCount(), nodes, "nodes in the shared FS");
+});
+
+test("pty: controlling terminal, isatty, ttyname, window size, /dev/tty", () => {
+  const pty = openPty();
+  setWinsize(pty.fd, 30, 100);
+  const pid = ptySpawn(["/bin/ktest", "tty"], pty);
+  const out = terminal(pty).expectEnd();
+  has(out, "isatty=111\r\n");
+  has(out, "session-leader=yes\r\n");
+  has(out, "foreground=yes\r\n");
+  has(out, `ttyname=${pty.name}\r\n`);
+  has(out, "winsize=30x100\r\n");
+  has(out, "icanon=1 echo=1\r\n");
+  has(out, "via /dev/tty\r\n");
+  eq(waitpid(pid).code, 0, "exit status");
+  close(pty.fd);
+  eq(kernel.ptys.size, 0, "pseudoterminals");
+  noLeak();
+});
+
+test("pty: canonical mode: echo, erase, kill, end-of-file", () => {
+  const pty = openPty();
+  const pid = ptySpawn(["/bin/ktest", "ttyline"], pty);
+  const term = terminal(pty);
+  write(pty.fd, "abc\x7fd\n");
+  eq(term.expect(/line=abd\r\n/), "abc\b \bd\r\nline=abd\r\n", "echo and erase");
+  write(pty.fd, "xy\x15z\r");
+  eq(term.expect(/line=z\r\n/), "xy\b \b\b \bz\r\nline=z\r\n", "kill, CR read as NL");
+  write(pty.fd, "\x04");
+  eq(term.expectEnd(), "eof\r\n", "end-of-file");
+  eq(waitpid(pid).code, 0, "exit status");
+  close(pty.fd);
+  noLeak();
+});
+
+test("pty: the interrupt character signals the foreground process group", () => {
+  const pty = openPty();
+  const pid = ptySpawn(["/bin/ktest", "block"], pty);
+  const term = terminal(pty);
+  term.expect(/ready\r\n/);
+  write(pty.fd, "\x03");
+  eq(term.expectEnd(), "^C", "echo");
+  eq(waitpid(pid).signal, C.SIGINT, "killed by SIGINT");
+  close(pty.fd);
+  noLeak();
+});
+
+test("pty: non-canonical mode reads bytes as they come, without echo", () => {
+  const pty = openPty();
+  const pid = ptySpawn(["/bin/ktest", "ttyraw"], pty);
+  const term = terminal(pty);
+  term.expect(/raw\r\n/);
+  write(pty.fd, "x");
+  eq(term.expect(/byte=\d+\r\n/), "byte=120\r\n", "a byte, no echo");
+  write(pty.fd, "\r\x7f");
+  eq(term.expect(/byte=127\r\n/), "byte=10\r\nbyte=127\r\n", "ICRNL, no erase");
+  eq(term.expectEnd(), "restored=yes\r\n", "modes restored");
+  eq(waitpid(pid).code, 0, "exit status");
+  close(pty.fd);
+  noLeak();
+});
+
+test("pty: a window size change sends SIGWINCH", () => {
+  const pty = openPty();
+  const pid = ptySpawn(["/bin/ktest", "ttywinch"], pty);
+  const term = terminal(pty);
+  term.expect(/ready\r\n/);
+  setWinsize(pty.fd, 40, 120);
+  eq(term.expectEnd(), "winch 40x120\r\n", "output");
+  eq(waitpid(pid).code, 0, "exit status");
+  close(pty.fd);
+  noLeak();
+});
+
+test("pty: VTIME bounds a non-canonical read", () => {
+  const pty = openPty();
+  const pid = ptySpawn(["/bin/ktest", "ttytimeout"], pty);
+  eq(terminal(pty).expectEnd(), "timeout n=0 waited\r\n", "output");
+  eq(waitpid(pid).code, 0, "exit status");
+  close(pty.fd);
+  noLeak();
+});
+
+test("pty: closing the master hangs up the session", () => {
+  const pty = openPty();
+  const pid = ptySpawn(["/bin/ktest", "block"], pty);
+  terminal(pty).expect(/ready\r\n/);
+  close(pty.fd);
+  eq(waitpid(pid).signal, C.SIGHUP, "killed by SIGHUP");
+  eq(kernel.ptys.size, 0, "pseudoterminals");
+  noLeak();
+});
+
+test("/dev/tty of a process without a controlling terminal is ENXIO", () => {
+  has(run(["/bin/ktest", "notty"]).out, "dev-tty=ENXIO\n");
+  noLeak();
+});
+
+test("100 pty sessions leave nothing behind", () => {
+  const nodes = fsNodeCount();
+  for (let i = 0; i < 100; i++) {
+    const pty = openPty();
+    const pid = ptySpawn(["/bin/ktest", "crash", "exit3"], pty);
+    terminal(pty).expectEnd();
+    eq(waitpid(pid).code, 3, `session ${i}`);
+    close(pty.fd);
+  }
+  eq(kernel.ptys.size, 0, "pseudoterminals");
+  eq(fsNodeCount(), nodes, "nodes in the shared FS");
+  noLeak();
+});
+
 // ---- userland (only when it has been built) ----------------------------------
 const manifest = existsSync(`${userlandDir}/manifest.json`)
   ? JSON.parse(readFileSync(`${userlandDir}/manifest.json`, "utf8"))
@@ -564,6 +779,35 @@ if (haveBusybox) {
     const w = waitpid(pid);
     eq(w.exited && w.code, 3, "exit status");
     close(inW); close(outR);
+    noLeak();
+  });
+
+  test("interactive sh on a pty (what M-x term does)", () => {
+    const pty = openPty();
+    // term.el's term-exec-1: stty, then exec the shell.
+    const pid = ptySpawn(["/bin/sh", "-c",
+      'stty -nl echo rows 30 columns 100 sane 2>/dev/null; if [ $1 = .. ]; then shift; fi; exec "$@"',
+      "..", "/bin/sh"], pty, [...shEnv, "PS1=$ ", "TERM=eterm-color"]);
+    const term = terminal(pty);
+    term.expect(/\$ /);
+    write(pty.fd, "stty size; tty\r");
+    const out = term.expect(/\$ /);
+    has(out, "30 100\r\n");
+    has(out, `${pty.name}\r\n`);
+    write(pty.fd, "echo $((6 * 7))\r");
+    has(term.expect(/\$ /), "42\r\n");
+    write(pty.fd, "sleep 30\r");
+    term.expect(/sleep 30\r\n/);
+    term.run(100);
+    write(pty.fd, "\x03");
+    term.expect(/\$ /);
+    write(pty.fd, "echo still alive\r");
+    has(term.expect(/\$ /), "still alive\r\n");
+    write(pty.fd, "exit 3\r");
+    term.expectEnd();
+    eq(waitpid(pid).code, 3, "exit status");
+    close(pty.fd);
+    eq(kernel.ptys.size, 0, "pseudoterminals");
     noLeak();
   });
 

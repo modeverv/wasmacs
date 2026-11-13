@@ -32,7 +32,9 @@ const logPath = process.env.WASMACS_BROWSER_SMOKE_LOG || `${repoRoot}/logs/brows
 //            merge; navigate/copy/resolve through Ediff's actual key bindings
 //   python   M-x run-python: multiline input, standard library and shared files,
 //            exception recovery, C-c C-c during a CPU loop and repeated exit
-const knownScenarios = new Set(["xterm", "shell", "persist", "ediff", "python"]);
+//   term     M-x term: a shell on a pseudoterminal, vi and less in it, ^C
+//            through the line discipline, a window resize, exit
+const knownScenarios = new Set(["xterm", "shell", "persist", "ediff", "python", "term"]);
 const scenarios = process.argv.slice(2);
 if (scenarios.length === 0) scenarios.push("xterm");
 for (const scenario of scenarios) {
@@ -472,6 +474,50 @@ try {
     }
     await logEvent("SCENARIO_PASS python");
     console.log("browser smoke scenario passed: python");
+  }
+
+  if (scenarios.includes("term")) {
+    await logEvent("SCENARIO_START term");
+    await sendKeys("\x1bxterm\r");
+    await waitForScreen(/Run program: /, "M-x term asks for the program");
+    await sendKeys("\r");
+    await waitForScreen(/[#$]$/m, "M-x term shell prompt", 60_000);
+    await sendKeys("tty; stty size\r");
+    await waitForScreen(/^\/dev\/pts\/[0-9]+$/m, "the shell runs on a pseudoterminal");
+    const size = /^([0-9]+) ([0-9]+)$/m.exec(await waitForScreen(/^[0-9]+ [0-9]+$/m, "stty reports the window size"));
+    await sendKeys("printf 'alpha\\nbeta-line\\n' > /tmp/term.txt; vi /tmp/term.txt\r");
+    await waitForScreen(/^beta-line$/m, "vi shows the file");
+    // dd deletes the first line, ZZ saves and quits.
+    await sendKeys("ddZZ");
+    await sendKeys("cat /tmp/term.txt; echo vi-$((1 + 1))\r");
+    await waitForScreen(/^beta-line\nvi-2$/m, "vi edited and saved the file");
+    await sendKeys("less /etc/passwd\r");
+    await waitForScreen(/^root:x:0:0/m, "less pages a file");
+    await sendKeys("q");
+    await sendKeys("echo after-less-$((2 + 2))\r");
+    await waitForScreen(/^after-less-4$/m, "less quits back to the shell");
+    await sendKeys("sleep 100\r");
+    await pause(500);
+    // C-c C-c sends ^C into the terminal; its line discipline sends SIGINT.
+    await sendKeys("\x03\x03");
+    await sendKeys("echo back-$((40 + 2))\r");
+    await waitForScreen(/^back-42$/m, "^C interrupts the job");
+    // A smaller page: xterm.js, then Emacs's frame, then term's window and
+    // finally the pseudoterminal (SIGWINCH) all change size.
+    await client.send("Emulation.setDeviceMetricsOverride", { width: 640, height: 420, deviceScaleFactor: 1, mobile: false }, sessionId);
+    await pause(1500);
+    await sendKeys("stty size; echo resized-$((3 + 3))\r");
+    const resized = await waitForScreen(/^[0-9]+ [0-9]+\nresized-6$/m, "stty after the resize");
+    const after = /^([0-9]+) ([0-9]+)\nresized-6$/m.exec(resized);
+    if (after[1] === size[1] && after[2] === size[2]) {
+      throw new Error(`term scenario: the pseudoterminal kept its size ${size[1]}x${size[2]} after the resize`);
+    }
+    evidence.push(`PASS terminal size ${size[1]}x${size[2]} -> ${after[1]}x${after[2]}`);
+    await client.send("Emulation.clearDeviceMetricsOverride", {}, sessionId);
+    await sendKeys("exit\r");
+    await waitForScreen(/Process terminal finished/, "the shell exits");
+    await logEvent("SCENARIO_PASS term");
+    console.log("browser smoke scenario passed: term");
   }
 
   console.log(`browser smoke passed: ${scenarios.join(",")} ${appUrl}`);

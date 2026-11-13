@@ -18,10 +18,10 @@ this kernel the way it runs against Linux.
 ```text
 Emacs (pid 1)                      vendor/emacs/src/{callproc,process,sysdep,keyboard}.c
   emacs_spawn, waitpid, kill       src/c/patches/0006-process-service.patch
-  pipe2, poll, idle wait           tools/scripts/wasmacs-atomics-host-library.js
+  pipe2, poll, ioctl, idle wait    tools/scripts/wasmacs-atomics-host-library.js
     |
 kernel                             src/runtime/process/wasmacs-kernel.js
-  process table, fd tables, pipes, signals, timers, scheduler
+  process table, fd tables, pipes, pseudoterminals, signals, timers, scheduler
     |
 process                            src/runtime/process/child/
   one WebAssembly instance per process, own linear memory, Asyncify
@@ -39,7 +39,8 @@ programs                           src/userland/{busybox,git,grep,diffutils,pyth
   stderr to a file, `default-directory` as the working directory.
 - `make-process`, `start-process`: filters, sentinels, `process-send-string`,
   `process-send-eof`, `kill-process`, `interrupt-process`, `signal-process`.
-  A pty request quietly becomes pipes.
+  With `process-connection-type` t the child gets a pseudoterminal as its
+  controlling terminal (see "Pseudoterminals" below).
 - An idle Emacs runs filters and sentinels as output arrives, without
   `accept-process-output`, and sleeps otherwise.
 - `C-g` interrupts a synchronous subprocess (`call-process` returns with a
@@ -48,13 +49,14 @@ programs                           src/userland/{busybox,git,grep,diffutils,pyth
   in an Emacs buffer; `M-x grep`, `rgrep`, `lgrep`, `xref-matches-in-files`.
 - `M-x run-python` with the bundled CPython and standard library; Python
   scripts use the same filesystem as Emacs.
+- `M-x term` and `ansi-term`: an interactive shell with line editing, `vi`,
+  `less`, `stty`, `^C`, window resizing.
 
 ## What it does not provide
 
 | Missing | Consequence |
 |---|---|
-| Pseudoterminals | `M-x term`, `ansi-term` and full-screen programs do not work. Programs see pipes; `isatty` is false. |
-| Job control | `ash` is built without it: `&`, `wait`, `kill` work, `fg`/`bg`/`C-z` do not. |
+| Job control | `ash` is built without it: `&`, `wait`, `kill` work, `fg`/`bg`/`C-z` do not. Processes are never stopped (`SIGTSTP`, `SIGTTIN`, `SIGTTOU` are ignored). |
 | Sockets | `socket()` fails with `EAFNOSUPPORT`. Git Smart HTTP(S) uses the explicit host HTTP service; SSH and `git://` are unavailable. |
 | Threads in processes | Programs are single-threaded. |
 | Preemption | Scheduling is cooperative. A program that computes without a system call or polling point keeps running. CPython's interpreter has explicit polling points. |
@@ -74,14 +76,14 @@ else in Emacs knows that anything is unusual.
 
 | Emacs | Change |
 |---|---|
-| `callproc.c` `emacs_spawn` | The one function that starts every subprocess. Under `__EMSCRIPTEN__` it calls `wasmacs_host_proc_spawn (argv, envp, cwd, stdin, stdout, stderr)` and returns the pid. `std_err < 0` means "same as stdout". |
+| `callproc.c` `emacs_spawn` | The one function that starts every subprocess. Under `__EMSCRIPTEN__` it calls `wasmacs_host_proc_spawn (argv, envp, cwd, stdin, stdout, stderr, pty_name)` and returns the pid. `std_err < 0` means "same as stdout". For a pty process it first runs `child_setup_tty` on the slave side. |
 | `sysdep.c` `get_child_status` | `waitpid` becomes `wasmacs_host_proc_waitpid`. |
 | `callproc.c`, `process.c` | `kill` becomes `wasmacs_os_kill`, which signals Emacs itself with `raise` and everything else through `wasmacs_host_proc_kill`. |
 | `callproc.c` | Two exported entry points for the kernel: `wasmacs_os_raise_signal` (runs Emacs's own `SIGCHLD` handler) and `wasmacs_os_request_quit` (sets `Vquit_flag`). |
 | `keyboard.c` | The idle wait returns `WASMACS_WAIT_PROCESS` when processes did something; `wasmacs_os_service_subprocesses` then calls `wait_reading_process_output` once, which runs filters and sentinels. |
 
-`pipe2` and `poll` need no patch: the host library overrides the two libc
-system calls (`pselect` ends in `__syscall_poll`).
+`pipe2`, `poll` and `ioctl` need no patch: the host library overrides the
+libc system calls (`pselect` ends in `__syscall_poll`).
 
 Patch `0007-keyboard-honor-read-timeout.patch` is a fix this work depended on:
 `sit-for` and `read-event` with a timeout used to wait a full second.
@@ -140,6 +142,65 @@ at the keyboard. A `C-g` is taken out of the input queue, `Vquit_flag` is set
 and the wait ends with `EINTR`, which is what a tty driver's interrupt
 character does.
 
+**Output before exit.** A child that writes and exits within one scheduling
+round has its exit reported (`SIGCHLD`) at Emacs's next poll, after the
+output has been readable. Emacs stops reading a process once it knows that
+the process is gone, so `accept-process-output` with a timeout could
+otherwise return without its last output.
+
+## Pseudoterminals
+
+`M-x term` and `ansi-term` bind `process-connection-type` to t. Emacs's
+`allocate_pty` (UNIX98, unchanged) opens `/dev/ptmx`, unlocks it and asks for
+its name; `create_process` keeps the master side. The kernel provides the
+devices in the shared filesystem:
+
+| Device | |
+|---|---|
+| `/dev/ptmx` | Opening it creates a pseudoterminal and returns its master side; `/dev/pts/N` appears. |
+| `/dev/pts/N` | The slave side. Locked until `unlockpt`. Removed when neither side is open. |
+| `/dev/tty` | The caller's controlling terminal; `ENXIO` for a process without one. For Emacs it stays Emacs's own terminal (the console). |
+
+`emacs_spawn` sets the terminal modes with Emacs's own `child_setup_tty`
+(the modes belong to the terminal, so doing it in Emacs is the same as in the
+child) and passes the slave's name to the kernel, which opens it as the
+child's descriptors and makes it the controlling terminal of the child's new
+session; the child's process group is the foreground group.
+
+Between the two sides sits a line discipline after Linux's n_tty:
+
+- input: `ICRNL`/`INLCR`/`IGNCR`, `ISTRIP`, `IXON` stop/start
+- canonical mode: lines, `VERASE`, `VKILL`, `VWERASE`, `VLNEXT`, `VREPRINT`,
+  `VEOF`, `VEOL`/`VEOL2`; non-canonical mode with `VMIN`/`VTIME`
+- echo with `ECHOE`, `ECHOK`, `ECHOKE`, `ECHOCTL`, `ECHONL`
+- `VINTR`, `VQUIT`, `VSUSP` signal the foreground process group (flushing the
+  queues unless `NOFLSH`)
+- output: `OPOST` with `ONLCR`, `OCRNL`, `ONOCR`, `ONLRET`, tab expansion
+
+`ioctl` on either side goes to the kernel (the child library and the Emacs
+host library route it there; Emscripten's own handler only knows the console):
+`TCGETS`/`TCSETS*` keep the whole `struct termios` as written, which Emacs and
+`stty` compare after setting it; `TIOCGWINSZ`/`TIOCSWINSZ` (a change sends
+`SIGWINCH` to the foreground group: `set-process-window-size` and `stty rows`);
+`TIOCGPGRP`/`TIOCSPGRP`/`TIOCGSID`/`TIOCSCTTY`/`TIOCNOTTY`;
+`TIOCGPTN`/`TIOCSPTLCK`; `FIONREAD`, `FIONBIO`, `TCFLSH`, `TCXONC`.
+`isatty()` asks `fd_fdstat_get`, which the child library answers with a
+character device for a pseudoterminal.
+
+As on Linux, the master reads `EIO` once no slave descriptor is open (Emacs
+then lets the exit status speak); closing the master hangs up the session:
+slave reads return end-of-file, writes fail, the session leader and the
+foreground group get `SIGHUP`. A session leader that exits takes its
+controlling terminal with it.
+
+The pseudoterminal's master side is never `stream.tty`: that property marks
+Emacs's own terminal, whose bytes Emacs reads as keyboard input.
+
+Not provided: job control (above), `ECHOPRT`, break and parity handling.
+In `term`'s char mode ESC is a meta prefix, so ESC and the next key reach the
+program as one sequence; BusyBox `vi` drops that as an unknown escape
+sequence, as it would on Linux.
+
 ## Programs
 
 A program image is a pair `<name>.js` + `<name>.wasm`, built with the flags in
@@ -190,7 +251,8 @@ threads, subprocesses, pip and native wheel loading are outside this build.
 
 `WasmacsUserland.EMACS_SETTINGS` (`src/runtime/process/wasmacs-userland.js`)
 holds the three Emacs settings that follow from the above; the worker evaluates
-them at startup: `process-connection-type` nil (there are no ptys to try),
+them at startup: `process-connection-type` nil (`M-x shell`, `compile`,
+`run-python` and Magit keep pipes; `term` binds it to t itself),
 `grep-highlight-matches` `always` (`--color=auto` never colours a pipe), and
 `with-editor-emacsclient-executable` nil (there is no emacsclient; with-editor
 then uses its shell-script editor, which Emacs wakes with a signal).
@@ -278,6 +340,7 @@ tree: a very large repository makes every save slow.
 | `npm run test:python` | Real Emacs: Python expressions, multiline input, imports/files, exceptions, interruption/recovery and process cleanup. |
 | `npm run browser:smoke:python` | Real Chrome: `run-python` interaction, CPU-loop interruption and continued REPL use. |
 | `npm run browser:smoke:processes` | `tools/scripts/run-browser-smoke.mjs shell persist`: the page in headless Chrome. |
+| `npm run browser:smoke:term` | Real Chrome: `M-x term` on a pseudoterminal, `vi`, `less`, `^C`, a page resize reaching the shell as `SIGWINCH`. |
 
 Development aids: `WASMACS_KERNEL_JS=<file>` makes the Node harness use that
 kernel instead of the one linked into Emacs, and on a local development host
@@ -287,6 +350,7 @@ kernel.
 
 ## Possible next steps
 
-- A pseudoterminal in the kernel (line discipline, `isatty`, window size):
-  `M-x term`, job control, programs that buffer differently on a terminal.
+- Job control: stopped processes (`SIGTSTP`, `SIGTTIN`, `SIGTTOU`, `SIGCONT`,
+  `WUNTRACED`), background reads, and BusyBox `ash` built with job control.
+  The pseudoterminal already keeps a foreground process group.
 - Saving `/home/user` incrementally instead of as one image.

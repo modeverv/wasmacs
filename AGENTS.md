@@ -97,7 +97,7 @@ host.gui     input events, frame metrics, redisplay target, clipboard
 
 `host.process` (running programs of the host machine) stays unavailable. Subprocesses are provided inside the wasm world by the Process Service instead: a cooperative kernel in the Emacs worker (`src/runtime/process/`) runs the bundled userland (`src/userland/`: BusyBox `sh` and tools, git, GNU grep) as separate wasm instances, and Emacs's own `process.c` / `callproc.c` run unchanged against it. Read `doc/process-service.md` before touching it; its "Rules" section lists the mistakes that are silent in tests and fatal in a browser tab (promises, timers, anything a process leaves registered in the shared filesystem).
 
-Ptys and sockets remain unavailable.
+Pseudoterminals (`/dev/ptmx`, `/dev/pts/N`, `/dev/tty`, for `M-x term`) are kernel devices of the Process Service. Sockets remain unavailable.
 
 ## Working Style
 
@@ -141,7 +141,7 @@ Do not skip ahead to browser UI, wasm build scripts, or filesystem implementatio
 ## Non-Goals For MVP
 
 - Full native Emacs compatibility.
-- Host subprocesses, ptys, job control, sockets. (Subprocesses of the bundled userland are supported by the Process Service.)
+- Host subprocesses, job control, sockets. (Subprocesses of the bundled userland and pseudoterminals are supported by the Process Service.)
 - Full TRAMP support.
 - Native-comp support.
 - pdumper/dumped image support.

@@ -37,6 +37,8 @@ for (const name of ['__syscall_openat', '__syscall_dup', '__syscall_dup3', '__sy
   wasmacsOrigSyscalls[`$wasmacs_orig${name}`] = LibraryManager.library[name];
   wasmacsOrigSyscalls[`$wasmacs_orig${name}__deps`] = LibraryManager.library[`${name}__deps`] || [];
 }
+wasmacsOrigSyscalls.$wasmacs_orig_fd_fdstat_get = LibraryManager.library.fd_fdstat_get;
+wasmacsOrigSyscalls.$wasmacs_orig_fd_fdstat_get__deps = LibraryManager.library.fd_fdstat_get__deps || [];
 addToLibrary(wasmacsOrigSyscalls);
 
 addToLibrary({
@@ -481,13 +483,24 @@ addToLibrary({
   __syscall_poll: (fds, nfds, timeout) =>
     WK.sys((k, p) => k.sys_poll(p, fds, nfds, timeout), -{{{ cDefs.EINTR }}}),
 
-  // ---- FD_CLOEXEC ----------------------------------------------------------
+  // ---- ioctl ---------------------------------------------------------------
+  // On a pseudoterminal every request (termios, window size, process groups)
+  // goes to the kernel: Emscripten's own handler only knows the console.
   // CPython first tries ioctl(FIOCLEX) when opening script files. These ioctl
   // operations apply to all descriptors, including ordinary files and pipes.
-  __syscall_ioctl__deps: ['$FS', '$wasmacs_orig__syscall_ioctl'],
+  __syscall_ioctl__deps: ['$WK', '$FS', '$wasmacs_orig__syscall_ioctl'],
   __syscall_ioctl: (fd, request, varargs) => {
+    var stream = FS.getStream(fd);
+    if (stream && stream.pty) {
+      var r = stream.stream_ops.ioctl(stream, request, varargs ? {{{ makeGetValue('varargs', 0, '*') }}} : 0);
+      // A signal it sent to ourselves (SIGWINCH) is delivered now.
+      if (WK.proc.sigPending.size && !WK.inHandler) {
+        WK.runSignalHandlers();
+        WK.proc.eintr = false;
+      }
+      return r;
+    }
     if (request === 0x5451 /* FIOCLEX */ || request === 0x5450 /* FIONCLEX */) {
-      var stream = FS.getStream(fd);
       if (!stream) return -{{{ cDefs.EBADF }}};
       stream.cloexec = request === 0x5451 /* FIOCLEX */;
       return 0;
@@ -495,6 +508,19 @@ addToLibrary({
     return wasmacs_orig__syscall_ioctl(fd, request, varargs);
   },
 
+  // isatty() asks fd_fdstat_get for a character device, which Emscripten
+  // reports only for the console.
+  fd_fdstat_get__deps: ['$FS', '$wasmacs_orig_fd_fdstat_get'],
+  fd_fdstat_get: (fd, pbuf) => {
+    var r = wasmacs_orig_fd_fdstat_get(fd, pbuf);
+    var stream = FS.getStream(fd);
+    if (r === 0 && stream && stream.pty) {
+      {{{ makeSetValue('pbuf', C_STRUCTS.__wasi_fdstat_t.fs_filetype, cDefs.__WASI_FILETYPE_CHARACTER_DEVICE, 'i8') }}};
+    }
+    return r;
+  },
+
+  // ---- FD_CLOEXEC ----------------------------------------------------------
   // Emscripten ignores close-on-exec ("makes no sense for a single process").
   // It is tracked per descriptor in stream.cloexec and honoured by exec/spawn.
   __syscall_openat__deps: ['$WK', '$FS', '$wasmacs_orig__syscall_openat'],

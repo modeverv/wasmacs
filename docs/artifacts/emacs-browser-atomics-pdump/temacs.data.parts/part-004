@@ -165933,14 +165933,6 @@ unibyte string or a byte vector.")
 (defvar wasmacs-url-fetch-allowed-schemes '("http" "https")
   "URL schemes handled by the wasmacs fetch-backed loader.")
 
-(defvar wasmacs-url-fetch-proxy-url nil
-  "Optional self-hosted fetch proxy endpoint for wasmacs HTTP(S) requests.
-
-When non-nil, `wasmacs-url-fetch' includes this URL in the host request as
-`proxyUrl'.  The wasm host still tries direct browser fetch first, then this
-proxy when CORS or browser fetch policy blocks the direct request.  A typical
-local value is \"http://127.0.0.1:8787/\".")
-
 (defconst wasmacs-url-http-asynchronous-p nil
   "wasmacs fetch-backed HTTP(S) retrievals complete before returning.")
 
@@ -166028,10 +166020,7 @@ so an alist here would fail to serialize."
                         :headers (wasmacs-url-fetch--request-headers))))
     (unless (member (upcase method) '("GET" "HEAD"))
       (setq request (plist-put request :body url-request-data)))
-    (if (and (stringp wasmacs-url-fetch-proxy-url)
-             (not (string-empty-p wasmacs-url-fetch-proxy-url)))
-        (plist-put request :proxyUrl wasmacs-url-fetch-proxy-url)
-      request)))
+    request))
 
 (defun wasmacs-url-fetch--response-buffer (url response)
   "Create a url.el response buffer for URL from RESPONSE plist."
@@ -166106,20 +166095,14 @@ The function is called with a plist containing `:url', `:method',
 unibyte string or a byte vector.
 (byte-code "\300\301!\210\300\302!\210\300\303!\210\300\304!\207" [require url-methods url-parse url-vars json] 2)
 (defvar wasmacs-url-fetch-function nil (#$ . 84))#@57 URL schemes handled by the wasmacs fetch-backed loader.
-(defvar wasmacs-url-fetch-allowed-schemes '("http" "https") (#$ . 568))#@345 Optional self-hosted fetch proxy endpoint for wasmacs HTTP(S) requests.
-
-When non-nil, `wasmacs-url-fetch' includes this URL in the host request as
-`proxyUrl'.  The wasm host still tries direct browser fetch first, then this
-proxy when CORS or browser fetch policy blocks the direct request.  A typical
-local value is "http://127.0.0.1:8787/".
-(defvar wasmacs-url-fetch-proxy-url nil (#$ . 702))#@68 wasmacs fetch-backed HTTP(S) retrievals complete before returning.
-(defconst wasmacs-url-http-asynchronous-p nil (#$ . 1103))
+(defvar wasmacs-url-fetch-allowed-schemes '("http" "https") (#$ . 568))#@68 wasmacs fetch-backed HTTP(S) retrievals complete before returning.
+(defconst wasmacs-url-http-asynchronous-p nil (#$ . 701))
 (defconst wasmacs-url-http-default-port 80)
 (defconst wasmacs-url-https-default-port 443)#@47 Return VALUE as a unibyte string.
 
 (fn VALUE)
 (byte-code "\300\301\302\"\210\300\303\302\"\207" [defalias wasmacs-url-http-expand-file-name url-default-expander wasmacs-url-https-expand-file-name] 3)
-(defalias 'wasmacs-url-fetch--string-bytes #[257 "\211;\203 \300!\203 \301\302\303#\207\207\304!\2038 \305G\306\"G\306\211W\2035 \307H\310\"I\210T\202  \266\207\211\204> \311\207\312\313\314!\"\207" [multibyte-string-p encode-coding-string utf-8 t vectorp make-string 0 logand 255 "" error "Unsupported wasmacs fetch body: %S" type-of] 9 (#$ . 1324)])#@312 Return HEADERS as newline-terminated HTTP header lines.
+(defalias 'wasmacs-url-fetch--string-bytes #[257 "\211;\203 \300!\203 \301\302\303#\207\207\304!\2038 \305G\306\"G\306\211W\2035 \307H\310\"I\210T\202  \266\207\211\204> \311\207\312\313\314!\"\207" [multibyte-string-p encode-coding-string utf-8 t vectorp make-string 0 logand 255 "" error "Unsupported wasmacs fetch body: %S" type-of] 9 (#$ . 921)])#@312 Return HEADERS as newline-terminated HTTP header lines.
 
 Lines use a bare LF rather than CRLF: `mm-copy-to-buffer' (used by
 `url-insert' to split the header/body of a `url-retrieve' buffer)
@@ -166129,27 +166112,27 @@ line made of a lone LF, not a CRLF pair.
 (fn HEADERS)#@15 
 
 (fn HEADER)
-(defalias 'wasmacs-url-fetch--header-lines #[257 "\300\301\302#\207" [mapconcat #[257 "\300\301\"\203 \300\301\"\202 \211:\203 \211@\202 \302\303\304\"\203' \300\304\"\2022 :\2031 A\2022 \302\305\306#\207" [plist-get :name "" plist-member :value format "%s: %s"] 7 (#$ . 2213)] "\n"] 5 (#$ . 1897)])#@70 Fetch REQUEST through the wasm host network primitive.
+(defalias 'wasmacs-url-fetch--header-lines #[257 "\300\301\302#\207" [mapconcat #[257 "\300\301\"\203 \300\301\"\202 \211:\203 \211@\202 \302\303\304\"\203' \300\304\"\2022 :\2031 A\2022 \302\305\306#\207" [plist-get :name "" plist-member :value format "%s: %s"] 7 (#$ . 1809)] "\n"] 5 (#$ . 1493)])#@70 Fetch REQUEST through the wasm host network primitive.
 
 (fn REQUEST)
-(defalias 'wasmacs-url-fetch--host-fetch #[257 "\300\301!\204\n \302\303!\210\304!\301!\305\306\307\310\311\312\313\314\313&	\315\316\"\211\203) \302\317\"\210\315\320\"\2064 \315\321\"\211\203A \322\323\324!#\262\210\207" [fboundp wasmacs-os-network-fetch-json error "wasmacs-os-network-fetch-json is not available" json-serialize json-parse-string :object-type plist :array-type list :null-object nil :false-object plist-get :error "wasmacs host network fetch failed: %s" :body-base64 :bodyBase64 plist-put :body base64-decode-string] 13 (#$ . 2545)])#@333 Return request headers from dynamically bound url.el variables.
+(defalias 'wasmacs-url-fetch--host-fetch #[257 "\300\301!\204\n \302\303!\210\304!\301!\305\306\307\310\311\312\313\314\313&	\315\316\"\211\203) \302\317\"\210\315\320\"\2064 \315\321\"\211\203A \322\323\324!#\262\210\207" [fboundp wasmacs-os-network-fetch-json error "wasmacs-os-network-fetch-json is not available" json-serialize json-parse-string :object-type plist :array-type list :null-object nil :false-object plist-get :error "wasmacs host network fetch failed: %s" :body-base64 :bodyBase64 plist-put :body base64-decode-string] 13 (#$ . 2141)])#@333 Return request headers from dynamically bound url.el variables.
 
 The result is a vector of two-element vectors so `json-serialize' encodes
 it as a JSON array of `[name, value]' pairs.  `json-serialize' treats Lisp
 lists as JSON objects (and rejects string keys with `wrong-type-argument'),
 so an alist here would fail to serialize.
-(defalias 'wasmacs-url-fetch--request-headers #[0 "\301\211\203\" \211@\211:\203 \302\303\304@\"\303\304A\"\"B\262\210A\202 \210\305\237!\207" [url-request-extra-headers nil vector format "%s" vconcat] 8 (#$ . 3185)])#@54 Return a host fetch request plist for URL.
+(defalias 'wasmacs-url-fetch--request-headers #[0 "\301\211\203\" \211@\211:\203 \302\303\304@\"\303\304A\"\"B\262\210A\202 \210\305\237!\207" [url-request-extra-headers nil vector format "%s" vconcat] 8 (#$ . 2781)])#@54 Return a host fetch request plist for URL.
 
 (fn URL)
-(defalias 'wasmacs-url-fetch--request #[257 "\206 \303\304\305!\306\307\310 \257\226\311\235\204 \312\313	#\262\n;\2032 \n\211\314\230\262\2042 \312\315\n#\207\207" [url-request-method url-request-data wasmacs-url-fetch-proxy-url "GET" :url url-recreate-url :method :headers wasmacs-url-fetch--request-headers ("GET" "HEAD") plist-put :body "" :proxyUrl] 8 (#$ . 3748)])#@81 Create a url.el response buffer for URL from RESPONSE plist.
+(defalias 'wasmacs-url-fetch--request #[257 "\206 \302\303\304!\305\306\307 \257\226\310\235\204 \311\312	#\262\207" [url-request-method url-request-data "GET" :url url-recreate-url :method :headers wasmacs-url-fetch--request-headers ("GET" "HEAD") plist-put :body] 8 (#$ . 3344)])#@81 Create a url.el response buffer for URL from RESPONSE plist.
 
 (fn URL RESPONSE)
-(defalias 'wasmacs-url-fetch--response-buffer #[514 "\303\304\"\206 \305\303\306\"\206 \303\307\"\206 \310\303\311\"\312\303\313\"!\314\315\316\317	!>\2045 \320\321\322D\"\210\323H\"!r\211q\210\324\325!\210\326\301!\210\326\302!\210\315\327#c\210\330!\211\211\331\230\262\204j \211\332\261\210\210\332c\210c\210eb)\210\207" [cl-struct-url-tags url-current-object url-http-response-status plist-get :status 200 :status-text :statusText "OK" :headers wasmacs-url-fetch--string-bytes :body generate-new-buffer format " *wasmacs-url-%s*" type-of signal wrong-type-argument url 4 set-buffer-multibyte nil make-local-variable "HTTP/1.1 %d %s\n" wasmacs-url-fetch--header-lines "" "\n"] 13 (#$ . 4188)])#@151 Load URL through the wasmacs host fetch capability.
+(defalias 'wasmacs-url-fetch--response-buffer #[514 "\303\304\"\206 \305\303\306\"\206 \303\307\"\206 \310\303\311\"\312\303\313\"!\314\315\316\317	!>\2045 \320\321\322D\"\210\323H\"!r\211q\210\324\325!\210\326\301!\210\326\302!\210\315\327#c\210\330!\211\211\331\230\262\204j \211\332\261\210\210\332c\210c\210eb)\210\207" [cl-struct-url-tags url-current-object url-http-response-status plist-get :status 200 :status-text :statusText "OK" :headers wasmacs-url-fetch--string-bytes :body generate-new-buffer format " *wasmacs-url-%s*" type-of signal wrong-type-argument url 4 set-buffer-multibyte nil make-local-variable "HTTP/1.1 %d %s\n" wasmacs-url-fetch--header-lines "" "\n"] 13 (#$ . 3693)])#@151 Load URL through the wasmacs host fetch capability.
 CALLBACK and CBARGS follow `url-retrieve' loader conventions.
 
 (fn URL &optional CALLBACK CBARGS)
-(defalias 'wasmacs-url-fetch #[769 "\303!>\204 \304\305\306D\"\210\307H	\235\204. \310\311\303!>\204) \304\305\306D\"\210\307H\"\210\312\n!\2046 \313\314!\n!\315\"\203R r\211q\210\316@A#)\210\207" [cl-struct-url-tags wasmacs-url-fetch-allowed-schemes wasmacs-url-fetch-function type-of signal wrong-type-argument url 1 error "wasmacs fetch loader does not handle scheme: %s" functionp wasmacs-url-fetch--host-fetch wasmacs-url-fetch--request wasmacs-url-fetch--response-buffer apply] 10 (#$ . 4998)])#@61 Route url.el HTTP(S) retrieval through `wasmacs-url-fetch'.
-(defalias 'wasmacs-url-fetch-enable #[0 "\304\305\306\305\307\310\311\312	\313\314\315\316\257\f\n#\210\304\317\306\317\307\310\311\312\313\320\315\316\257\f\n#\207" [wasmacs-url-http-asynchronous-p wasmacs-url-http-default-port url-scheme-registry wasmacs-url-https-default-port puthash "http" name loader wasmacs-url-fetch asynchronous-p default-port expand-file-name wasmacs-url-http-expand-file-name parse-url url-generic-parse-url "https" wasmacs-url-https-expand-file-name] 14 (#$ . 5674)])
+(defalias 'wasmacs-url-fetch #[769 "\303!>\204 \304\305\306D\"\210\307H	\235\204. \310\311\303!>\204) \304\305\306D\"\210\307H\"\210\312\n!\2046 \313\314!\n!\315\"\203R r\211q\210\316@A#)\210\207" [cl-struct-url-tags wasmacs-url-fetch-allowed-schemes wasmacs-url-fetch-function type-of signal wrong-type-argument url 1 error "wasmacs fetch loader does not handle scheme: %s" functionp wasmacs-url-fetch--host-fetch wasmacs-url-fetch--request wasmacs-url-fetch--response-buffer apply] 10 (#$ . 4503)])#@61 Route url.el HTTP(S) retrieval through `wasmacs-url-fetch'.
+(defalias 'wasmacs-url-fetch-enable #[0 "\304\305\306\305\307\310\311\312	\313\314\315\316\257\f\n#\210\304\317\306\317\307\310\311\312\313\320\315\316\257\f\n#\207" [wasmacs-url-http-asynchronous-p wasmacs-url-http-default-port url-scheme-registry wasmacs-url-https-default-port puthash "http" name loader wasmacs-url-fetch asynchronous-p default-port expand-file-name wasmacs-url-http-expand-file-name parse-url url-generic-parse-url "https" wasmacs-url-https-expand-file-name] 14 (#$ . 5179)])
 (provide 'wasmacs-url-fetch)
 ;;; wdired.el --- Rename files editing their names in dired buffers -*- coding: utf-8; lexical-binding: t; -*-
 

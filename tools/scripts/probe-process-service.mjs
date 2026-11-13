@@ -115,9 +115,26 @@ await check("make-process: filter, sentinel, send-string, send-eof", () =>
   expectValue('(let* ((out "") (events nil) (p (make-process :name "cat" :command (list "cat") :connection-type (quote pipe) :filter (lambda (_p s) (setq out (concat out s))) :sentinel (lambda (_p e) (push e events))))) (process-send-string p "one\\ntwo\\n") (accept-process-output p 1) (process-send-eof p) (while (process-live-p p) (accept-process-output p 0.1)) (list out events (process-status p) (process-exit-status p)))',
     '("one\ntwo\n" ("finished\n") exit 0)'));
 
-await check("start-process asks for a pty and gets pipes", () =>
-  expectValue('(let* ((process-connection-type t) (out "") (p (start-process "e" nil "echo" "piped"))) (set-process-filter p (lambda (_p s) (setq out (concat out s)))) (while (process-live-p p) (accept-process-output p 0.1)) (list (process-tty-name p) out (process-exit-status p)))',
-    '(nil "piped\n" 0)'));
+// ---- pseudoterminals --------------------------------------------------------------
+
+// child_setup_tty has turned echo and NL -> CR NL off.
+await check("pty process: the child's controlling terminal", () =>
+  expectValue('(let* ((process-connection-type t) (out "") (p (start-process "t" nil "sh" "-c" "tty; stty size; test -t 0 && test -t 1 && echo tty-io"))) (set-process-filter p (lambda (_p s) (setq out (concat out s)))) (while (process-live-p p) (accept-process-output p 0.1)) (list (process-tty-name p) out (process-exit-status p)))',
+    '("/dev/pts/0" "/dev/pts/0\n24 80\ntty-io\n" 0)'));
+
+await check("pty process: set-process-window-size", () =>
+  expectValue('(let* ((process-connection-type t) (out "") (p (start-process "w" nil "sh" "-c" "sleep 0.3; stty size"))) (set-process-filter p (lambda (_p s) (setq out (concat out s)))) (set-process-window-size p 30 100) (while (process-live-p p) (accept-process-output p 0.1)) out)',
+    '"30 100\n"'));
+
+// process-running-child-p is nil only when TIOCGPGRP on the master names the
+// process's own group (it is t when the ioctl fails).
+await check("pty process: the terminal's foreground group, interrupt-process", () =>
+  expectValue('(let* ((process-connection-type t) (p (start-process "s" nil "sleep" "60"))) (accept-process-output nil 0.2) (list (process-running-child-p p) (progn (interrupt-process p t) (while (process-live-p p) (accept-process-output p 0.1)) (list (process-status p) (process-exit-status p)))))',
+    "(nil (signal 2))"));
+
+await check("pty process: input goes through the line discipline, EOF ends it", () =>
+  expectValue('(let* ((process-connection-type t) (out "") (p (start-process "c" nil "cat"))) (set-process-filter p (lambda (_p s) (setq out (concat out s)))) (process-send-string p "one\\ntwo\\n") (accept-process-output p 0.3) (process-send-eof p) (while (process-live-p p) (accept-process-output p 0.1)) (list out (process-exit-status p)))',
+    '("one\ntwo\n" 0)'));
 
 await check("kill-process and interrupt-process", () =>
   expectValue('(let* ((events nil) (p (make-process :name "s" :command (list "sleep" "60") :connection-type (quote pipe) :sentinel (lambda (_p e) (push e events)))) (q (make-process :name "t" :command (list "sleep" "60") :connection-type (quote pipe) :sentinel (lambda (_p e) (push e events))))) (accept-process-output nil 0.2) (kill-process p) (interrupt-process q) (while (or (process-live-p p) (process-live-p q)) (accept-process-output nil 0.1)) (list (sort events (function string<)) (process-status p) (process-status q)))',
@@ -277,6 +294,36 @@ await check("M-x shell: prompt, commands, git, C-c C-c, exit", async () => {
       { name: "C-c C-c interrupts the job", expect: /[#$] /, send: "echo back-at-prompt\r" },
       { name: "shell survived", expect: /back-at-prompt/, send: "exit\r" },
       { name: "shell exited", expect: /Process shell finished/, send: "\x18\x03" },
+    ],
+  });
+  if (!session.completed) throw new Error(`stuck at "${session.failure?.step}": ${JSON.stringify(session.failure?.tail)}`);
+});
+
+await check("M-x term: shell on a pty, stty, vi, less, C-c, exit", async () => {
+  const session = await interactiveSession({
+    ...boot,
+    timeoutMs: 30000,
+    prepare(emacs) { emacs.FS.writeFile("/tmp/t.txt", "alpha\nbeta-line\n"); },
+    steps: [
+      { name: "emacs is up", expect: /\*scratch\*/, send: "\x1bxterm\r" },
+      { name: "program prompt", expect: /Run program: /, send: "\r" },
+      { name: "shell prompt", expect: /[#$] /, send: "tty; stty size\r" },
+      { name: "a terminal of the window's size", expect: /\/dev\/pts\/0[\s\S]*\b[0-9]+ [0-9]+\b/, send: "echo answer-$((6 * 7))\r" },
+      { name: "command output", expect: /answer-42/, send: "vi /tmp/t.txt\r" },
+      // dd deletes the first line, ZZ saves and quits.  (Not ESC: term sends
+      // ESC with the next key as one meta sequence, which BusyBox vi drops
+      // as an unknown escape sequence, as it would on Linux.)
+      { name: "vi shows the file", expect: /beta-line/, send: "ddZZ" },
+      { name: "vi wrote it", expect: (_f, _a, emacs) => recorded(emacs, "/tmp/t.txt") === "beta-line\n", send: "less /etc/passwd\r" },
+      { name: "less shows the file", expect: /root:x:0:0/, send: "q" },
+      { name: "less quit", expect: /[#$] /, send: "echo after-$((1 + 1))\r" },
+      { name: "prompt after less", expect: /after-2/, send: "sleep 100\r" },
+      // C-c C-c sends ^C through the terminal: SIGINT from the line discipline.
+      // (Redisplay may draw the blank as a cursor movement.)
+      { name: "sleep is running", expect: /sleep ?100/, send: "\x03\x03" },
+      { name: "^C interrupts it", expect: /[#$] /, send: "echo back-$((2 + 2))\r" },
+      { name: "shell survived", expect: /back-4/, send: "exit\r" },
+      { name: "shell exited", expect: /Process terminal finished/, send: "\x18\x03" },
     ],
   });
   if (!session.completed) throw new Error(`stuck at "${session.failure?.step}": ${JSON.stringify(session.failure?.tail)}`);

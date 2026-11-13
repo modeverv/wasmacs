@@ -26,13 +26,16 @@
  * No Asyncify, no JS wrapper frames, no call stack save/restore.
  */
 
-// Emscripten's own pipe2/poll, kept under private names: they are used when
-// no process kernel is present (globalThis.WasmacsKernel missing).
+// Emscripten's own pipe2/poll/ioctl, kept under private names: they are used
+// when no process kernel is present (globalThis.WasmacsKernel missing) and
+// for descriptors that are not the kernel's.
 mergeInto(LibraryManager.library, {
   $wasmacs_orig__syscall_pipe2: LibraryManager.library['__syscall_pipe2'],
   $wasmacs_orig__syscall_pipe2__deps: LibraryManager.library['__syscall_pipe2__deps'] || [],
   $wasmacs_orig__syscall_poll: LibraryManager.library['__syscall_poll'],
   $wasmacs_orig__syscall_poll__deps: LibraryManager.library['__syscall_poll__deps'] || [],
+  $wasmacs_orig__syscall_ioctl: LibraryManager.library['__syscall_ioctl'],
+  $wasmacs_orig__syscall_ioctl__deps: LibraryManager.library['__syscall_ioctl__deps'] || [],
 });
 
 mergeInto(LibraryManager.library, {
@@ -253,10 +256,11 @@ mergeInto(LibraryManager.library, {
     },
   },
 
-  // Start a subprocess for emacs_spawn (callproc.c).  Returns the pid or
-  // -errno.
+  // Start a subprocess for emacs_spawn (callproc.c).  With a pseudoterminal,
+  // PTYNAMEPTR names its slave side, which replaces the descriptors given as
+  // -1.  Returns the pid or -errno.
   wasmacs_host_proc_spawn__deps: ['$wasmacs_process', '$UTF8ToString'],
-  wasmacs_host_proc_spawn: function (argvPtr, envpPtr, cwdPtr, stdIn, stdOut, stdErr) {
+  wasmacs_host_proc_spawn: function (argvPtr, envpPtr, cwdPtr, stdIn, stdOut, stdErr, ptyNamePtr) {
     var K = wasmacs_process.get();
     if (!K) return -{{{ cDefs.ENOSYS }}};
     function strings(ptr) {
@@ -271,7 +275,7 @@ mergeInto(LibraryManager.library, {
       return out;
     }
     return K.emacsSpawn(strings(argvPtr), strings(envpPtr), cwdPtr ? UTF8ToString(cwdPtr) : null,
-                        [stdIn, stdOut, stdErr]);
+                        [stdIn, stdOut, stdErr], ptyNamePtr ? UTF8ToString(ptyNamePtr) : null);
   },
 
   // waitpid for get_child_status (sysdep.c): pid, 0 (WNOHANG) or -errno.
@@ -297,6 +301,16 @@ mergeInto(LibraryManager.library, {
     var K = wasmacs_process.get();
     if (!K) return wasmacs_orig__syscall_pipe2(fdPtr, flags);
     return K.emacsPipe2(fdPtr, flags);
+  },
+
+  // Pseudoterminals are the kernel's: allocate_pty (unlockpt, ptsname),
+  // child_setup_tty, set-process-window-size and the foreground process group
+  // of interrupt-process are ioctls on them.
+  __syscall_ioctl__deps: ['$FS', '$wasmacs_orig__syscall_ioctl'],
+  __syscall_ioctl: function (fd, op, varargs) {
+    var stream = FS.getStream(fd);
+    if (stream && stream.pty) return stream.stream_ops.ioctl(stream, op, varargs ? HEAPU32[varargs >> 2] : 0);
+    return wasmacs_orig__syscall_ioctl(fd, op, varargs);
   },
 
   // select/pselect/poll all end up here (musl implements them with poll).

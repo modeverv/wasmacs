@@ -556,11 +556,11 @@ Acceptance tests:
 - `tests/process/run-kernel-tests.mjs`: the kernel without Emacs.
 - `tools/scripts/probe-process-service.mjs`: `call-process`, `make-process`,
   `M-x shell`, eshell, `vc-git`, Magit and `M-x grep` in the real Emacs build.
-- `tools/scripts/run-browser-smoke.mjs shell persist`: the page in a browser.
+- `tools/scripts/run-browser-smoke.mjs shell persist term`: the page in a browser.
 - A dead process leaves nothing reachable (kernel suite and Emacs probe).
 
-Not provided: pseudoterminals, job control, sockets, preemption of a program
-that makes no system calls. The design, its rules and its limits are in
+Pseudoterminals are kernel devices (`M-x term`). Not provided: job control,
+sockets, preemption of a program that makes no system calls. The design, its rules and its limits are in
 `doc/process-service.md`.
 
 ## Cross-Service Checks
@@ -643,9 +643,10 @@ These checks prevent services from contradicting each other.
 
 ### Process x Terminal
 
-- Processes get pipes, never the terminal: is `isatty` false in a subprocess,
-  and do Emacs settings that assume a pty (`process-connection-type`, grep
-  colours) say so?
+- Processes get pipes unless they ask for a pseudoterminal, and never Emacs's
+  own terminal: is `isatty` false on a pipe and true on a pty, is `/dev/tty`
+  the controlling pty (or `ENXIO`), and do Emacs settings that assume a pty
+  (`process-connection-type`, grep colours) say so?
 
 ### Host Capability x Browser GUI
 

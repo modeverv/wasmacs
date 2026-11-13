@@ -1,6 +1,6 @@
 --- a/src/callproc.c
 +++ b/src/callproc.c
-@@ -95,7 +95,52 @@
+@@ -95,6 +95,52 @@
  #ifdef HAVE_ANDROID
  #include "android.h"
  #endif /* HAVE_ANDROID */
@@ -11,7 +11,8 @@
 +   (src/runtime/process/wasmacs-kernel.js) runs inside the same worker;
 +   the host starts it, delivers signals to it and reports its status.  */
 +extern int wasmacs_host_proc_spawn (char **argv, char **envp, const char *cwd,
-+				    int std_in, int std_out, int std_err);
++				    int std_in, int std_out, int std_err,
++				    const char *pty_name);
 +extern int wasmacs_host_proc_kill (int pid, int sig);
 +
 +/* kill for subprocesses: PID < 0 names a process group, like kill(2).  */
@@ -39,7 +40,7 @@
 +{
 +  Vquit_flag = Qt;
 +}
- 
++
 +/* The host calls this to run a signal handler of Emacs: the SIGCHLD
 +   handler when a subprocess changed state.  */
 +__attribute__ ((used, visibility ("default")))
@@ -49,23 +50,35 @@
 +  return raise (sig);
 +}
 +#endif /* __EMSCRIPTEN__ */
-+
+ 
  /* Pattern used by call-process-region to make temp files.  */
  static Lisp_Object Vtemp_file_name_pattern;
- 
-@@ -1443,6 +1488,25 @@
+@@ -1443,6 +1489,38 @@
               const char *pty_name, bool pty_in, bool pty_out,
               const sigset_t *oldset)
  {
 +#ifdef __EMSCRIPTEN__
 +  /* wasmacs process service: the host kernel creates the child and gives
 +     it duplicates of STD_IN, STD_OUT and STD_ERR as its descriptors 0, 1
-+     and 2; nothing else is inherited.  There are no pseudoterminals:
-+     allocate_pty fails, so process.c has already fallen back to pipes
-+     and PTY_NAME is null.  */
++     and 2; nothing else is inherited.  With a pseudoterminal, process.c
++     passes -1 for the descriptors that use it; the kernel opens PTY_NAME
++     for them and makes it the controlling terminal of the child's new
++     session, as the code below does in the child.  */
 +  {
++    if (pty_name && pty_out)
++      {
++	/* The modes belong to the terminal, not to a process: setting them
++	   here is what child_setup_tty does in the child.  */
++	int fd = emacs_open (pty_name, O_RDWR | O_NOCTTY, 0);
++	if (fd >= 0)
++	  {
++	    child_setup_tty (fd);
++	    emacs_close (fd);
++	  }
++      }
 +    int rc = wasmacs_host_proc_spawn (argv, envp, cwd, std_in, std_out,
-+				      std_err < 0 ? std_out : std_err);
++				      std_err < 0 ? std_out : std_err,
++				      pty_name);
 +    if (rc < 0)
 +      {
 +	*newpid = -1;

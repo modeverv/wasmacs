@@ -2369,15 +2369,18 @@ Subprocesses work (see "Phase: Process Service" below): `M-x shell`, eshell,
 git with `vc-git` and Magit, `M-x grep` / `rgrep` / `lgrep` / xref search, on a
 bundled userland of BusyBox, git, GNU grep and GNU diffutils. Git Smart HTTP(S)
 clone/fetch/push uses the companion extension. Ediff comparison and ancestor
-merge use GNU diff/diff3 (see the implementation records below).
+merge use GNU diff/diff3 (see the implementation records below). `M-x term`
+and `ansi-term` run on kernel pseudoterminals (see "Implementation:
+Pseudoterminals and M-x term" below).
 
 CPython is bundled and provides an interactive REPL through `M-x run-python`
 (see "Implementation: Python REPL" below).
 
 Other candidates, in the order they would matter to a user:
 
-1. A pseudoterminal in the process kernel (line discipline, `isatty`, window
-   size): `M-x term`, job control, programs that behave differently on a tty.
+1. Job control on top of the pseudoterminals: stopped processes (`SIGTSTP`,
+   `SIGTTIN`, `SIGTTOU`, `SIGCONT`, `WUNTRACED`) and BusyBox `ash` built with
+   it, so that `C-z`, `fg` and `bg` work in `M-x term`.
 2. Incremental persistence of `/home/user` (today the whole tree is saved as
    one image whenever it changed; large repositories make that slow).
 3. Bring the VS Code lane onto the numbered patch layer (`src/c/patches`), so
@@ -2389,6 +2392,7 @@ Validation commands for the current state:
 npm test                          # CI: contracts + the checked-in docs bundle runs sh/git/grep
 npm run test:process              # kernel tests, then real Emacs with real subprocesses (Node)
 npm run browser:smoke:processes   # the page in headless Chrome: shell, git, grep, reload persistence
+npm run browser:smoke:term        # the page in headless Chrome: M-x term on a pseudoterminal
 npm run test:product && npm run test:artifacts && npm run test:vscode-lane
 ```
 
@@ -5359,3 +5363,49 @@ Validation:
   failed with "wasmacs companion extension is unavailable ..." and the target
   received no request. The dev server answers 404 at
   `/__wasmacs_network_fetch`.
+
+## Implementation: Pseudoterminals and M-x term (2026-11-14)
+
+Status: done. The user asked for `M-x term` after an effort estimate (medium:
+a pty device in the kernel; job control left for later).
+
+- Kernel (`src/runtime/process/wasmacs-kernel.js`): `/dev/ptmx`, `/dev/pts/N`
+  and `/dev/tty` as devices of the shared FS. A Linux n_tty style line
+  discipline: input processing, canonical editing (erase, kill, werase,
+  lnext, reprint, EOF/EOL), echo, VINTR/VQUIT/VSUSP to the foreground group,
+  VMIN/VTIME, IXON stop/start, OPOST output processing. Controlling terminal
+  per session, foreground process group, hangup on master close (SIGHUP),
+  EIO on the master once no slave is open, SIGWINCH on a size change.
+  `/dev/tty` is the caller's controlling pty (ENXIO without one); Emacs keeps
+  the console. The full `struct termios` is stored as written (Emacs's
+  `emacs_set_tty` and `stty` compare it after setting).
+- Emacs seam (`0006`): `emacs_spawn` runs `child_setup_tty` on the slave and
+  passes `pty_name` to `wasmacs_host_proc_spawn`; the kernel opens it as the
+  child's descriptors in a new session. Emacs's own `allocate_pty`
+  (UNIX98) is unchanged. Host library: `__syscall_ioctl` routes pty ioctls
+  to the kernel. Child library: same, plus `fd_fdstat_get` reports a
+  character device for a pty (Emscripten's `isatty`).
+- Found on the way: a child that writes and exits in one scheduling round had
+  its SIGCHLD delivered before Emacs could read the output, so
+  `accept-process-output` with a timeout could return without it (pipes too).
+  Exits of a round are now reported at Emacs's next poll.
+- `process-connection-type` stays nil for M-x shell, compile and magit; term
+  and ansi-term bind it to t.
+- Not done: job control (stopped processes, ash built with it). In term's
+  char mode ESC is a meta prefix, so BusyBox vi drops ESC+key (as on Linux).
+
+Validation (rebased onto the CPython commit e049d19; the child runtime's one
+`ioctl` override serves the pty and CPython's FIOCLEX, all programs relinked):
+
+- `node tests/process/run-kernel-tests.mjs`: 52/52 (10 new pty tests with
+  `ktest` tty modes and interactive BusyBox sh on a pty; header constants
+  checked by `consts.c`).
+- `node tools/scripts/probe-process-service.mjs`: 37/37 on `build/` and on the
+  `docs/` bundle (pty process, set-process-window-size, foreground group,
+  line discipline + EOF, interactive M-x term with tty, stty, vi, less, ^C).
+- `npm run browser:smoke:term`: headless Chrome, including a page resize that
+  reaches the shell (16x72 -> 12x61). The `python`, `ediff`, `shell` and
+  `persist` scenarios pass too.
+- `npm test` 125/125, `test:python` 7/7, `test:ediff` 9/9, `test:git-http`
+  16 PASS; before the rebase also `test:product`, `test:artifacts`,
+  `test:vscode-lane`.

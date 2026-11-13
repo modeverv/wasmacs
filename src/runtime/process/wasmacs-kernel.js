@@ -22,6 +22,9 @@
  *   - fork() unwinds the parent with Asyncify, copies its linear memory into a
  *     fresh instance of the same module and rewinds both.  execve() replaces the
  *     program image and keeps the pid and the file descriptors.
+ *   - Pseudoterminals (/dev/ptmx, /dev/pts/N, /dev/tty) are devices of the
+ *     shared FS.  Emacs holds the master side (term.el); the slave side is the
+ *     controlling terminal of a session, with a line discipline in between.
  *
  * The file has no Emscripten macros and no dependency on the Emacs glue: all
  * access to it goes through the `env` object given to WasmacsKernel.create()
@@ -38,9 +41,9 @@
     EPERM: 63, ENOENT: 44, ESRCH: 71, EINTR: 27, EIO: 29, E2BIG: 1, ENOEXEC: 45, EBADF: 8,
     ECHILD: 12, EAGAIN: 6, ENOMEM: 48, EACCES: 2, EFAULT: 21, EEXIST: 20, ENOTDIR: 54,
     EISDIR: 31, EINVAL: 28, EMFILE: 33, ENOTTY: 59, ESPIPE: 70, EPIPE: 64, ENOSYS: 52,
-    ELOOP: 32,
+    ELOOP: 32, ENXIO: 60,
     O_RDONLY: 0, O_WRONLY: 1, O_RDWR: 2, O_ACCMODE: 2097155, O_CREAT: 64, O_EXCL: 128,
-    O_TRUNC: 512, O_APPEND: 1024, O_NONBLOCK: 2048, O_CLOEXEC: 524288,
+    O_NOCTTY: 256, O_TRUNC: 512, O_APPEND: 1024, O_NONBLOCK: 2048, O_CLOEXEC: 524288,
     S_IFMT: 0o170000, S_IFIFO: 0o010000, S_IFCHR: 0o020000, S_IFREG: 0o100000, S_IFDIR: 0o040000,
     POLLIN: 1, POLLPRI: 2, POLLOUT: 4, POLLERR: 8, POLLHUP: 16, POLLNVAL: 32,
     POLLRDNORM: 64, POLLWRNORM: 256,
@@ -50,6 +53,22 @@
     SIGTSTP: 20, SIGTTIN: 21, SIGTTOU: 22, SIGURG: 23, SIGWINCH: 28, NSIG: 65,
     FIONREAD: 0x541b,
     PIPE_BUF: 4096,
+    // termios: c_cc indices and the c_iflag / c_oflag / c_cflag / c_lflag bits
+    NCCS: 32, VINTR: 0, VQUIT: 1, VERASE: 2, VKILL: 3, VEOF: 4, VTIME: 5, VMIN: 6,
+    VSTART: 8, VSTOP: 9, VSUSP: 10, VEOL: 11, VREPRINT: 12, VWERASE: 14, VLNEXT: 15, VEOL2: 16,
+    ISTRIP: 0o40, INLCR: 0o100, IGNCR: 0o200, ICRNL: 0o400, IXON: 0o2000, IXANY: 0o4000,
+    IUTF8: 0o40000,
+    OPOST: 0o1, ONLCR: 0o4, OCRNL: 0o10, ONOCR: 0o20, ONLRET: 0o40, TABDLY: 0o14000, XTABS: 0o14000,
+    B38400: 0o17, CS8: 0o60, CREAD: 0o200, HUPCL: 0o2000,
+    ISIG: 0o1, ICANON: 0o2, ECHO: 0o10, ECHOE: 0o20, ECHOK: 0o40, ECHONL: 0o100, NOFLSH: 0o200,
+    ECHOCTL: 0o1000, ECHOKE: 0o4000, IEXTEN: 0o100000,
+    // ioctl(2) requests on terminals
+    TCGETS: 0x5401, TCSETS: 0x5402, TCSETSW: 0x5403, TCSETSF: 0x5404, TCSBRK: 0x5409,
+    TCXONC: 0x540a, TCFLSH: 0x540b, TIOCSCTTY: 0x540e, TIOCGPGRP: 0x540f, TIOCSPGRP: 0x5410,
+    TIOCOUTQ: 0x5411, TIOCGWINSZ: 0x5413, TIOCSWINSZ: 0x5414, FIONBIO: 0x5421, TIOCNOTTY: 0x5422,
+    TCSBRKP: 0x5425, TIOCGSID: 0x5429, TIOCGPTN: 0x80045430 | 0, TIOCSPTLCK: 0x40045431,
+    FIONCLEX: 0x5450, FIOCLEX: 0x5451,
+    TCOOFF: 0, TCOON: 1, TCIFLUSH: 0, TCOFLUSH: 1, TCIOFLUSH: 2,
     // posix_spawn: musl fdop.h FDOP_* and spawn.h POSIX_SPAWN_*
     FDOP_CLOSE: 1, FDOP_DUP2: 2, FDOP_OPEN: 3, FDOP_CHDIR: 4, FDOP_FCHDIR: 5,
     POSIX_SPAWN_SETPGROUP: 2, POSIX_SPAWN_SETSID: 128,
@@ -79,23 +98,18 @@
     constructor(wait) { this.wait = wait; }
   }
 
-  let pipeSeq = 0;
-  // A pipe: a bounded byte queue (ring buffer).  The buffer starts small and
-  // grows up to CAPACITY, so the many pipes that only ever carry a few bytes
-  // stay cheap.
-  class Pipe {
+  // A bounded byte queue (ring buffer).  The buffer starts small and grows up
+  // to CAPACITY, so the many queues that only ever carry a few bytes stay
+  // cheap.
+  class ByteQueue {
     constructor(capacity) {
-      this.id = ++pipeSeq;
       this.capacity = capacity;
       this.buf = new Uint8Array(0);
       this.head = 0;           // index of the first unread byte in buf
       this.size = 0;           // unread bytes
-      this.readers = 0;        // number of fds (in any process) open for reading
-      this.writers = 0;        // number of fds (in any process) open for writing
-      this.rwait = new Set();  // processes waiting for data / EOF
-      this.wwait = new Set();  // processes waiting for space / a reader to vanish
-      this.emacsOwned = false; // created by Emacs: activity must wake Emacs
     }
+    get free() { return this.capacity - this.size; }
+    clear() { this.head = 0; this.size = 0; }
     // Move up to LENGTH unread bytes to BUFFER[OFFSET...]; returns the count.
     take(buffer, offset, length) {
       const n = Math.min(length, this.size);
@@ -126,6 +140,85 @@
       this.buf = next;
       this.head = 0;
     }
+  }
+
+  let pipeSeq = 0;
+  // A pipe: a byte queue shared by every descriptor open on one of its ends.
+  class Pipe extends ByteQueue {
+    constructor(capacity) {
+      super(capacity);
+      this.id = ++pipeSeq;
+      this.readers = 0;        // number of fds (in any process) open for reading
+      this.writers = 0;        // number of fds (in any process) open for writing
+      this.rwait = new Set();  // processes waiting for data / EOF
+      this.wwait = new Set();  // processes waiting for space / a reader to vanish
+      this.emacsOwned = false; // created by Emacs: activity must wake Emacs
+    }
+  }
+
+  // struct termios of Emscripten's libc: four flag words, c_line, c_cc[NCCS]
+  // and the two speeds.  It is stored as these bytes and handed back
+  // unchanged: Emacs and stty compare what they read with what they set.
+  const TERMIOS_SIZE = 60;
+  const TERMIOS_CC = 17;
+  const MAX_CANON = 4096;      // longest line in canonical mode (Linux N_TTY_BUF_SIZE)
+  // The modes of a new terminal: Linux's tty_std_termios.
+  function defaultTermios() {
+    const t = new Uint8Array(TERMIOS_SIZE);
+    const v = new DataView(t.buffer);
+    v.setUint32(0, C.ICRNL | C.IXON, true);
+    v.setUint32(4, C.OPOST | C.ONLCR, true);
+    v.setUint32(8, C.B38400 | C.CS8 | C.CREAD | C.HUPCL, true);
+    v.setUint32(12, C.ISIG | C.ICANON | C.ECHO | C.ECHOE | C.ECHOK | C.ECHOCTL | C.ECHOKE | C.IEXTEN, true);
+    // ^C ^\ DEL ^U ^D, VTIME 0, VMIN 1, -, ^Q ^S ^Z, -, ^R ^O ^W ^V
+    t.set([3, 28, 127, 21, 4, 0, 1, 0, 17, 19, 26, 0, 18, 15, 23, 22, 0], TERMIOS_CC);
+    return t;
+  }
+
+  // A pseudoterminal.  The master side is what Emacs (term.el) reads and
+  // writes; the slave side, /dev/pts/N, is the controlling terminal of a
+  // session.  In between sits a line discipline after Linux's n_tty: input
+  // processing, canonical line editing, echo, the signal characters and
+  // output processing.
+  class Pty {
+    constructor(index, capacity) {
+      this.index = index;
+      this.input = new ByteQueue(capacity);   // what the slave reads
+      this.inTotal = 0;                       // bytes ever put into input
+      this.inTaken = 0;                       // bytes ever read from input
+      this.lines = [];                        // canonical mode: { end, eof } of the complete lines in input
+      this.edit = [];                         // canonical mode: the line being edited
+      this.editColumn = 0;                    // output column where that line started
+      this.output = new ByteQueue(capacity);  // what the master reads
+      this.column = 0;                        // output column (tabs, erasing)
+      this.termios = defaultTermios();
+      this.rows = 24;
+      this.cols = 80;
+      this.xpixel = 0;
+      this.ypixel = 0;
+      this.masters = 0;         // descriptors open on the master side
+      this.slaves = 0;          // descriptors open on the slave side
+      this.slaveOpened = false;
+      this.locked = true;       // until unlockpt()
+      this.hungUp = false;      // the master side was closed
+      this.stopped = false;     // output stopped by the STOP character (IXON)
+      this.lnext = false;       // the next input character is taken literally
+      this.sid = 0;             // the session this is the controlling terminal of
+      this.fgPgrp = 0;          // its foreground process group
+      this.emacsOwned = false;  // Emacs holds the master: output must wake it
+      this.slaveReaders = new Set();  // processes waiting for input (or a hangup)
+      this.slaveWriters = new Set();  // processes waiting for room in output
+      this.masterReaders = new Set(); // processes waiting for output (or the slave to close)
+      this.masterWriters = new Set(); // processes waiting for room in input
+    }
+    _flag(offset) {
+      const t = this.termios;
+      return (t[offset] | t[offset + 1] << 8 | t[offset + 2] << 16 | t[offset + 3] << 24) >>> 0;
+    }
+    get iflag() { return this._flag(0); }
+    get oflag() { return this._flag(4); }
+    get lflag() { return this._flag(12); }
+    cc(index) { return this.termios[TERMIOS_CC + index]; }
   }
 
   // One program image: the Emscripten MODULARIZE factory plus ONE compiled
@@ -234,6 +327,9 @@
       this.runq = [];
       this.sleepers = new Set(); // blocked processes with a deadline
       this.httpRequests = new Set(); // bounded page-owned requests, never promises
+      this.ptys = new Map();     // /dev/pts/N index -> Pty
+      this.maxPtys = 64;
+      this.ttyCapacity = 65536;  // bytes of input / output a pty buffers
       this.nextPid = FIRST_PID;
       this.debug = !!env.debug;
       this.stats = { spawns: 0, forks: 0, execs: 0, exits: 0, switches: 0 };
@@ -250,6 +346,8 @@
       this.procs.set(EMACS_PID, this.emacs);
       this.current = this.emacs;
       this._initPipeOps();
+      this._initTtyOps();
+      this._installTtyDevices();
     }
 
     log(msg) {
@@ -404,6 +502,703 @@
       });
       pipe.writers++;
       return { pipe, r, w };
+    }
+
+    // ----------------------------------------------------------------- ttys
+    // /dev/ptmx opens the master side of a new pseudoterminal and creates its
+    // slave side /dev/pts/N; /dev/tty is the controlling terminal of the
+    // caller.  For Emacs, /dev/tty stays its own terminal (the console).
+    _installTtyDevices() {
+      const FS = this.FS;
+      if (typeof FS.registerDevice !== 'function') return;   // a host without devices: no terminals
+      FS.mkdirTree('/dev/pts');
+      const ptmx = FS.makedev(5, 2);
+      FS.registerDevice(ptmx, { open: (stream) => this._openPtmx(stream) });
+      try { FS.mkdev('/dev/ptmx', 0o666, ptmx); } catch (e) { if (e.errno !== C.EEXIST) throw e; }
+      const ttyDev = FS.makedev(5, 0);
+      const previous = FS.getDevice(ttyDev);
+      const consoleOps = previous && (previous.consoleOps || previous.stream_ops);
+      FS.registerDevice(ttyDev, { open: (stream) => this._openTty(stream, consoleOps) });
+      FS.getDevice(ttyDev).consoleOps = consoleOps;
+    }
+    // A device open that fails must also free the descriptor FS.open took.
+    _refuseOpen(stream, errno) {
+      this.FS.closeStream(stream.fd);
+      throw this.errno(errno);
+    }
+    _openTty(stream, consoleOps) {
+      const p = this.current;
+      if (p === this.emacs && consoleOps) {
+        stream.stream_ops = consoleOps;
+        if (consoleOps.open) consoleOps.open(stream);
+        return;
+      }
+      const pty = this._ctty(p);
+      if (!pty) this._refuseOpen(stream, C.ENXIO);
+      this._attachTty(stream, pty, false);
+    }
+    _openPtmx(stream) {
+      const FS = this.FS;
+      let index = 0;
+      while (this.ptys.has(index)) index++;
+      if (index >= this.maxPtys) this._refuseOpen(stream, C.EAGAIN);
+      const pty = new Pty(index, this.ttyCapacity);
+      pty.dev = FS.makedev(136, index);
+      pty.path = `/dev/pts/${index}`;
+      pty.emacsOwned = this.current === this.emacs;
+      FS.registerDevice(pty.dev, { open: (s) => this._openPts(s, pty) });
+      try { FS.unlink(pty.path); } catch (e) { /* not there */ }
+      FS.mkdev(pty.path, 0o620, pty.dev);
+      this.ptys.set(index, pty);
+      this._attachTty(stream, pty, true);
+    }
+    _openPts(stream, pty) {
+      if (pty.locked || pty.hungUp || this.ptys.get(pty.index) !== pty) this._refuseOpen(stream, C.EIO);
+      this._attachTty(stream, pty, false);
+      // A session leader without a terminal acquires the first one it opens.
+      const p = this.current;
+      if (!(stream.flags & C.O_NOCTTY) && p !== this.emacs && p.sid === p.pid && !pty.sid && !this._ctty(p)) {
+        this._setCtty(p, pty);
+      }
+    }
+    _attachTty(stream, pty, master) {
+      stream.stream_ops = master ? this.ptmOps : this.ptsOps;
+      stream.pty = pty;
+      stream.ptyMaster = master;
+      stream.seekable = false;
+      if (master) {
+        pty.masters++;
+      } else {
+        pty.slaves++;
+        pty.slaveOpened = true;
+      }
+    }
+    // The controlling terminal of P's session, or null.  Emacs has none.
+    _ctty(p) {
+      if (!p || p === this.emacs) return null;
+      for (const pty of this.ptys.values()) if (pty.sid && pty.sid === p.sid) return pty;
+      return null;
+    }
+    _setCtty(p, pty) {
+      pty.sid = p.sid;
+      pty.fgPgrp = p.pgid;
+    }
+    // The session loses its controlling terminal (its leader exited, or
+    // TIOCNOTTY): SIGHUP and SIGCONT to the foreground process group.
+    _ttyDisassociate(pty) {
+      const fg = pty.fgPgrp;
+      pty.sid = 0;
+      pty.fgPgrp = 0;
+      if (fg) {
+        this._signalGroup(fg, C.SIGHUP);
+        this._signalGroup(fg, C.SIGCONT);
+      }
+    }
+    // The master side was closed: the slave side reads end-of-file, writes
+    // fail, and the session is hung up.
+    _ttyHangup(pty) {
+      pty.hungUp = true;
+      const leader = pty.sid ? this.procs.get(pty.sid) : null;
+      this._ttyDisassociate(pty);
+      if (leader && leader !== this.current) this._signal(leader, C.SIGHUP);
+      this._wakeSet(pty.slaveReaders);
+      this._wakeSet(pty.slaveWriters);
+    }
+    // Remove the pseudoterminal once neither side is open.
+    _ttyMaybeFree(pty) {
+      if (pty.masters > 0 || pty.slaves > 0 || this.ptys.get(pty.index) !== pty) return;
+      this.ptys.delete(pty.index);
+      try { this.FS.unlink(pty.path); } catch (e) { /* already gone */ }
+      delete this.FS.devices[pty.dev];
+    }
+    // Send SIG to every process of group PGID; the running process, which
+    // may die of it, last.
+    _signalGroup(pgid, sig) {
+      let self = false;
+      for (const t of [...this.procs.values()]) {
+        if (t === this.emacs || t.state === 'zombie' || t.pgid !== pgid) continue;
+        if (t === this.current) { self = true; continue; }
+        this._signal(t, sig);
+      }
+      if (self) this._signal(this.current, sig);
+    }
+
+    // Output processing (OPOST) of byte C into OUT[N...]; returns the new N.
+    // It adds at most 8 bytes (a tab expanded to spaces).
+    _ttyOutChar(pty, c, out, n) {
+      const oflag = pty.oflag;
+      if (!(oflag & C.OPOST)) {
+        out[n++] = c;
+        return n;
+      }
+      switch (c) {
+        case 10:
+          if (oflag & C.ONLRET) pty.column = 0;
+          if (oflag & C.ONLCR) {
+            pty.column = 0;
+            out[n++] = 13;
+          }
+          out[n++] = 10;
+          return n;
+        case 13:
+          if ((oflag & C.ONOCR) && pty.column === 0) return n;
+          if (oflag & C.OCRNL) {
+            if (oflag & C.ONLRET) pty.column = 0;
+            out[n++] = 10;
+            return n;
+          }
+          pty.column = 0;
+          out[n++] = 13;
+          return n;
+        case 9: {
+          const spaces = 8 - (pty.column & 7);
+          pty.column += spaces;
+          if ((oflag & C.TABDLY) === C.XTABS) {
+            for (let i = 0; i < spaces; i++) out[n++] = 32;
+            return n;
+          }
+          out[n++] = 9;
+          return n;
+        }
+        case 8:
+          if (pty.column > 0) pty.column--;
+          out[n++] = 8;
+          return n;
+        default:
+          if (c >= 32 && c !== 127 && !((pty.iflag & C.IUTF8) && (c & 0xc0) === 0x80)) pty.column++;
+          out[n++] = c;
+          return n;
+      }
+    }
+    // Queue COUNT bytes of BYTES[OFFSET...] for the master, as many as fit.
+    _ttyEmit(pty, bytes, offset, count) {
+      const n = Math.min(count, pty.output.free);
+      if (n <= 0) return;
+      pty.output.put(bytes, offset, n);
+      this._wakeSet(pty.masterReaders);
+      if (pty.emacsOwned) this.eventSeq++;
+    }
+    // What the slave writes, through output processing.  Returns how many of
+    // the LENGTH bytes fitted into the master's queue.
+    _ttyWrite(pty, buffer, offset, length) {
+      const room = pty.output.free;
+      if (!(pty.oflag & C.OPOST)) {
+        const n = Math.min(room, length);
+        this._ttyEmit(pty, buffer, offset, n);
+        return n;
+      }
+      if (room < 8) return 0;
+      const out = new Uint8Array(Math.min(room, length * 2 + 8));
+      let n = 0, i = 0;
+      while (i < length && n + 8 <= out.length) {
+        n = this._ttyOutChar(pty, buffer[offset + i] & 0xff, out, n);
+        i++;
+      }
+      this._ttyEmit(pty, out, 0, n);
+      return i;
+    }
+    _ttyEchoRaw(pty, bytes) {
+      const out = new Uint8Array(bytes.length * 8);
+      let n = 0;
+      for (const c of bytes) n = this._ttyOutChar(pty, c, out, n);
+      this._ttyEmit(pty, out, 0, n);
+    }
+    // Echo C; with ECHOCTL a control character as ^X.
+    _ttyEchoChar(pty, c) {
+      if ((pty.lflag & C.ECHOCTL) && (c < 32 || c === 127) && c !== 9 && c !== 10) {
+        this._ttyEchoRaw(pty, [94, c ^ 0x40]);
+      } else {
+        this._ttyEchoRaw(pty, [c]);
+      }
+    }
+    // The output column after echoing B at column COL.
+    _ttyEchoWidth(pty, b, col) {
+      if (b === 9) return (col | 7) + 1;
+      if (b < 32 || b === 127) return (pty.lflag & C.ECHOCTL) ? col + 2 : col;
+      if ((pty.iflag & C.IUTF8) && (b & 0xc0) === 0x80) return col;
+      return col + 1;
+    }
+
+    // Input processing of one byte written to the master (n_tty's
+    // receive_char).  Signals go to SIGS; the caller sends them.
+    _ttyReceive(pty, c, sigs) {
+      const iflag = pty.iflag, lflag = pty.lflag;
+      if (iflag & C.ISTRIP) c &= 0x7f;
+      if (pty.lnext) {
+        pty.lnext = false;
+        this._ttyStore(pty, c);
+        return;
+      }
+      if (iflag & C.IXON) {
+        if (c && c === pty.cc(C.VSTOP)) {
+          pty.stopped = true;
+          return;
+        }
+        if (c && c === pty.cc(C.VSTART)) {
+          this._ttyStart(pty);
+          return;
+        }
+        if (pty.stopped && (iflag & C.IXANY)) this._ttyStart(pty);
+      }
+      if (c === 13) {
+        if (iflag & C.IGNCR) return;
+        if (iflag & C.ICRNL) c = 10;
+      } else if (c === 10 && (iflag & C.INLCR)) {
+        c = 13;
+      }
+      if (c && (lflag & C.ISIG)) {
+        const sig = c === pty.cc(C.VINTR) ? C.SIGINT : c === pty.cc(C.VQUIT) ? C.SIGQUIT
+          : c === pty.cc(C.VSUSP) ? C.SIGTSTP : 0;
+        if (sig) {
+          if (!(lflag & C.NOFLSH)) this._ttyFlush(pty, true, true);
+          if (lflag & C.ECHO) this._ttyEchoChar(pty, c);
+          sigs.push(sig);
+          return;
+        }
+      }
+      if (!(lflag & C.ICANON)) {
+        this._ttyStore(pty, c);
+        return;
+      }
+      if (c) {
+        if (c === pty.cc(C.VERASE)) return this._ttyErase(pty, 'erase');
+        if (c === pty.cc(C.VKILL)) return this._ttyErase(pty, 'kill');
+        if (lflag & C.IEXTEN) {
+          if (c === pty.cc(C.VWERASE)) return this._ttyErase(pty, 'werase');
+          if (c === pty.cc(C.VLNEXT)) {
+            pty.lnext = true;
+            if ((lflag & C.ECHO) && (lflag & C.ECHOCTL)) {
+              if (pty.edit.length === 0) pty.editColumn = pty.column;
+              this._ttyEchoRaw(pty, [94, 8]);
+            }
+            return;
+          }
+          if (c === pty.cc(C.VREPRINT)) {
+            if (lflag & C.ECHO) {
+              this._ttyEchoChar(pty, c);
+              this._ttyEchoRaw(pty, [10]);
+              pty.editColumn = pty.column;
+              for (const b of pty.edit) this._ttyEchoChar(pty, b);
+            }
+            return;
+          }
+        }
+      }
+      if (c === 10) {
+        if (lflag & (C.ECHO | C.ECHONL)) this._ttyEchoRaw(pty, [10]);
+        pty.edit.push(c);
+        this._ttyCommitLine(pty, false);
+        return;
+      }
+      if (c && c === pty.cc(C.VEOF)) {
+        this._ttyCommitLine(pty, true);
+        return;
+      }
+      if (c && (c === pty.cc(C.VEOL) || ((lflag & C.IEXTEN) && c === pty.cc(C.VEOL2)))) {
+        if (lflag & C.ECHO) this._ttyEchoChar(pty, c);
+        pty.edit.push(c);
+        this._ttyCommitLine(pty, false);
+        return;
+      }
+      this._ttyStore(pty, c);
+    }
+    // An ordinary input character: into the line being edited (canonical
+    // mode) or straight into the input queue.
+    _ttyStore(pty, c) {
+      const lflag = pty.lflag;
+      if (lflag & C.ICANON) {
+        if (pty.edit.length >= MAX_CANON - 1) return;   // the line is full (Linux drops it too)
+        if (lflag & C.ECHO) {
+          if (pty.edit.length === 0) pty.editColumn = pty.column;
+          this._ttyEchoChar(pty, c);
+        }
+        pty.edit.push(c);
+        return;
+      }
+      if (lflag & C.ECHO) this._ttyEchoChar(pty, c);
+      pty.input.put(Uint8Array.of(c), 0, 1);
+      pty.inTotal++;
+    }
+    // The line being edited is complete and becomes readable.  EOF: it was
+    // ended by VEOF, which is not part of it (an empty one reads as EOF).
+    _ttyCommitLine(pty, eof) {
+      const n = pty.edit.length;
+      if (n) pty.input.put(Uint8Array.from(pty.edit), 0, n);
+      pty.edit.length = 0;
+      pty.inTotal += n;
+      pty.lines.push({ end: pty.inTotal, eof });
+    }
+    // VERASE, VWERASE and VKILL in canonical mode, with their echo.
+    _ttyErase(pty, kind) {
+      const lflag = pty.lflag;
+      if (pty.edit.length === 0) return;
+      if (kind === 'kill') {
+        if (!(lflag & C.ECHO)) {
+          pty.edit.length = 0;
+          return;
+        }
+        if (!(lflag & C.ECHOK) || !(lflag & C.ECHOKE) || !(lflag & C.ECHOE)) {
+          pty.edit.length = 0;
+          this._ttyEchoChar(pty, pty.cc(C.VKILL));
+          if (lflag & C.ECHOK) this._ttyEchoRaw(pty, [10]);
+          return;
+        }
+      }
+      let seenWord = false;
+      while (pty.edit.length) {
+        // One character: with IUTF8 a lead byte and its continuation bytes.
+        let start = pty.edit.length - 1;
+        if (pty.iflag & C.IUTF8) while (start > 0 && (pty.edit[start] & 0xc0) === 0x80) start--;
+        const c = pty.edit[start];
+        if (kind === 'werase') {
+          const word = (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
+          if (word) seenWord = true;
+          else if (seenWord) break;
+        }
+        pty.edit.length = start;
+        if (lflag & C.ECHO) this._ttyRubout(pty, c, kind);
+        if (kind === 'erase') break;
+      }
+    }
+    // Take the echo of C, just removed from the line being edited, back.
+    _ttyRubout(pty, c, kind) {
+      const lflag = pty.lflag;
+      if (kind === 'erase' && !(lflag & C.ECHOE)) {
+        this._ttyEchoChar(pty, pty.cc(C.VERASE));
+        return;
+      }
+      if (c === 9) {
+        // Back to the column where the tab started.
+        let col = pty.editColumn;
+        for (const b of pty.edit) col = this._ttyEchoWidth(pty, b, col);
+        this._ttyEchoRaw(pty, new Array(Math.max(0, pty.column - col)).fill(8));
+        return;
+      }
+      const control = c < 32 || c === 127;
+      if (control && !(lflag & C.ECHOCTL)) return;   // its echo was invisible
+      this._ttyEchoRaw(pty, control ? [8, 32, 8, 8, 32, 8] : [8, 32, 8]);
+    }
+    // Discard pending input (the slave's) and/or output (the master's).
+    _ttyFlush(pty, input, output) {
+      if (input) {
+        pty.input.clear();
+        pty.inTaken = pty.inTotal;
+        pty.lines.length = 0;
+        pty.edit.length = 0;
+        pty.lnext = false;
+        this._wakeSet(pty.masterWriters);
+      }
+      if (output) {
+        pty.output.clear();
+        this._wakeSet(pty.slaveWriters);
+      }
+    }
+    _ttyStart(pty) {
+      pty.stopped = false;
+      this._wakeSet(pty.slaveWriters);
+    }
+    // tcsetattr(): the new modes, and what switching canonical mode does to
+    // pending input (as in Linux).
+    _ttySetTermios(pty, bytes) {
+      const wasCanon = pty.lflag & C.ICANON;
+      pty.termios.set(bytes);
+      const canon = pty.lflag & C.ICANON;
+      if (wasCanon && !canon) {
+        // The line being edited becomes readable as it is.
+        const n = pty.edit.length;
+        if (n) pty.input.put(Uint8Array.from(pty.edit), 0, n);
+        pty.inTotal += n;
+        pty.edit.length = 0;
+        pty.lines.length = 0;
+      } else if (!wasCanon && canon) {
+        // Pending input becomes one line.
+        pty.lines.length = 0;
+        if (pty.input.size) pty.lines.push({ end: pty.inTotal, eof: false });
+      }
+      if (pty.stopped && !(pty.iflag & C.IXON)) this._ttyStart(pty);
+      this._wakeSet(pty.slaveReaders);
+    }
+    // Is there something for the slave to read?  POLL: as poll() sees it, in
+    // non-canonical mode with VTIME 0 that means VMIN bytes.
+    _ttyReadable(pty, poll) {
+      if (pty.lflag & C.ICANON) return pty.lines.length > 0;
+      const vmin = pty.cc(C.VMIN);
+      return pty.input.size >= (poll && !pty.cc(C.VTIME) && vmin ? vmin : 1);
+    }
+    // Read up to LENGTH bytes of input for the slave: in canonical mode at
+    // most one line, and 0 for an end-of-file.
+    _ttyTake(pty, buffer, offset, length) {
+      if (length === 0) return 0;
+      let n;
+      if (pty.lflag & C.ICANON) {
+        const avail = pty.lines[0].end - pty.inTaken;
+        n = avail ? pty.input.take(buffer, offset, Math.min(length, avail)) : 0;
+        pty.inTaken += n;
+        if (n === avail) pty.lines.shift();
+      } else {
+        n = pty.input.take(buffer, offset, length);
+        pty.inTaken += n;
+      }
+      if (n) this._wakeSet(pty.masterWriters);
+      return n;
+    }
+
+    _initTtyOps() {
+      const k = this;
+      const ioctl = (stream, op, arg) => k._ttyIoctl(stream, op, arg);
+      const llseek = () => { throw k.errno(C.ESPIPE); };
+      // The master side: what Emacs reads and writes.
+      this.ptmOps = {
+        read(stream, buffer, offset, length) {
+          const pty = stream.pty;
+          for (;;) {
+            if (pty.output.size > 0) {
+              const n = pty.output.take(buffer, offset, length);
+              k._wakeSet(pty.slaveWriters);
+              return n;
+            }
+            // No slave descriptor is open (any more): EIO, as in Linux.
+            if (pty.slaves === 0) throw k.errno(C.EIO);
+            if (stream.flags & C.O_NONBLOCK) throw k.errno(C.EAGAIN);
+            if (k.current === k.emacs) {
+              const r = k._emacsBlock(() => pty.output.size > 0 || pty.slaves === 0, -1, { quit: true });
+              if (r === 'eintr') throw k.errno(C.EINTR);
+              continue;
+            }
+            throw new BlockRequest({ kind: 'tty-read', sets: [pty.masterReaders], interruptible: true });
+          }
+        },
+        write(stream, buffer, offset, length) {
+          const pty = stream.pty;
+          const room = () => pty.input.size + pty.edit.length < pty.input.capacity;
+          for (;;) {
+            // Nothing reads the slave side any more: the bytes are dropped.
+            if (pty.slaves === 0 && pty.slaveOpened) return length;
+            const sigs = [];
+            let i = 0;
+            while (i < length && room()) {
+              k._ttyReceive(pty, buffer[offset + i] & 0xff, sigs);
+              i++;
+            }
+            if (i > 0 || length === 0) {
+              k._wakeSet(pty.slaveReaders);
+              for (const sig of sigs) if (pty.fgPgrp) k._signalGroup(pty.fgPgrp, sig);
+              return i;
+            }
+            if (stream.flags & C.O_NONBLOCK) throw k.errno(C.EAGAIN);
+            if (k.current === k.emacs) {
+              const r = k._emacsBlock(() => room() || (pty.slaves === 0 && pty.slaveOpened), -1, { quit: true });
+              if (r === 'eintr') throw k.errno(C.EINTR);
+              continue;
+            }
+            throw new BlockRequest({ kind: 'tty-write', sets: [pty.masterWriters], interruptible: true });
+          }
+        },
+        dup(stream) {
+          stream.pty.masters++;
+        },
+        close(stream) {
+          const pty = stream.pty;
+          if (--pty.masters > 0) return;
+          k._ttyHangup(pty);
+          k._ttyMaybeFree(pty);
+        },
+        poll(stream) {
+          const pty = stream.pty;
+          let mask = 0;
+          if (pty.output.size > 0) mask |= C.POLLIN | C.POLLRDNORM;
+          if (pty.slaves === 0) mask |= C.POLLHUP;
+          if (pty.input.size + pty.edit.length < pty.input.capacity) mask |= C.POLLOUT | C.POLLWRNORM;
+          return mask;
+        },
+        ioctl,
+        llseek,
+      };
+      // The slave side: the terminal of the processes.
+      this.ptsOps = {
+        read(stream, buffer, offset, length) {
+          const pty = stream.pty, p = k.current;
+          for (;;) {
+            if (pty.hungUp) return 0;
+            let ready, until = null;
+            if (pty.lflag & C.ICANON) {
+              ready = pty.lines.length > 0;
+            } else {
+              const vmin = pty.cc(C.VMIN), vtime = pty.cc(C.VTIME), avail = pty.input.size;
+              ready = vmin > 0 ? avail >= Math.min(vmin, length) : !vtime || avail > 0;
+              if (!ready && vtime && p !== k.emacs) {
+                // VTIME: a timeout for the whole read (VMIN 0), or a timer
+                // that starts once some input has arrived.
+                const deadline = p.restart && p.restart.kind === 'tty-read' ? p.restart.until
+                  : vmin === 0 || avail > 0 ? k.now() + vtime * 100 : null;
+                if (deadline !== null && k.now() >= deadline) ready = true;
+                else until = deadline;
+              }
+            }
+            if (ready) {
+              if (p.restart && p.restart.kind === 'tty-read') p.restart = null;
+              return k._ttyTake(pty, buffer, offset, length);
+            }
+            if (stream.flags & C.O_NONBLOCK) throw k.errno(C.EAGAIN);
+            if (p === k.emacs) {
+              const r = k._emacsBlock(() => pty.hungUp || k._ttyReadable(pty, false), -1, { quit: true });
+              if (r === 'eintr') throw k.errno(C.EINTR);
+              continue;
+            }
+            if (until !== null) p.restart = { kind: 'tty-read', until };
+            throw new BlockRequest({ kind: 'tty-read', sets: [pty.slaveReaders], until, interruptible: true });
+          }
+        },
+        write(stream, buffer, offset, length) {
+          const pty = stream.pty;
+          for (;;) {
+            if (pty.hungUp) throw k.errno(C.EIO);
+            if (length === 0) return 0;
+            if (!pty.stopped) {
+              const n = k._ttyWrite(pty, buffer, offset, length);
+              if (n > 0) return n;
+            }
+            if (stream.flags & C.O_NONBLOCK) throw k.errno(C.EAGAIN);
+            if (k.current === k.emacs) {
+              const r = k._emacsBlock(() => pty.hungUp || (!pty.stopped && pty.output.free >= 8), -1, { quit: true });
+              if (r === 'eintr') throw k.errno(C.EINTR);
+              continue;
+            }
+            throw new BlockRequest({ kind: 'tty-write', sets: [pty.slaveWriters], interruptible: true });
+          }
+        },
+        dup(stream) {
+          stream.pty.slaves++;
+        },
+        close(stream) {
+          const pty = stream.pty;
+          if (--pty.slaves > 0) return;
+          k._wakeSet(pty.masterReaders);
+          k._wakeSet(pty.masterWriters);
+          if (pty.emacsOwned) k.eventSeq++;   // Emacs has to see the EIO
+          k._ttyMaybeFree(pty);
+        },
+        poll(stream) {
+          const pty = stream.pty;
+          if (pty.hungUp) {
+            return C.POLLIN | C.POLLRDNORM | C.POLLOUT | C.POLLWRNORM | C.POLLHUP | C.POLLERR;
+          }
+          let mask = 0;
+          if (k._ttyReadable(pty, true)) mask |= C.POLLIN | C.POLLRDNORM;
+          if (!pty.stopped && pty.output.free >= 8) mask |= C.POLLOUT | C.POLLWRNORM;
+          return mask;
+        },
+        ioctl,
+        llseek,
+      };
+    }
+
+    // ioctl(2) on either side of a pseudoterminal (from Emacs or a process).
+    // ARG is the argument word: a pointer into the caller's memory or a
+    // value.  Returns 0 or -errno.
+    _ttyIoctl(stream, op, arg) {
+      const pty = stream.pty, master = stream.ptyMaster, p = this.current;
+      const { HEAPU8, HEAP32, HEAP16 } = this._views();
+      const own = this._ctty(p) === pty;   // the caller's controlling terminal
+      switch (op) {
+        case C.TCGETS:
+          HEAPU8.set(pty.termios, arg);
+          return 0;
+        case C.TCSETS:
+        case C.TCSETSW:
+        case C.TCSETSF:
+          if (op === C.TCSETSF) this._ttyFlush(pty, true, false);
+          this._ttySetTermios(pty, HEAPU8.subarray(arg, arg + TERMIOS_SIZE));
+          return 0;
+        case C.TIOCGWINSZ:
+          HEAP16[arg >> 1] = pty.rows;
+          HEAP16[(arg >> 1) + 1] = pty.cols;
+          HEAP16[(arg >> 1) + 2] = pty.xpixel;
+          HEAP16[(arg >> 1) + 3] = pty.ypixel;
+          return 0;
+        case C.TIOCSWINSZ: {
+          const rows = HEAP16[arg >> 1] & 0xffff, cols = HEAP16[(arg >> 1) + 1] & 0xffff;
+          const changed = rows !== pty.rows || cols !== pty.cols;
+          pty.rows = rows;
+          pty.cols = cols;
+          pty.xpixel = HEAP16[(arg >> 1) + 2] & 0xffff;
+          pty.ypixel = HEAP16[(arg >> 1) + 3] & 0xffff;
+          if (changed && pty.fgPgrp) this._signalGroup(pty.fgPgrp, C.SIGWINCH);
+          return 0;
+        }
+        case C.TIOCGPGRP:
+          if ((!master && !own) || !pty.fgPgrp) return -C.ENOTTY;
+          HEAP32[arg >> 2] = pty.fgPgrp;
+          return 0;
+        case C.TIOCSPGRP: {
+          if (master || !own) return -C.ENOTTY;
+          const pgid = HEAP32[arg >> 2];
+          if (pgid <= 0) return -C.EINVAL;
+          for (const t of this.procs.values()) {
+            if (t !== this.emacs && t.state !== 'zombie' && t.pgid === pgid && t.sid === pty.sid) {
+              pty.fgPgrp = pgid;
+              return 0;
+            }
+          }
+          return -C.EPERM;
+        }
+        case C.TIOCGSID:
+          if ((!master && !own) || !pty.sid) return -C.ENOTTY;
+          HEAP32[arg >> 2] = pty.sid;
+          return 0;
+        case C.TIOCSCTTY:
+          if (master || p === this.emacs || p.sid !== p.pid) return -C.EPERM;
+          if (own) return 0;
+          if (this._ctty(p) || (pty.sid && pty.sid !== p.sid)) return -C.EPERM;
+          this._setCtty(p, pty);
+          return 0;
+        case C.TIOCNOTTY:
+          if (!own) return -C.ENOTTY;
+          if (p.sid === p.pid) this._ttyDisassociate(pty);
+          return 0;
+        case C.FIONREAD:
+          HEAP32[arg >> 2] = master ? pty.output.size
+            : !(pty.lflag & C.ICANON) ? pty.input.size
+            : pty.lines.length ? pty.lines[0].end - pty.inTaken : 0;
+          return 0;
+        case C.TIOCOUTQ:
+          HEAP32[arg >> 2] = master ? pty.input.size : pty.output.size;
+          return 0;
+        case C.FIONBIO:
+          if (HEAP32[arg >> 2]) stream.flags |= C.O_NONBLOCK;
+          else stream.flags &= ~C.O_NONBLOCK;
+          return 0;
+        case C.FIOCLEX:
+        case C.FIONCLEX:
+          stream.cloexec = op === C.FIOCLEX;
+          return 0;
+        case C.TCFLSH: {
+          // Seen from the master, its input is what the slave wrote.
+          const input = arg === C.TCIFLUSH || arg === C.TCIOFLUSH;
+          const output = arg === C.TCOFLUSH || arg === C.TCIOFLUSH;
+          if (!input && !output) return -C.EINVAL;
+          if (master) this._ttyFlush(pty, output, input);
+          else this._ttyFlush(pty, input, output);
+          return 0;
+        }
+        case C.TCXONC:
+          if (arg === C.TCOOFF) pty.stopped = true;
+          else if (arg === C.TCOON) this._ttyStart(pty);
+          return 0;
+        case C.TCSBRK:
+        case C.TCSBRKP:
+          return 0;   // tcdrain(): output is never delayed
+        case C.TIOCGPTN:
+          if (!master) return -C.ENOTTY;
+          HEAP32[arg >> 2] = pty.index;
+          return 0;
+        case C.TIOCSPTLCK:
+          if (!master) return -C.ENOTTY;
+          pty.locked = HEAP32[arg >> 2] !== 0;
+          return 0;
+        default:
+          return -C.ENOTTY;
+      }
     }
 
     // ------------------------------------------------------------ fd tables
@@ -604,6 +1399,11 @@
       p.state = 'zombie';
       this._closeAll(p);            // drops pipe refs -> EOF / EPIPE wakeups
       p.inst = null; p.image = null; // let the instance and its memory be collected
+      // A session leader takes its controlling terminal with it: the
+      // foreground process group is hung up.
+      if (p.sid === p.pid) {
+        for (const pty of this.ptys.values()) if (pty.sid === p.sid) this._ttyDisassociate(pty);
+      }
       // Orphans are adopted by Emacs and reaped automatically.
       for (const c of p.children) {
         c.ppid = EMACS_PID; c.autoReap = true; this.emacs.children.add(c);
@@ -1118,6 +1918,12 @@
       const sets = [];
       for (let i = 0; i < nfds; i++) {
         const stream = FS.getStream(HEAP32[(fds + i * 8) >> 2]);
+        const pty = stream && stream.pty;
+        if (pty) {
+          if (stream.ptyMaster) sets.push(pty.masterReaders, pty.masterWriters);
+          else sets.push(pty.slaveReaders, pty.slaveWriters);
+          continue;
+        }
         const pipe = stream && stream.node && stream.node.pipe;
         if (pipe) sets.push(stream.wasmacsEnd === 'r' ? pipe.rwait : pipe.wwait);
       }
@@ -1171,6 +1977,9 @@
           return 'eintr';
         }
         this.pump(this.pumpMs);
+        // Output of this round first; its exits are reported by the next
+        // poll (see emacsPoll).
+        if (cond()) return 'ok';
         if (sigchld) this._deliverSigchld();
         if (cond()) return 'ok';
         const now = env.now();
@@ -1188,8 +1997,11 @@
     }
 
     // emacs_spawn(): start ARGV with fds STDIN/STDOUT/STDERR of Emacs as the
-    // child's 0/1/2.  Nothing else is inherited.  Returns the pid or -errno.
-    emacsSpawn(argv, env, cwd, stdio) {
+    // child's 0/1/2.  Nothing else is inherited.  With PTYNAME (a pty
+    // process), the descriptors given as -1 are that terminal's slave side,
+    // and it becomes the controlling terminal of the child's new session.
+    // Returns the pid or -errno.
+    emacsSpawn(argv, env, cwd, stdio, ptyName = null) {
       const FS = this.FS;
       if (cwd) {
         try {
@@ -1201,9 +2013,21 @@
         }
       }
       const streams = [];
+      let pty = null;
       try {
         this._withTable(streams, () => {
           stdio.forEach((fd, i) => {
+            if (fd < 0 && ptyName) {
+              const s = FS.open(ptyName, C.O_RDWR | C.O_NOCTTY);
+              pty = s.pty || null;
+              if (s.fd !== i) {
+                FS.dupStream(s, i).cloexec = false;
+                FS.close(s);
+              } else {
+                s.cloexec = false;
+              }
+              return;
+            }
             const src = this.emacs.streams[fd];
             if (!src) throw this.errno(C.EBADF);
             FS.dupStream(src, i).cloexec = false;
@@ -1216,7 +2040,9 @@
         return -(e && e.errno ? e.errno : C.EBADF);
       }
       const r = this._spawn(this.emacs, { path: argv[0], argv, env, cwd: cwd || FS.currentPath, streams, newSession: true });
-      return r.err ? -r.err : r.pid;
+      if (r.err) return -r.err;
+      if (pty && !pty.sid) this._setCtty(this.procs.get(r.pid), pty);
+      return r.pid;
     }
 
     // waitpid() for Emacs.  Returns pid, 0 (WNOHANG, nothing yet) or -errno.
@@ -1260,11 +2086,21 @@
         const stream = this.FS.getStream(HEAP32[(fds + i * 8) >> 2]);
         if (stream && stream.tty && (HEAP16[(fds + i * 8 + 4) >> 1] & C.POLLIN)) watchesTty = true;
       }
+      // Children that exited in an earlier round are reported now.
+      this._deliverSigchld();
       // A system call is a scheduling point even when it does not wait.
       this.pump(timeout === 0 ? this.sliceMs : this.pumpMs);
-      this._deliverSigchld();
       env.drainKeyboard();
       let n = this._pollScan(fds, nfds, ttyReady);
+      // What a child wrote is readable before its exit of the same round is
+      // reported (the next call does that).  Emacs stops reading a process
+      // when it learns of the exit, so accept-process-output with a timeout
+      // could otherwise return without the last output of a process that
+      // is already gone.
+      if (n === 0) {
+        this._deliverSigchld();
+        n = this._pollScan(fds, nfds, ttyReady);
+      }
       if (n > 0 || timeout === 0) return n;
       this._emacsBlock(() => (n = this._pollScan(fds, nfds, ttyReady)) > 0, timeout,
                        { quit: !watchesTty, sigchld: true });

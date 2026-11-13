@@ -4,7 +4,7 @@
 
 This is not a project to build an "Emacs-like editor." Its goal is to run the real Emacs on WebAssembly by keeping the GNU Emacs 30.2 C core and Elisp runtime at the center, while the browser side provides display, input, persistence, and portable filesystem images.
 
-The current main route is the browser runtime built on `SharedArrayBuffer`, `Atomics.wait`, pdump, and xterm.js. It has reached `*scratch*`, Dired, Org mode, Elisp loading through `load-file`, import/export of `.wasifs` images, and subprocesses: `M-x shell`, eshell, git, grep, Magit, Ediff and the Python REPL run inside the browser tab.
+The current main route is the browser runtime built on `SharedArrayBuffer`, `Atomics.wait`, pdump, and xterm.js. It has reached `*scratch*`, Dired, Org mode, Elisp loading through `load-file`, import/export of `.wasifs` images, and subprocesses: `M-x shell`, eshell, `M-x term`, git, grep, Magit, Ediff and the Python REPL run inside the browser tab.
 
 ## Current Capabilities
 
@@ -19,13 +19,14 @@ The current main route is the browser runtime built on `SharedArrayBuffer`, `Ato
 - Reach package archives and Git remotes through the Chrome companion extension, the only network transport
 - Copy yanked text to the browser clipboard
 - Start subprocesses from Emacs: `call-process`, `make-process`, `shell-command`, `M-x shell`, eshell with external commands and pipelines
+- Use `M-x term` / `ansi-term`: a shell on a pseudoterminal, with line editing, `vi`, `less`, `stty` and window resizing
 - Run a POSIX shell (BusyBox `ash`) and about 150 command line tools, git 2.52, GNU grep 3.12, GNU diffutils 3.12 and CPython 3.14 as real processes with pipes, signals, `fork` and `exec`
 - Use `M-x grep`, `rgrep`, `lgrep`, the xref/project search commands, `vc-git`, and Magit (status, staging, commit with the message edited in Emacs, log, diff)
 
 ## Current Limitations
 
 - Processes are provided by wasmacs's own process service, not by the host: only the bundled programs (BusyBox tools, git, GNU grep, GNU diffutils, CPython) can run. See [Subprocesses](#subprocesses-shell-git-grep).
-- There are no pseudoterminals or raw sockets. `M-x term` / `ansi-term` do not work; `M-x shell` and eshell do. Git `clone`, `fetch` and `push` support Smart HTTP(S) through the Chrome companion, as well as local repositories.
+- There are no raw sockets and no job control (`C-z`, `fg`, `bg`). Git `clone`, `fetch` and `push` support Smart HTTP(S) through the Chrome companion, as well as local repositories.
 - Scheduling is cooperative on one thread. Computation without system calls or explicit polling points delays interruption. CPython's interpreter includes polling points for Python loops.
 - Network access requires the Chrome companion extension (`extension/`) and is limited to the hosts it allows. Without it, `package-refresh-contents`, `git clone` and other network features fail. See [Network Access](#network-access).
 - This is not a port of native GUI Emacs frames. The current route is terminal Emacs running on xterm.js.
@@ -137,7 +138,7 @@ make dev
 
 `make userland` builds only the programs that run as processes (`build/artifacts/userland/`). The first run downloads the BusyBox, git, GNU grep, GNU diffutils and CPython release tarballs under `build/userland/`; their sha256 sums are pinned in the build scripts.
 
-`make test` (`npm test`) is what CI runs: the runtime contract tests, including one that boots the checked-in `docs/` bundle under Node and lets Emacs run `sh`, `git` and `grep`. `make test-process` runs the full process suites (kernel tests, then real Emacs driving real subprocesses); `npm run browser:smoke:processes` drives the page in headless Chrome.
+`make test` (`npm test`) is what CI runs: the runtime contract tests, including one that boots the checked-in `docs/` bundle under Node and lets Emacs run `sh`, `git` and `grep`. `make test-process` runs the full process suites (kernel tests, then real Emacs driving real subprocesses); `npm run browser:smoke:processes` and `npm run browser:smoke:term` drive the page in headless Chrome.
 
 `make dev` starts the development server. The development server exposes runtime files at `/artifacts/...`, so workers and smoke URLs use the same URL contract as Pages.
 
@@ -160,6 +161,7 @@ Emacs (callproc.c, process.c)        emacs_spawn / waitpid / kill / pipe / poll
 What that gives Emacs:
 
 - `M-x shell` and eshell, including pipelines, redirection, background jobs, `C-c C-c`
+- `M-x term` and `ansi-term` (see below)
 - `C-g` interrupts a synchronous subprocess
 - git on repositories in the filesystem: `vc-git` and Magit work, and a repository under `/home/user` survives a page reload (executable bits and modification times are saved with the user image)
 - `M-x grep`, `rgrep`, `lgrep`, `project-find-regexp`, `xref-find-references` with the unmodified Emacs defaults
@@ -167,12 +169,33 @@ What that gives Emacs:
 
 What it does not give:
 
-- no pseudoterminals: programs see pipes, so `M-x term` does not work and full-screen programs are of no use
+- no job control: `&`, `wait` and `kill` work, but processes cannot be stopped (`C-z`, `fg`, `bg`)
 - no raw sockets: Git HTTP(S) uses the browser host capability; SSH and `git://` are unavailable
 - no other programs than the bundled ones; there is no compiler or package manager
 - the whole of `/home/user` is saved as one image whenever it changed, so very large repositories make saving slow
 
 Magit is not bundled. Install it with `package.el` (see Network Access below), or bring it in a packed `.wasifs` image.
+
+### Terminal emulator: `M-x term`
+
+`M-x term` (or `ansi-term`) asks for a program, `/bin/sh` by default, and runs
+it on a pseudoterminal: the kernel provides `/dev/ptmx`, `/dev/pts/N` and
+`/dev/tty`, with a line discipline after Linux's (canonical line editing,
+echo, `^C`/`^\` as signals, output processing). Programs see a real terminal:
+`isatty`, `tty`, `stty`, BusyBox `ash` line editing and history, `vi`, `less`.
+Resizing the window resizes the terminal (`SIGWINCH`).
+
+In char mode `C-c C-c` sends `^C` to the terminal, and `C-c C-j` / `C-c C-k`
+switch between line and char mode, as usual in `term`. ESC is a meta prefix
+there: ESC and the next key reach the program as one sequence, which BusyBox
+`vi` discards as an unknown escape sequence (it does the same on Linux). In
+`vi` this leaves commands that need no ESC (`dd`, `x`, `ZZ`, ...); edit files
+in Emacs itself.
+
+`M-x shell`, `compile`, `run-python` and Magit keep using pipes
+(`process-connection-type` is nil); a program that asks for a pty gets one.
+
+Validation: `npm run test:process` (kernel and Emacs) and `npm run browser:smoke:term`.
 
 ### Python REPL
 
@@ -427,7 +450,7 @@ doc/small-os-for-emacs.md
 - The browser UI is a display/input host; it must not fake undo, kill-ring, region, minibuffer, or file-visiting semantics.
 - `.wasifs` is the unit of portable workspaces.
 - `vendor/emacs` is read-only.
-- Processes are a service of the compatibility layer (`src/runtime/process`), not of the host: Emacs's own process code runs unchanged against it. Ptys and sockets stay explicit unavailable boundaries.
+- Processes are a service of the compatibility layer (`src/runtime/process`), not of the host: Emacs's own process code runs unchanged against it. Pseudoterminals are part of that layer; sockets stay an explicit unavailable boundary.
 - Product behavior and diagnostic behavior are kept separate.
 - The low-level substrate is C/wasm-first. JavaScript remains the browser coordinator, host capability provider, and diagnostic harness.
 

@@ -22,6 +22,7 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <termios.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -402,6 +403,103 @@ static int mode_big(long n) {
   return 0;
 }
 
+/* ---- terminals (stdin/stdout on a pseudoterminal) ----------------------------------- */
+static int mode_tty(void) {
+  struct winsize ws;
+  struct termios t;
+  printf("isatty=%d%d%d\n", isatty(0), isatty(1), isatty(2));
+  printf("session-leader=%s\n", getsid(0) == getpid() ? "yes" : "no");
+  printf("foreground=%s\n", tcgetpgrp(0) == getpgrp() ? "yes" : "no");
+  const char *name = ttyname(0);
+  printf("ttyname=%s\n", name ? name : "(none)");
+  if (ioctl(0, TIOCGWINSZ, &ws) == 0) printf("winsize=%dx%d\n", ws.ws_row, ws.ws_col);
+  if (tcgetattr(0, &t) == 0) printf("icanon=%d echo=%d\n", !!(t.c_lflag & ICANON), !!(t.c_lflag & ECHO));
+  fflush(stdout);
+  int fd = open("/dev/tty", O_RDWR);
+  if (fd < 0) return fail("open /dev/tty");
+  dprintf(fd, "via /dev/tty\n");
+  close(fd);
+  return 0;
+}
+
+/* Canonical mode: one read per line, 0 at end-of-file. */
+static int mode_ttyline(void) {
+  char buf[256];
+  for (;;) {
+    ssize_t n = read(0, buf, sizeof buf - 1);
+    if (n < 0) return fail("read");
+    if (n == 0) {
+      printf("eof\n");
+      return 0;
+    }
+    buf[n] = 0;
+    if (buf[n - 1] == '\n') buf[n - 1] = 0;
+    printf("line=%s\n", buf);
+    fflush(stdout);
+  }
+}
+
+/* Non-canonical mode without echo: bytes one at a time, then the old modes back. */
+static int mode_ttyraw(void) {
+  struct termios saved, raw, check;
+  if (tcgetattr(0, &saved) != 0) return fail("tcgetattr");
+  raw = saved;
+  raw.c_lflag &= ~(ICANON | ECHO);
+  raw.c_cc[VMIN] = 1;
+  raw.c_cc[VTIME] = 0;
+  if (tcsetattr(0, TCSANOW, &raw) != 0) return fail("tcsetattr");
+  printf("raw\n");
+  fflush(stdout);
+  for (int i = 0; i < 3; i++) {
+    unsigned char c;
+    if (read(0, &c, 1) != 1) return fail("read");
+    printf("byte=%d\n", c);
+    fflush(stdout);
+  }
+  tcsetattr(0, TCSAFLUSH, &saved);
+  tcgetattr(0, &check);
+  printf("restored=%s\n", memcmp(&check, &saved, sizeof saved) ? "no" : "yes");
+  return 0;
+}
+
+static volatile sig_atomic_t winched;
+static void on_winch(int sig) { (void)sig; winched = 1; }
+
+static int mode_ttywinch(void) {
+  struct winsize ws;
+  signal(SIGWINCH, on_winch);
+  printf("ready\n");
+  fflush(stdout);
+  while (!winched) pause();
+  ioctl(0, TIOCGWINSZ, &ws);
+  printf("winch %dx%d\n", ws.ws_row, ws.ws_col);
+  return 0;
+}
+
+/* VMIN 0, VTIME 2: a read that times out after 0.2 seconds. */
+static int mode_ttytimeout(void) {
+  struct termios t;
+  struct timespec a, b;
+  char c;
+  tcgetattr(0, &t);
+  t.c_lflag &= ~(ICANON | ECHO);
+  t.c_cc[VMIN] = 0;
+  t.c_cc[VTIME] = 2;
+  tcsetattr(0, TCSANOW, &t);
+  clock_gettime(CLOCK_MONOTONIC, &a);
+  ssize_t n = read(0, &c, 1);
+  clock_gettime(CLOCK_MONOTONIC, &b);
+  long ms = (b.tv_sec - a.tv_sec) * 1000 + (b.tv_nsec - a.tv_nsec) / 1000000;
+  printf("timeout n=%zd %s\n", n, ms >= 190 ? "waited" : "TOO-SHORT");
+  return 0;
+}
+
+static int mode_notty(void) {
+  int fd = open("/dev/tty", O_RDWR);
+  printf("dev-tty=%s\n", fd >= 0 ? "opened" : errno == ENXIO ? "ENXIO" : strerror(errno));
+  return 0;
+}
+
 int main(int argc, char **argv) {
   const char *mode = argc > 1 ? argv[1] : "hello";
   if (!strcmp(mode, "hello")) return mode_hello(argc, argv);
@@ -428,6 +526,12 @@ int main(int argc, char **argv) {
   if (!strcmp(mode, "ioctl-cloexec")) return mode_ioctl_cloexec(argv[2]);
   if (!strcmp(mode, "poll")) return mode_poll();
   if (!strcmp(mode, "big")) return mode_big(atol(argv[2]));
+  if (!strcmp(mode, "tty")) return mode_tty();
+  if (!strcmp(mode, "ttyline")) return mode_ttyline();
+  if (!strcmp(mode, "ttyraw")) return mode_ttyraw();
+  if (!strcmp(mode, "ttywinch")) return mode_ttywinch();
+  if (!strcmp(mode, "ttytimeout")) return mode_ttytimeout();
+  if (!strcmp(mode, "notty")) return mode_notty();
   printf("ktest: unknown mode %s\n", mode);
   return 2;
 }

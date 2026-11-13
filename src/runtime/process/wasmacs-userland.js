@@ -71,8 +71,9 @@
   // (and the test harness) evaluates them at startup when the userland is
   // installed.
   const EMACS_SETTINGS = [
-    // There are no pseudoterminals: ask for pipes right away instead of
-    // letting every start-process try (and fail) to allocate a pty.
+    // Pipes unless a command asks for a terminal: M-x shell, compile,
+    // run-python and magit keep the pipes they are tested with, while M-x
+    // term and ansi-term bind this to t and get a pseudoterminal.
     '(setq process-connection-type nil)',
     // "grep --color=auto" colours terminal output only, and a pipe is not a
     // terminal: M-x grep would never highlight its matches.
