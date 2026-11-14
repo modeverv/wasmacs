@@ -5597,3 +5597,20 @@ one invocation fails at the Ediff cleanup step on master too; each scenario
 passes on its own.
 
 Not done: starting Emacs from a shell that is init; job control.
+
+### Follow-up: combined smoke runs and a performance check (2026-11-14)
+
+- `run-browser-smoke.mjs` scenarios can be combined in one run again
+  (`shell persist ediff python term init` passes): a scenario that follows
+  another boots the page again, `bootPage` waits for the frame to have the
+  terminal's real size, and the Ediff cleanup check counts only Ediff's own
+  processes. Observation behind the second point: right after a reload Emacs
+  briefly has a frame of 7 rows before the real size arrives (corrected within
+  half a second by the normal resize path; master behaves the same).
+- Performance, master against this branch, same machine: 300 `call-process
+  "true"` 142-185 ms vs 147-172 ms; 60 shell pipelines 548-636 ms vs
+  551-646 ms; 30 `git --version` 29-40 ms vs 29-43 ms; 1 MB through a pipe
+  29 ms vs 28-31 ms; headless Chrome boot to `*scratch*` 1.6-1.8 s vs
+  1.6-2.0 s (the branch's run includes the new frame-size wait); the `shell`
+  browser scenario 10.9 s vs 11.2 s. No measurable regression. `?init=sh`
+  reaches its prompt without downloading Emacs.
