@@ -850,7 +850,10 @@ wasifsInput.addEventListener("change", () => {
 
 // ?embed=1: this page is the editor inside another page (an iframe of the
 // same origin): no header, start at once.  The embedding page
-//   - passes --eval forms with extra-eval parameters,
+//   - passes --eval forms with extra-eval parameters, or, with
+//     options=parent, answers this page's "wasmacs:options-request" with
+//     { type: "wasmacs:options", extraEvals: [...] } (a URL is too short
+//     for whole files),
 //   - gets the user image in "wasmacs:user-image" messages,
 //   - gets what Emacs Lisp sends with OSC 7777 in "wasmacs:message" messages,
 //   - types into Emacs by posting { type: "wasmacs:input", bytes } here.
@@ -862,8 +865,26 @@ if (pageParams.get("embed") === "1") {
   });
 }
 
+// Emacs starts when the embedding page has said what it should evaluate.
+function startWithParentOptions() {
+  window.addEventListener("message", function onOptions(event) {
+    if (event.origin !== location.origin || event.source !== window.parent) return;
+    if (event.data?.type !== "wasmacs:options") return;
+    window.removeEventListener("message", onOptions);
+    for (const form of event.data.extraEvals || []) {
+      if (typeof form === "string" && form.length > 0) debugBootOptions.extraEvals.push(form);
+    }
+    startSession();
+  });
+  window.parent.postMessage({ type: "wasmacs:options-request" }, location.origin);
+}
+
 // Autostart if ?autostart in URL
-if (pageParams.has("autostart") || pageParams.get("embed") === "1") startSession();
+if (pageParams.get("embed") === "1" && pageParams.get("options") === "parent" && window.parent !== window) {
+  startWithParentOptions();
+} else if (pageParams.has("autostart") || pageParams.get("embed") === "1") {
+  startSession();
+}
     </script>
   </body>
 </html>
