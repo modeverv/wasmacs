@@ -20,6 +20,13 @@ test("Pages bundle: the eval service files are published as in src/wasm", () => 
   }
 });
 
+test("Pages bundle: the eval service's build id matches the published files", { skip }, async () => {
+  const { evalBuildId } = await import("../../src/build/eval-build-id.mjs");
+  const published = JSON.parse(readFileSync(`${docsApp}/eval-build-id.json`, "utf8")).id;
+  assert.equal(published, await evalBuildId(`${repoRoot}docs`),
+    "docs/app/eval-build-id.json is stale: browsers would keep an old Emacs in their cache; run npm run build");
+});
+
 test("Pages bundle: Emacs evaluates Lisp for a host and returns JSON", { skip }, async () => {
   const { service, info, emacs } = await evalService({ artifactDir: docsArtifactDir, appDir: `${docsApp}/src` });
   assert.equal(info.version, "30.2");

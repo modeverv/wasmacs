@@ -6,7 +6,7 @@
  * emacs-eval-client.js.
  *
  *   -> { type: "start" }
- *   <- { type: "ready", version, bootMs }            | { type: "failed", error }
+ *   <- { type: "ready", version, bootMs, cached }    | { type: "failed", error }
  *   -> { type: "eval", id, source, format }          format: "json" | "lisp"
  *   -> { type: "call", id, name, args, format }
  *   <- { type: "result", id, ok, value | error, output, ms }
@@ -19,6 +19,13 @@
  * free in between.  Nothing here needs SharedArrayBuffer, so the page does
  * not have to be cross-origin isolated, and the page may be on another
  * origin than these files (they are fetched with CORS).
+ *
+ * The files of Emacs (about 150 MB) are kept in the browser's Cache Storage
+ * under the build id of the published site (../eval-build-id.json, written
+ * by src/build/build-site.mjs).  A later start asks the network only for
+ * that id and takes everything else from the cache; a new build has a new
+ * id, is downloaded once, and replaces the old one.  "ready" says whether
+ * this start came from the cache.
  */
 // Where this script is served from.  A page on another origin cannot start a
 // worker from here directly; the client then starts a blob worker that
@@ -43,18 +50,69 @@ async function fetchBytes(url) {
   return new Uint8Array(await response.arrayBuffer());
 }
 
+// ---- the files of Emacs, cached by build -------------------------------------
+
+const CACHE_PREFIX = "wasmacs-eval-";
+let cache = null;         // Cache of this build, or null: everything from the network
+let downloads = 0;        // files that were not in the cache
+
+// Open the cache of the published build and drop those of older builds.
+// Without a build id (a development server) or without Cache Storage
+// (an insecure origin) nothing is cached.
+async function openBuildCache() {
+  try {
+    const { id } = JSON.parse(new TextDecoder().decode(await fetchBytes(`${resolveRuntimeUrl("../eval-build-id.json")}?v=${CACHE_BUST}`)));
+    if (!id || typeof caches === "undefined") return;
+    cache = await caches.open(`${CACHE_PREFIX}${id}`);
+    for (const name of await caches.keys()) {
+      if (name.startsWith(CACHE_PREFIX) && name !== `${CACHE_PREFIX}${id}`) await caches.delete(name);
+    }
+  } catch (_) {
+    cache = null;
+  }
+}
+
+// The bytes of URL: from the cache of this build, else from the network
+// (and into the cache).
+async function loadBytes(url) {
+  if (cache) {
+    try {
+      const hit = await cache.match(url);
+      if (hit) return new Uint8Array(await hit.arrayBuffer());
+    } catch (_) { /* fall through to the network */ }
+  }
+  downloads += 1;
+  const bytes = await fetchBytes(`${url}?v=${CACHE_BUST}`);
+  if (cache) {
+    // Not awaited: storing 150 MB must not delay the start.  A failure
+    // (quota) only means another download next time.
+    cache.put(url, new Response(bytes, { headers: { "Content-Type": "application/octet-stream" } })).catch(() => {});
+  }
+  return bytes;
+}
+
+// importScripts for a script that comes through loadBytes.
+async function importCached(url) {
+  const blobUrl = URL.createObjectURL(new Blob([await loadBytes(url)], { type: "text/javascript" }));
+  try {
+    importScripts(blobUrl);
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}
+
 // temacs.data is published in parts (GitHub Pages file size limit); the same
 // layout as in emacs-atomics-pdump-worker.js.
 async function fetchSplitPreloadedPackage(packageName, expectedSize) {
   const packageUrl = new URL(packageName, SCRIPT_URL);
   packageUrl.search = "";
   const partsUrl = `${packageUrl.href}.parts`;
-  const manifest = JSON.parse(new TextDecoder().decode(await fetchBytes(`${partsUrl}/manifest.json?v=${CACHE_BUST}`)));
+  const manifest = JSON.parse(new TextDecoder().decode(await loadBytes(`${partsUrl}/manifest.json`)));
   if (manifest.size !== expectedSize) {
     throw new Error(`split preload size mismatch: manifest=${manifest.size} expected=${expectedSize}`);
   }
   const parts = await Promise.all(manifest.parts.map(async (part) => {
-    const bytes = await fetchBytes(`${partsUrl}/${part.name}?v=${CACHE_BUST}`);
+    const bytes = await loadBytes(`${partsUrl}/${part.name}`);
     if (bytes.length !== part.size) throw new Error(`split preload part size mismatch: ${part.name}`);
     return bytes;
   }));
@@ -69,10 +127,12 @@ async function fetchSplitPreloadedPackage(packageName, expectedSize) {
 
 async function start() {
   const t0 = performance.now();
-  importScripts(`${resolveRuntimeUrl("./emacs-eval-core.js")}?v=${CACHE_BUST}`);
-  const [pdmp, lisp] = await Promise.all([
-    fetchBytes(`${ARTIFACT_DIR}/bootstrap-emacs.pdmp?v=${CACHE_BUST}`),
-    fetchBytes(`${resolveRuntimeUrl("./wasmacs-eval-service.el")}?v=${CACHE_BUST}`),
+  await openBuildCache();
+  const [pdmp, lisp, wasmBinary] = await Promise.all([
+    loadBytes(`${ARTIFACT_DIR}/bootstrap-emacs.pdmp`),
+    loadBytes(resolveRuntimeUrl("./wasmacs-eval-service.el")),
+    loadBytes(`${ARTIFACT_DIR}/temacs.wasm`),
+    importCached(resolveRuntimeUrl("./emacs-eval-core.js")),
   ]);
 
   // Emacs writes to its terminal; the core collects that as request output.
@@ -84,7 +144,8 @@ async function start() {
     noInitialRun: true,
     // "/temacs" with the slash: see emacs-atomics-pdump-worker.js.
     thisProgram: "/temacs",
-    locateFile(path) { return `${ARTIFACT_DIR}/${path}?v=${CACHE_BUST}`; },
+    wasmBinary,
+    locateFile(path) { return `${ARTIFACT_DIR}/${path}`; },
     getPreloadedPackage(packageName, packageSize) {
       return String(packageName).includes("temacs.data") ? fetchSplitPreloadedPackage(packageName, packageSize) : null;
     },
@@ -99,7 +160,7 @@ async function start() {
     onRuntimeInitialized() { resolveReady(); },
   };
   self.Module = Module;
-  importScripts(`${ARTIFACT_DIR}/temacs.js?v=${CACHE_BUST}`);
+  await importCached(`${ARTIFACT_DIR}/temacs.js`);
   await ready;
 
   const FS = Module.FS;
@@ -110,7 +171,8 @@ async function start() {
 
   service = self.WasmacsEvalService.create({ Module, lisp: new TextDecoder().decode(lisp) });
   const info = service.start();
-  post("ready", { version: info.version, bootMs: Math.round(performance.now() - t0) });
+  post("ready", { version: info.version, bootMs: Math.round(performance.now() - t0),
+                  cached: Boolean(cache) && downloads === 0 });
 }
 
 self.onmessage = (event) => {
