@@ -18,8 +18,6 @@ pdump_src="${repo_root}/build/emacs-pdump-configure-probe/src"
 build_dir="${repo_root}/build/emacs-pdump-configure-probe/build-gnu-host-internal-termcap-pdump"
 out_dir="${repo_root}/build/artifacts/emacs-browser-atomics-pdump"
 atomics_host_library="${repo_root}/tools/scripts/wasmacs-atomics-host-library.js"
-# The process kernel is linked into the runtime (plain JS, no Emscripten macros).
-process_kernel="${repo_root}/src/runtime/process/wasmacs-kernel.js"
 emmake_bin="${EMMAKE:-emmake}"
 emacs_wasm_cflags="${EMACS_WASM_CFLAGS:--O3 -g0}"
 emacs_wasm_linkflags="${EMACS_WASM_LINKFLAGS:-${emacs_wasm_cflags}}"
@@ -111,7 +109,6 @@ emacs_atomics_pdump_ldflags="${emacs_wasm_linkflags} \
   -sINITIAL_MEMORY=${initial_memory} \
   -sALLOW_MEMORY_GROWTH=${allow_memory_growth} \
   --js-library ${atomics_host_library} \
-  --pre-js ${process_kernel} \
   --preload-file ${pdump_src}/lisp@/usr/local/share/emacs/30.2/lisp \
   --preload-file ${pdump_src}/etc@/usr/local/share/emacs/30.2/etc"
 
@@ -166,6 +163,7 @@ echo "=== Building pdumper+Atomics profile (${initial_memory} bytes) ==="
 echo "=== Generating matching bootstrap-emacs.pdmp (final Atomics runtime) ==="
 rm -f "${pdmp_file}"
 WASMACS_TEMACS_DIR="${build_dir}/src" \
+WASMACS_PROCESS_DIR="${repo_root}/src/runtime/process" \
 WASMACS_PDMP_OUT="${pdmp_file}" \
   node --stack-size=65500 --input-type=module <<'JS'
 import { readFileSync, writeFileSync } from "node:fs";
@@ -199,6 +197,17 @@ ctx.self = { postMessage() {} };
 vm.createContext(ctx);
 vm.runInContext(code, ctx, { filename: "temacs" });
 await ready;
+
+// As in the product: the kernel is booted before Emacs runs.
+for (const name of ["wasmacs-kernel.js", "wasmacs-boot.js"]) {
+  vm.runInContext(readFileSync(`${process.env.WASMACS_PROCESS_DIR}/${name}`, "utf8"), ctx, { filename: name });
+}
+vm.runInContext(`WasmacsBoot.boot({
+  FS: Module.FS,
+  init: "emacs",
+  console: WasmacsBoot.createConsole({ post() {}, keepOutput: true }),
+  loadProgram(name) { throw new Error("no programs while dumping: " + name); },
+});`, ctx, { filename: "boot" });
 
 ctx.globalThis.__wasmacsInputSAB = new SharedArrayBuffer(264);
 ctx.globalThis.__wasmacsTerminalOutputBytes = ttyOut;

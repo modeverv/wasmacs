@@ -31,6 +31,8 @@ const canonicalFiles = [
   "src/emacs-lisp/wasmacs-url-fetch.el",
   // Process service: kernel, per-process runtime, userland builds.
   "src/runtime/process/wasmacs-kernel.js",
+  "src/runtime/process/wasmacs-boot.js",
+  "src/runtime/process/base/wasmacs-base.c",
   "src/runtime/process/wasmacs-userland.js",
   "src/runtime/process/child/wasmacs-child-library.js",
   "src/runtime/process/child/wasmacs-child-pre.js",

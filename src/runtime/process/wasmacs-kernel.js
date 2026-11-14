@@ -1,21 +1,27 @@
 /*
  * wasmacs-kernel.js -- the wasmacs Process Service.
  *
- * A small cooperative UNIX-like kernel that lets Emacs (wasm, not asyncified)
- * start and talk to subprocesses.  There are no host processes and no extra
- * threads involved:
+ * A small cooperative UNIX-like kernel for one worker thread.  It is booted
+ * first (wasmacs-boot.js) and then starts an init program on top of itself:
+ * GNU Emacs by default, or any userland program (/bin/sh on the console).
+ * There are no host processes and no extra threads involved:
  *
- *   - Emacs is pid 1.  It never returns to the worker's event loop, so nothing
- *     in here may rely on promises, timers or messages.  Everything is plain
- *     synchronous JS that runs inside one of Emacs's system calls.
- *   - A process is another Emscripten program instantiated in the same thread:
- *     its own WebAssembly.Instance and linear memory, built with -sASYNCIFY=1.
+ *   - A process is an Emscripten program instantiated in the same thread: its
+ *     own WebAssembly.Instance and linear memory, built with -sASYNCIFY=1.
  *     A system call that has to wait (read on an empty pipe, waitpid, sleep,
  *     fork ...) unwinds the process back into the scheduler below; it is rewound
  *     when the reason for waiting is gone.
- *   - Emacs's system calls are the scheduling points: the idle keyboard wait,
- *     select/poll, blocking pipe reads, waitpid and kill all run the scheduler.
- *   - There is ONE filesystem: Emacs's Emscripten FS object.  Every process
+ *   - One process is different: the host process.  It is not asyncified, so
+ *     it cannot be unwound, and the thread never returns to the worker's event
+ *     loop while it runs.  Nothing in here may therefore rely on promises,
+ *     timers or messages: everything is plain synchronous JS that runs inside
+ *     one of the host process's system calls, and those calls are the
+ *     scheduling points (idle wait, select/poll, blocking reads, waitpid,
+ *     kill).  When Emacs is init, Emacs is the host process and pid 1.  With
+ *     another init, the host process is the kernel's own console task (pid 0,
+ *     WasmacsBoot.runInit) and init is an ordinary process with pid 1.
+ *   - There is ONE filesystem: the Emscripten FS object of the system module
+ *     (Emacs, or the base module when Emacs is not loaded).  Every process
  *     uses the very same JS object; the per-process file descriptor table
  *     (FS.streams) and working directory (FS.currentPath) are swapped at every
  *     context switch.
@@ -23,12 +29,15 @@
  *     fresh instance of the same module and rewinds both.  execve() replaces the
  *     program image and keeps the pid and the file descriptors.
  *   - Pseudoterminals (/dev/ptmx, /dev/pts/N, /dev/tty) are devices of the
- *     shared FS.  Emacs holds the master side (term.el); the slave side is the
+ *     shared FS.  The host process holds the master side (Emacs's term.el, or
+ *     the console task for the terminal of init); the slave side is the
  *     controlling terminal of a session, with a line discipline in between.
  *
- * The file has no Emscripten macros and no dependency on the Emacs glue: all
- * access to it goes through the `env` object given to WasmacsKernel.create()
- * (see tools/scripts/wasmacs-atomics-host-library.js).  The child-side half is
+ * The file has no Emscripten macros and no dependency on the Emacs glue.  The
+ * `env` object given to WasmacsKernel.create() supplies the filesystem, the
+ * console and the program loader; a host process that lives in wasm memory
+ * (Emacs) adds its own pieces with attachHost() (see
+ * tools/scripts/wasmacs-atomics-host-library.js).  The child-side half is
  * src/runtime/process/child/.
  */
 (function (root) {
@@ -79,7 +88,7 @@
   const DEFAULT_IGNORED = new Set([C.SIGCHLD, C.SIGCONT, C.SIGSTOP, C.SIGTSTP, C.SIGTTIN,
                                    C.SIGTTOU, C.SIGURG, C.SIGWINCH]);
 
-  const EMACS_PID = 1;
+  // Emacs as init is the host process and pid 1; its children start here.
   const FIRST_PID = 100;
   const MAX_SHEBANG_DEPTH = 4;
   // First bytes of an executable that stands for a program image of the host
@@ -152,7 +161,7 @@
       this.writers = 0;        // number of fds (in any process) open for writing
       this.rwait = new Set();  // processes waiting for data / EOF
       this.wwait = new Set();  // processes waiting for space / a reader to vanish
-      this.emacsOwned = false; // created by Emacs: activity must wake Emacs
+      this.hostOwned = false; // created by Emacs: activity must wake Emacs
     }
   }
 
@@ -205,7 +214,7 @@
       this.lnext = false;       // the next input character is taken literally
       this.sid = 0;             // the session this is the controlling terminal of
       this.fgPgrp = 0;          // its foreground process group
-      this.emacsOwned = false;  // Emacs holds the master: output must wake it
+      this.hostOwned = false;  // Emacs holds the master: output must wake it
       this.slaveReaders = new Set();  // processes waiting for input (or a hangup)
       this.slaveWriters = new Set();  // processes waiting for room in output
       this.masterReaders = new Set(); // processes waiting for output (or the slave to close)
@@ -330,7 +339,7 @@
       this.ptys = new Map();     // /dev/pts/N index -> Pty
       this.maxPtys = 64;
       this.ttyCapacity = 65536;  // bytes of input / output a pty buffers
-      this.nextPid = FIRST_PID;
+      this.nextPid = env.firstPid === undefined ? FIRST_PID : env.firstPid;
       this.debug = !!env.debug;
       this.stats = { spawns: 0, forks: 0, execs: 0, exits: 0, switches: 0 };
       // Process activity that Emacs has to look at (output on its pipes, EOF,
@@ -338,16 +347,29 @@
       this.eventSeq = 0;
       this.servicedSeq = 0;
       this.sigchldPending = false;
-      // pid 1: Emacs.  Its fd table is the live FS.streams array.
-      this.emacs = new Process(EMACS_PID, 0);
-      this.emacs.name = 'emacs';
-      this.emacs.state = 'running';
-      this.emacs.streams = this.FS.streams;
-      this.procs.set(EMACS_PID, this.emacs);
-      this.current = this.emacs;
+      // The host process (see the top of the file): Emacs as pid 1, or the
+      // console task as pid 0.  Its fd table is the live FS.streams array.
+      this.host = new Process(env.hostPid === undefined ? 1 : env.hostPid, 0);
+      this.host.name = env.hostName || 'emacs';
+      this.host.state = 'running';
+      this.host.streams = this.FS.streams;
+      this.procs.set(this.host.pid, this.host);
+      this.current = this.host;
       this._initPipeOps();
       this._initTtyOps();
       this._installTtyDevices();
+    }
+
+    // The host process is a wasm program (Emacs): HOST supplies what only it
+    // knows.  views() are its heap views, for system call arguments;
+    // raiseSignal(sig) runs its signal handlers; requestQuit() makes it quit
+    // what it is doing (C-g while it waits for a subprocess).
+    attachHost(host) {
+      if (host.name) this.host.name = host.name;
+      for (const key of ['views', 'raiseSignal', 'requestQuit']) {
+        if (host[key]) this.env[key] = host[key];
+      }
+      return this;
     }
 
     log(msg) {
@@ -385,7 +407,7 @@
     }
     // Memory of the process that is making the current system call.
     _views() {
-      return this.current === this.emacs ? this.env.views() : this.current.inst.views();
+      return this.current === this.host ? this.env.views() : this.current.inst.views();
     }
 
     // ---------------------------------------------------------------- pipes
@@ -402,7 +424,7 @@
             }
             if (pipe.writers === 0) return 0;              // EOF: no writer left anywhere
             if (stream.flags & C.O_NONBLOCK) throw k.errno(C.EAGAIN);
-            if (k.current === k.emacs) {
+            if (k.current === k.host) {
               const r = k._emacsBlock(() => pipe.size > 0 || pipe.writers === 0, -1, { quit: true });
               if (r === 'eintr') throw k.errno(C.EINTR);
               continue;
@@ -415,7 +437,7 @@
           for (;;) {
             if (pipe.readers === 0) {
               // SIGPIPE, then EPIPE if the process survives it.
-              if (k.current !== k.emacs) k._signal(k.current, C.SIGPIPE);
+              if (k.current !== k.host) k._signal(k.current, C.SIGPIPE);
               throw k.errno(C.EPIPE);
             }
             const free = pipe.capacity - pipe.size;
@@ -424,11 +446,11 @@
               const n = Math.min(free, length);
               pipe.put(buffer, offset, n);
               k._wakeSet(pipe.rwait);
-              if (pipe.emacsOwned && FS.streams !== k.emacs.streams) k.eventSeq++;
+              if (pipe.hostOwned && FS.streams !== k.host.streams) k.eventSeq++;
               return n;
             }
             if (stream.flags & C.O_NONBLOCK) throw k.errno(C.EAGAIN);
-            if (k.current === k.emacs) {
+            if (k.current === k.host) {
               const r = k._emacsBlock(() => pipe.readers === 0 || pipe.capacity - pipe.size >= Math.min(length, C.PIPE_BUF),
                                       -1, { quit: true });
               if (r === 'eintr') throw k.errno(C.EINTR);
@@ -449,7 +471,7 @@
             k._wakeSet(pipe.rwait);                              // readers get EOF
             // A process (not Emacs itself) dropped the last write end: Emacs
             // has to see the EOF.
-            if (pipe.emacsOwned && FS.streams !== k.emacs.streams) k.eventSeq++;
+            if (pipe.hostOwned && FS.streams !== k.host.streams) k.eventSeq++;
           }
         },
         poll(stream) {
@@ -485,7 +507,7 @@
     createPipe(flags = 0) {
       const FS = this.FS;
       const pipe = new Pipe(this.pipeCapacity);
-      pipe.emacsOwned = this.current === this.emacs;
+      pipe.hostOwned = this.current === this.host;
       const node = {
         id: 0x40000000 + pipe.id, name: `pipe:[${pipe.id}]`, mode: C.S_IFIFO | 0o600,
         pipe, node_ops: {}, stream_ops: this.pipeOps, timestamp: new Date(),
@@ -528,7 +550,7 @@
     }
     _openTty(stream, consoleOps) {
       const p = this.current;
-      if (p === this.emacs && consoleOps) {
+      if (p === this.host && consoleOps) {
         stream.stream_ops = consoleOps;
         if (consoleOps.open) consoleOps.open(stream);
         return;
@@ -545,7 +567,7 @@
       const pty = new Pty(index, this.ttyCapacity);
       pty.dev = FS.makedev(136, index);
       pty.path = `/dev/pts/${index}`;
-      pty.emacsOwned = this.current === this.emacs;
+      pty.hostOwned = this.current === this.host;
       FS.registerDevice(pty.dev, { open: (s) => this._openPts(s, pty) });
       try { FS.unlink(pty.path); } catch (e) { /* not there */ }
       FS.mkdev(pty.path, 0o620, pty.dev);
@@ -557,7 +579,7 @@
       this._attachTty(stream, pty, false);
       // A session leader without a terminal acquires the first one it opens.
       const p = this.current;
-      if (!(stream.flags & C.O_NOCTTY) && p !== this.emacs && p.sid === p.pid && !pty.sid && !this._ctty(p)) {
+      if (!(stream.flags & C.O_NOCTTY) && p !== this.host && p.sid === p.pid && !pty.sid && !this._ctty(p)) {
         this._setCtty(p, pty);
       }
     }
@@ -575,7 +597,7 @@
     }
     // The controlling terminal of P's session, or null.  Emacs has none.
     _ctty(p) {
-      if (!p || p === this.emacs) return null;
+      if (!p || p === this.host) return null;
       for (const pty of this.ptys.values()) if (pty.sid && pty.sid === p.sid) return pty;
       return null;
     }
@@ -616,7 +638,7 @@
     _signalGroup(pgid, sig) {
       let self = false;
       for (const t of [...this.procs.values()]) {
-        if (t === this.emacs || t.state === 'zombie' || t.pgid !== pgid) continue;
+        if (t === this.host || t.state === 'zombie' || t.pgid !== pgid) continue;
         if (t === this.current) { self = true; continue; }
         this._signal(t, sig);
       }
@@ -676,7 +698,7 @@
       if (n <= 0) return;
       pty.output.put(bytes, offset, n);
       this._wakeSet(pty.masterReaders);
-      if (pty.emacsOwned) this.eventSeq++;
+      if (pty.hostOwned) this.eventSeq++;
     }
     // What the slave writes, through output processing.  Returns how many of
     // the LENGTH bytes fitted into the master's queue.
@@ -960,7 +982,7 @@
             // No slave descriptor is open (any more): EIO, as in Linux.
             if (pty.slaves === 0) throw k.errno(C.EIO);
             if (stream.flags & C.O_NONBLOCK) throw k.errno(C.EAGAIN);
-            if (k.current === k.emacs) {
+            if (k.current === k.host) {
               const r = k._emacsBlock(() => pty.output.size > 0 || pty.slaves === 0, -1, { quit: true });
               if (r === 'eintr') throw k.errno(C.EINTR);
               continue;
@@ -986,7 +1008,7 @@
               return i;
             }
             if (stream.flags & C.O_NONBLOCK) throw k.errno(C.EAGAIN);
-            if (k.current === k.emacs) {
+            if (k.current === k.host) {
               const r = k._emacsBlock(() => room() || (pty.slaves === 0 && pty.slaveOpened), -1, { quit: true });
               if (r === 'eintr') throw k.errno(C.EINTR);
               continue;
@@ -1026,7 +1048,7 @@
             } else {
               const vmin = pty.cc(C.VMIN), vtime = pty.cc(C.VTIME), avail = pty.input.size;
               ready = vmin > 0 ? avail >= Math.min(vmin, length) : !vtime || avail > 0;
-              if (!ready && vtime && p !== k.emacs) {
+              if (!ready && vtime && p !== k.host) {
                 // VTIME: a timeout for the whole read (VMIN 0), or a timer
                 // that starts once some input has arrived.
                 const deadline = p.restart && p.restart.kind === 'tty-read' ? p.restart.until
@@ -1040,7 +1062,7 @@
               return k._ttyTake(pty, buffer, offset, length);
             }
             if (stream.flags & C.O_NONBLOCK) throw k.errno(C.EAGAIN);
-            if (p === k.emacs) {
+            if (p === k.host) {
               const r = k._emacsBlock(() => pty.hungUp || k._ttyReadable(pty, false), -1, { quit: true });
               if (r === 'eintr') throw k.errno(C.EINTR);
               continue;
@@ -1059,7 +1081,7 @@
               if (n > 0) return n;
             }
             if (stream.flags & C.O_NONBLOCK) throw k.errno(C.EAGAIN);
-            if (k.current === k.emacs) {
+            if (k.current === k.host) {
               const r = k._emacsBlock(() => pty.hungUp || (!pty.stopped && pty.output.free >= 8), -1, { quit: true });
               if (r === 'eintr') throw k.errno(C.EINTR);
               continue;
@@ -1075,7 +1097,7 @@
           if (--pty.slaves > 0) return;
           k._wakeSet(pty.masterReaders);
           k._wakeSet(pty.masterWriters);
-          if (pty.emacsOwned) k.eventSeq++;   // Emacs has to see the EIO
+          if (pty.hostOwned) k.eventSeq++;   // Emacs has to see the EIO
           k._ttyMaybeFree(pty);
         },
         poll(stream) {
@@ -1091,6 +1113,17 @@
         ioctl,
         llseek,
       };
+    }
+
+    // The window of PTY's terminal has a new size: SIGWINCH to the foreground
+    // process group when it changed.
+    ptyResize(pty, rows, cols, xpixel = 0, ypixel = 0) {
+      const changed = rows !== pty.rows || cols !== pty.cols;
+      pty.rows = rows;
+      pty.cols = cols;
+      pty.xpixel = xpixel;
+      pty.ypixel = ypixel;
+      if (changed && pty.fgPgrp) this._signalGroup(pty.fgPgrp, C.SIGWINCH);
     }
 
     // ioctl(2) on either side of a pseudoterminal (from Emacs or a process).
@@ -1117,13 +1150,8 @@
           HEAP16[(arg >> 1) + 3] = pty.ypixel;
           return 0;
         case C.TIOCSWINSZ: {
-          const rows = HEAP16[arg >> 1] & 0xffff, cols = HEAP16[(arg >> 1) + 1] & 0xffff;
-          const changed = rows !== pty.rows || cols !== pty.cols;
-          pty.rows = rows;
-          pty.cols = cols;
-          pty.xpixel = HEAP16[(arg >> 1) + 2] & 0xffff;
-          pty.ypixel = HEAP16[(arg >> 1) + 3] & 0xffff;
-          if (changed && pty.fgPgrp) this._signalGroup(pty.fgPgrp, C.SIGWINCH);
+          this.ptyResize(pty, HEAP16[arg >> 1] & 0xffff, HEAP16[(arg >> 1) + 1] & 0xffff,
+                         HEAP16[(arg >> 1) + 2] & 0xffff, HEAP16[(arg >> 1) + 3] & 0xffff);
           return 0;
         }
         case C.TIOCGPGRP:
@@ -1135,7 +1163,7 @@
           const pgid = HEAP32[arg >> 2];
           if (pgid <= 0) return -C.EINVAL;
           for (const t of this.procs.values()) {
-            if (t !== this.emacs && t.state !== 'zombie' && t.pgid === pgid && t.sid === pty.sid) {
+            if (t !== this.host && t.state !== 'zombie' && t.pgid === pgid && t.sid === pty.sid) {
               pty.fgPgrp = pgid;
               return 0;
             }
@@ -1147,7 +1175,7 @@
           HEAP32[arg >> 2] = pty.sid;
           return 0;
         case C.TIOCSCTTY:
-          if (master || p === this.emacs || p.sid !== p.pid) return -C.EPERM;
+          if (master || p === this.host || p.sid !== p.pid) return -C.EPERM;
           if (own) return 0;
           if (this._ctty(p) || (pty.sid && pty.sid !== p.sid)) return -C.EPERM;
           this._setCtty(p, pty);
@@ -1323,13 +1351,13 @@
     // ----------------------------------------------------------- processes
     liveCount() {
       let n = 0;
-      for (const p of this.procs.values()) if (p !== this.emacs && p.state !== 'zombie') n++;
+      for (const p of this.procs.values()) if (p !== this.host && p.state !== 'zombie') n++;
       return n;
     }
     _newProc(parent) {
       const p = new Process(this.nextPid++, parent.pid);
-      p.pgid = parent === this.emacs ? p.pid : parent.pgid;
-      p.sid = parent === this.emacs ? p.pid : parent.sid;
+      p.pgid = parent === this.host ? p.pid : parent.pgid;
+      p.sid = parent === this.host ? p.pid : parent.sid;
       parent.children.add(p);
       this.procs.set(p.pid, p);
       return p;
@@ -1404,16 +1432,16 @@
       if (p.sid === p.pid) {
         for (const pty of this.ptys.values()) if (pty.sid === p.sid) this._ttyDisassociate(pty);
       }
-      // Orphans are adopted by Emacs and reaped automatically.
+      // Orphans are adopted by the host process and reaped automatically.
       for (const c of p.children) {
-        c.ppid = EMACS_PID; c.autoReap = true; this.emacs.children.add(c);
+        c.ppid = this.host.pid; c.autoReap = true; this.host.children.add(c);
         if (c.state === 'zombie') this._reap(c);
       }
       p.children.clear();
       if (p.vforkParent) this._vforkRelease(p);
       const parent = this.procs.get(p.ppid);
       if (p.autoReap || !parent) { this._reap(p); return; }
-      if (parent === this.emacs) {
+      if (parent === this.host) {
         this.sigchldPending = true;
         this.eventSeq++;
       } else {
@@ -1438,7 +1466,7 @@
     // Deliver SIG to TARGET (a child process).  May throw KILLED when TARGET is
     // the running process and the signal kills it.
     _signal(target, sig) {
-      if (target === this.emacs || target.state === 'zombie' || sig === 0) return;
+      if (target === this.host || target.state === 'zombie' || sig === 0) return;
       let disposition = 'default';
       if (sig !== C.SIGKILL && sig !== C.SIGSTOP && target.inst && target.state !== 'new') {
         try { disposition = target.inst.sigDisposition(sig); } catch (e) { disposition = 'default'; }
@@ -1469,7 +1497,7 @@
       } else {
         const pgid = pid === 0 ? p.pgid : pid === -1 ? null : -pid;
         for (const t of this.procs.values()) {
-          if (t === this.emacs || t.state === 'zombie') continue;
+          if (t === this.host || t.state === 'zombie') continue;
           if (pgid === null ? t !== p : t.pgid === pgid) out.push(t);
         }
       }
@@ -1477,10 +1505,10 @@
     }
     sys_kill(p, pid, sig) {
       if (sig < 0 || sig >= C.NSIG) return -C.EINVAL;
-      const targets = this._killTargets(p, pid).filter((t) => t !== this.emacs && t.state !== 'zombie');
+      const targets = this._killTargets(p, pid).filter((t) => t !== this.host && t.state !== 'zombie');
       if (targets.length === 0) {
-        // Signalling Emacs from a process is not allowed.
-        return pid === EMACS_PID ? -C.EPERM : -C.ESRCH;
+        // Signalling the host process from a process is not allowed.
+        return pid === this.host.pid ? -C.EPERM : -C.ESRCH;
       }
       if (sig === 0) return 0;
       let self = false;
@@ -1673,7 +1701,7 @@
       child.env = env;
       child.cwd = cwd;
       child.streams = streams;
-      if (parent !== this.emacs) { child.pgid = parent.pgid; child.sid = parent.sid; }
+      if (parent !== this.host) { child.pgid = parent.pgid; child.sid = parent.sid; }
       if (newSession) { child.sid = child.pid; child.pgid = child.pid; }
       else if (pgroup !== null) child.pgid = pgroup === 0 ? child.pid : pgroup;
       try {
@@ -1948,8 +1976,10 @@
     }
 
     // ======================================================================
-    // Emacs side.  Emacs is not asyncified: its blocking calls run the
-    // scheduler in a loop until their condition holds.
+    // Host process side.  The host process is not asyncified: its blocking
+    // calls run the scheduler in a loop until their condition holds.  The
+    // emacs* entry points are the system calls of Emacs as the host process
+    // (their pointer arguments refer to Emacs's memory).
     // ======================================================================
 
     // Block Emacs until COND() is true.
@@ -1973,7 +2003,7 @@
         if (cond()) return 'ok';
         if (keyboard && env.keyboardPending()) return 'keyboard';
         if (quit && env.takeQuitChar()) {
-          env.requestQuit();
+          if (env.requestQuit) env.requestQuit();
           return 'eintr';
         }
         this.pump(this.pumpMs);
@@ -1993,7 +2023,7 @@
 
     // pipe2() for Emacs.
     emacsPipe2(fdPtr, flags) {
-      return this.sys_pipe2(this.emacs, fdPtr, flags);
+      return this.sys_pipe2(this.host, fdPtr, flags);
     }
 
     // emacs_spawn(): start ARGV with fds STDIN/STDOUT/STDERR of Emacs as the
@@ -2028,7 +2058,7 @@
               }
               return;
             }
-            const src = this.emacs.streams[fd];
+            const src = this.host.streams[fd];
             if (!src) throw this.errno(C.EBADF);
             FS.dupStream(src, i).cloexec = false;
           });
@@ -2039,17 +2069,27 @@
         });
         return -(e && e.errno ? e.errno : C.EBADF);
       }
-      const r = this._spawn(this.emacs, { path: argv[0], argv, env, cwd: cwd || FS.currentPath, streams, newSession: true });
+      const r = this._spawn(this.host, { path: argv[0], argv, env, cwd: cwd || FS.currentPath, streams, newSession: true });
       if (r.err) return -r.err;
       if (pty && !pty.sid) this._setCtty(this.procs.get(r.pid), pty);
       return r.pid;
+    }
+
+    // waitpid(PID, WNOHANG) for a host process without wasm memory (the
+    // console task): the wait(2)-encoded status once PID has exited, else null.
+    hostReap(pid) {
+      const z = this._findChild(this.host, pid).zombie;
+      if (!z) return null;
+      const status = z.exitStatus;
+      this._reap(z);
+      return status;
     }
 
     // waitpid() for Emacs.  Returns pid, 0 (WNOHANG, nothing yet) or -errno.
     emacsWaitpid(pid, statusPtr, options) {
       if (!(options & C.WNOHANG)) this.pump(this.pumpMs);
       for (;;) {
-        const found = this._findChild(this.emacs, pid);
+        const found = this._findChild(this.host, pid);
         if (found.none) return -C.ECHILD;
         if (found.zombie) {
           const z = found.zombie;
@@ -2058,7 +2098,7 @@
           return z.pid;
         }
         if (options & C.WNOHANG) return 0;
-        const r = this._emacsBlock(() => !this._findChild(this.emacs, pid).running, -1, { quit: true });
+        const r = this._emacsBlock(() => !this._findChild(this.host, pid).running, -1, { quit: true });
         if (r === 'eintr') return -C.EINTR;
       }
     }
@@ -2066,7 +2106,7 @@
     // kill() for Emacs.  PID < 0 names a process group.
     emacsKill(pid, sig) {
       if (sig < 0 || sig >= C.NSIG) return -C.EINVAL;
-      const targets = this._killTargets(this.emacs, pid).filter((t) => t !== this.emacs && t.state !== 'zombie');
+      const targets = this._killTargets(this.host, pid).filter((t) => t !== this.host && t.state !== 'zombie');
       if (targets.length === 0) return -C.ESRCH;
       for (const t of targets) this._signal(t, sig);
       // Let the signalled processes react before Emacs looks again.
@@ -2119,7 +2159,7 @@
     _deliverSigchld() {
       if (!this.sigchldPending) return;
       this.sigchldPending = false;
-      this.env.raiseSignal(C.SIGCHLD);
+      if (this.env.raiseSignal) this.env.raiseSignal(C.SIGCHLD);
     }
     // Scheduling point of Emacs's idle keyboard wait: run processes for a
     // slice.  Returns the delay in ms until the scheduler needs to run again

@@ -10,7 +10,7 @@ const pageSource = read("src/wasm/xterm-atomics-pdump.html");
 const childSource = read("src/runtime/process/child/wasmacs-child-library.js");
 
 test("published plain-JS process helpers match current sources", () => {
-  for (const name of ["wasmacs-http.js", "wasmacs-userland.js"]) {
+  for (const name of ["wasmacs-kernel.js", "wasmacs-boot.js", "wasmacs-http.js", "wasmacs-userland.js"]) {
     const artifact = new URL(`../../docs/artifacts/userland/${name}`, import.meta.url);
     assert.equal(existsSync(artifact), true, `missing published helper: ${name}; rebuild the site bundle`);
     assert.equal(readFileSync(artifact, "utf8"), read(`src/runtime/process/${name}`),
@@ -35,10 +35,10 @@ function makeKernel(startNetworkFetch) {
   });
   let pid = 100;
   const process = () => {
-    const p = new kernel.emacs.constructor(pid++, 1);
+    const p = new kernel.host.constructor(pid++, 1);
     p.state = "running";
     kernel.procs.set(p.pid, p);
-    kernel.emacs.children.add(p);
+    kernel.host.children.add(p);
     return p;
   };
   return { kernel, process };

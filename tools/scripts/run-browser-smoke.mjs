@@ -34,7 +34,10 @@ const logPath = process.env.WASMACS_BROWSER_SMOKE_LOG || `${repoRoot}/logs/brows
 //            exception recovery, C-c C-c during a CPU loop and repeated exit
 //   term     M-x term: a shell on a pseudoterminal, vi and less in it, ^C
 //            through the line discipline, a window resize, exit
-const knownScenarios = new Set(["xterm", "shell", "persist", "ediff", "python", "term"]);
+//   init     ?init=sh: the kernel boots without Emacs and runs /bin/sh as
+//            pid 1 on the page's terminal: vi, git, ^C, a window resize, a
+//            file that survives a reload, exit halts the system; ?init=vi
+const knownScenarios = new Set(["xterm", "shell", "persist", "ediff", "python", "term", "init"]);
 const scenarios = process.argv.slice(2);
 if (scenarios.length === 0) scenarios.push("xterm");
 for (const scenario of scenarios) {
@@ -530,6 +533,75 @@ try {
     await waitForScreen(/Process terminal finished/, "the shell exits");
     await logEvent("SCENARIO_PASS term");
     console.log("browser smoke scenario passed: term");
+  }
+
+  if (scenarios.includes("init")) {
+    await logEvent("SCENARIO_START init");
+    // Boot the page with another init; Emacs must not be downloaded.
+    const bootInit = async (init, label, extra = "") => {
+      const url = new URL(appUrl);
+      if (extra) url.search = extra;
+      url.searchParams.set("init", init);
+      await logEvent(`PAGE_NAVIGATE ${label} ${url}`);
+      await client.send("Page.navigate", { url: url.href }, sessionId);
+      await waitFor(client, sessionId, "document.readyState === 'complete' && window.crossOriginIsolated === true", 60_000, "cross-origin-isolated");
+      await waitFor(client, sessionId, "Boolean(document.querySelector('#start-btn') && document.querySelector('#xterm-container'))", 30_000, "xterm-page-ready");
+      await evaluate(client, sessionId, "document.querySelector('#start-btn').click(); true");
+      await waitFor(client, sessionId, "document.querySelector('#status')?.classList.contains('interactive')", 60_000, `${label}: interactive`);
+      const loaded = await evaluate(client, sessionId,
+        "performance.getEntriesByType('resource').map((entry) => entry.name).filter((name) => /temacs|bootstrap-emacs/.test(name)).length");
+      if (loaded !== 0) throw new Error(`init scenario: ${label} downloaded ${loaded} Emacs artifacts`);
+    };
+    const halted = (label) => waitFor(client, sessionId,
+      "/^ended/.test(document.querySelector('#status')?.textContent || '')", 30_000, `${label}: session ended`);
+
+    await bootInit("sh", "init=sh");
+    await waitForScreen(/[#$]$/m, "init=sh: the shell prompt");
+    await sendKeys("echo pid=$$ ppid=$PPID; tty; stty size\r");
+    await waitForScreen(/^pid=1 ppid=0$/m, "sh is pid 1, child of the kernel's console task");
+    const initSize = /^([0-9]+) ([0-9]+)$/m.exec(await waitForScreen(/^\/dev\/pts\/0\n[0-9]+ [0-9]+$/m, "the console is a pseudoterminal with the page's size"));
+    await sendKeys("git --version; echo abc | tr a-c A-C\r");
+    await waitForScreen(/^git version 2\.[0-9.]+\nABC$/m, "git and a pipeline run under the shell");
+    await sendKeys("vi /home/user/init-note.txt\r");
+    await waitForScreen(/init-note\.txt/, "vi opens on the console");
+    await sendKeys("ifrom vi as a child of init");
+    await pause(300);
+    await sendKeys("\x1b");            // a real ESC: no meta prefix on this terminal
+    await pause(300);
+    await sendKeys(":wq\r");
+    await sendKeys("cat /home/user/init-note.txt; echo vi-$((1 + 1))\r");
+    await waitForScreen(/^from vi as a child of init\nvi-2$/m, "vi inserts, leaves insert mode with ESC, saves");
+    await sendKeys("sleep 100\r");
+    await pause(500);
+    await sendKeys("\x03");
+    await sendKeys("echo back-$((40 + 2))\r");
+    await waitForScreen(/^back-42$/m, "^C interrupts the foreground job");
+    await client.send("Emulation.setDeviceMetricsOverride", { width: 640, height: 420, deviceScaleFactor: 1, mobile: false }, sessionId);
+    await pause(1500);
+    await sendKeys("stty size; echo resized-$((3 + 3))\r");
+    const initResized = /^([0-9]+) ([0-9]+)\nresized-6$/m.exec(await waitForScreen(/^[0-9]+ [0-9]+\nresized-6$/m, "stty after the resize"));
+    if (initResized[1] === initSize[1] && initResized[2] === initSize[2]) {
+      throw new Error(`init scenario: the console kept its size ${initSize[1]}x${initSize[2]} after the resize`);
+    }
+    await client.send("Emulation.clearDeviceMetricsOverride", {}, sessionId);
+    await pause(1500);                  // the idle system saves /home/user
+    await sendKeys("exit 5\r");
+    await waitForScreen(/init \/bin\/sh exited with status 5: system halted/, "exit halts the system");
+    await halted("init=sh");
+
+    // /home/user is the same persistent image as under Emacs.
+    await bootInit("sh", "init=sh again", "?");
+    await waitForScreen(/[#$]$/m, "second boot: the shell prompt");
+    await sendKeys("cat /home/user/init-note.txt; echo kept-$((2 + 2))\r");
+    await waitForScreen(/^from vi as a child of init\nkept-4$/m, "the file survived the reload");
+
+    await bootInit("vi /home/user/init-note.txt", "init=vi", "?");
+    await waitForScreen(/^from vi as a child of init$/m, "vi is init and shows the file");
+    await sendKeys(":q\r");
+    await waitForScreen(/init \/bin\/vi exited with status 0: system halted/, "leaving vi halts the system");
+    await halted("init=vi");
+    await logEvent("SCENARIO_PASS init");
+    console.log("browser smoke scenario passed: init");
   }
 
   console.log(`browser smoke passed: ${scenarios.join(",")} ${appUrl}`);

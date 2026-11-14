@@ -64,7 +64,8 @@ function loadUserlandLayout() {
  *   artifactDir   directory with temacs, temacs.wasm, temacs.data(.parts), bootstrap-emacs.pdmp
  *   userland      true | directory: install the process userland (default: false)
  *   extraPrograms directories searched for program images before the userland dir
- *   kernelSource  path of a wasmacs-kernel.js to use instead of the linked-in one
+ *   kernelSource  path of a wasmacs-kernel.js to use instead of the one next to
+ *                 the userland (or, without a userland, the one in src/)
  * batchEval and interactiveSession also take `prepare(emacs)`, called after
  * boot and before Emacs runs (to put files into the filesystem).
  */
@@ -120,10 +121,28 @@ export async function bootEmacs({
   vm.runInContext(code, context, { filename: "temacs" });
   await ready;
 
-  if (kernelSource) {
-    // Development aid: try a kernel change without relinking Emacs.
-    vm.runInContext(readFileSync(kernelSource, "utf8"), context, { filename: "wasmacs-kernel.js" });
+  // The kernel boots before Emacs runs, as in the worker: Emacs is its init.
+  // A published userland directory carries the kernel it was published with.
+  const userlandDir = typeof userland === "string" ? userland : buildUserlandDir;
+  const processScript = (name) => {
+    const published = `${userlandDir}/${name}`;
+    return userland && existsSync(published) ? published : `${repoRoot}src/runtime/process/${name}`;
+  };
+  for (const [name, file] of [["wasmacs-kernel.js", kernelSource || processScript("wasmacs-kernel.js")],
+                              ["wasmacs-boot.js", processScript("wasmacs-boot.js")]]) {
+    vm.runInContext(readFileSync(file, "utf8"), context, { filename: name });
   }
+  vm.runInContext(`WasmacsBoot.boot({
+    FS: Module.FS,
+    init: "emacs",
+    console: WasmacsBoot.createConsole({ post() {}, keepOutput: true }),
+    debug: !!globalThis.__wasmacsProcessDebug,
+    log(msg) { if (globalThis.__wasmacsProcessDebug) console.warn(msg); },
+    loadProgram(name) {
+      if (typeof globalThis.__wasmacsLoadProgram !== "function") throw new Error("no program loader is installed");
+      return globalThis.__wasmacsLoadProgram(name);
+    },
+  });`, context, { filename: "boot" });
 
   context.__wasmacsInputSAB = new SharedArrayBuffer(264);
   context.__wasmacsTerminalSizeSAB = new SharedArrayBuffer(12);
@@ -137,7 +156,6 @@ export async function bootEmacs({
 
   let userlandManifest = null;
   if (userland) {
-    const userlandDir = typeof userland === "string" ? userland : buildUserlandDir;
     const layout = loadUserlandLayout();
     userlandManifest = JSON.parse(readFileSync(`${userlandDir}/manifest.json`, "utf8"));
     layout.install(FS, userlandManifest);
@@ -182,7 +200,7 @@ export async function bootEmacs({
     }
     return { status, threw, ms: performance.now() - t0, stderr, terminal: terminalText() };
   }
-  // The process kernel, once Emacs has used it (null before that).
+  // The process kernel.
   const kernel = () => context.__wasmacsKernel || null;
   // What the worker evaluates at startup when the userland is installed.
   const settingsArgs = userland ? loadUserlandLayout().EMACS_SETTINGS.flatMap((form) => ["--eval", form]) : [];
@@ -300,4 +318,85 @@ class SessionAbandoned extends Error {
     super(`interactive session abandoned at "${step}"`);
     this.name = "SessionAbandoned";
   }
+}
+
+/**
+ * Boot the system without Emacs and run ARGV as init (pid 1) on the console
+ * terminal, as the worker does for ?init=sh: the base module provides the
+ * filesystem and the kernel's console task drives the session.
+ *   userland  directory with the userland, the kernel scripts and wasmacs-base
+ *   argv      the init program and its arguments
+ *   chunks    what is typed: the first chunk at once, each following one when
+ *             the system has gone idle
+ *   prepare   (FS) => void, called before init starts
+ *   timeoutMs init has to exit within this time
+ * Returns { status, code, signal, text, log, kernel, FS }.
+ */
+export async function initSession({ userland = buildUserlandDir, argv, chunks = [], prepare = null, timeoutMs = 30000 }) {
+  const require = createRequire(`${userland}/package.json`);
+  const context = {
+    Buffer, TextDecoder, TextEncoder, URL, WebAssembly, SharedArrayBuffer, Atomics,
+    atob, btoa, clearTimeout, console, performance, process, require, setTimeout,
+    __dirname: userland, __filename: `${userland}/wasmacs-base.js`,
+  };
+  context.globalThis = context;
+  context.self = { postMessage() {} };
+  vm.createContext(context);
+  for (const name of ["wasmacs-kernel.js", "wasmacs-boot.js", "wasmacs-userland.js"]) {
+    vm.runInContext(readFileSync(`${userland}/${name}`, "utf8"), context, { filename: name });
+  }
+  const base = await require(`${userland}/wasmacs-base.js`)();
+  const FS = base.FS;
+  const manifest = JSON.parse(readFileSync(`${userland}/manifest.json`, "utf8"));
+  context.__wasmacsInputSAB = new SharedArrayBuffer(264);
+  context.__wasmacsTerminalOutputBytes = [];
+  context.__wasmacsTerminalInputBytes = [];
+  const images = new Map();
+  const log = [];
+  const kernel = context.WasmacsBoot.boot({
+    FS,
+    init: argv[0],
+    console: context.WasmacsBoot.createConsole({ post() {}, keepOutput: true }),
+    views: () => ({ HEAPU8: base.HEAPU8, HEAP32: base.HEAP32, HEAP16: base.HEAP16 }),
+    log(msg) { log.push(String(msg)); },
+    loadProgram(name) {
+      if (!images.has(name)) {
+        vm.runInContext(readFileSync(`${userland}/${name}.js`, "utf8"), context, { filename: `${name}.js` });
+        context.WasmacsUserland.installProgramFiles(FS, manifest, name, (source) => readFileSync(`${userland}/${source}`));
+        images.set(name, { factory: context[`wasmacsProgram_${name.replace(/-/g, "_")}`], wasm: readFileSync(`${userland}/${name}.wasm`) });
+      }
+      return images.get(name);
+    },
+  });
+  context.WasmacsUserland.install(FS, manifest);
+  if (prepare) await prepare(FS);
+  const pending = chunks.slice();
+  const type = () => {
+    if (!pending.length) return false;
+    context.__wasmacsTerminalInputBytes.push(...Buffer.from(pending.shift(), "latin1"));
+    Atomics.add(new Int32Array(context.__wasmacsInputSAB, 0, 2), 0, 1);
+    return true;
+  };
+  const text = () => stripAnsi(Buffer.from(context.__wasmacsTerminalOutputBytes).toString("utf8"));
+  type();
+  let idles = 0, heldSince = null;
+  const started = performance.now();
+  const environment = { ...context.WasmacsUserland.ENVIRONMENT, HOME: "/home/user", USER: "user", TERM: "xterm-256color" };
+  const status = context.WasmacsBoot.runInit(kernel, {
+    argv,
+    env: Object.entries(environment).map(([name, value]) => `${name}=${value}`),
+    cwd: "/home/user",
+    beforeIdle() {
+      if (performance.now() - started > timeoutMs) throw new Error(`init did not exit: ${text().slice(-300)}`);
+      // A process in a short timed wait (vi after ESC) is not idle yet; one
+      // that polls all the time (Python's REPL) is, after a second.
+      if (kernel._nextTimerDelay(kernel.now()) < 500) {
+        if (heldSince === null) heldSince = performance.now();
+        if (performance.now() - heldSince < 1000) return;
+      }
+      heldSince = null;
+      if (!type() && ++idles > 20) throw new Error(`init did not exit: ${text().slice(-300)}`);
+    },
+  });
+  return { status, code: (status >> 8) & 0xff, signal: status & 0x7f, text: text(), log, kernel, FS };
 }

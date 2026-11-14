@@ -5547,3 +5547,53 @@ ARCHITECTURE.md design notes on the VS Code webview moved into the
 `archive/README.md` entry. `npm test` 114/114; the archived extension tests
 9/9. `build2/` and `vscode/` are ignored local outputs and are left to the
 user to delete.
+
+## Implementation: the kernel boots first; init is selectable (2026-11-14)
+
+Status: done on branch `feature/kernel-boots-init`. The user asked for the
+"light inversion" (the kernel boots and starts Emacs as pid 1) and for a
+selectable init (`sh` as pid 1 through a URL parameter).
+
+Before: Emacs's module was loaded, and its host library created the kernel
+(linked into `temacs.js` with `--pre-js`) on first use, handing it the
+console and the loader. Now:
+
+- `src/runtime/process/wasmacs-boot.js` (new): `createConsole` (the keyboard
+  `SharedArrayBuffer` and terminal output, formerly in Emacs's host library),
+  `boot` (kernel on the system filesystem, console, program loader) and
+  `runInit` (the console task: init as pid 1 on a pseudoterminal wired to the
+  console, scheduler loop until init exits).
+- Kernel: the special non-unwindable process is the *host process*
+  (`kernel.host`, was `kernel.emacs`): Emacs as pid 1, or the console task as
+  pid 0 with init as pid 1. `attachHost` lets Emacs add its heap views and
+  signal/quit entry points; `hostReap` and `ptyResize` serve a host without
+  wasm memory. No change to process, pipe, signal or pty semantics.
+- Emacs's host library only attaches to the booted kernel. The kernel is no
+  longer linked into `temacs.js`; the worker and the Node harness load
+  `wasmacs-kernel.js` and `wasmacs-boot.js` themselves (published in
+  `artifacts/userland/`). `temacs.wasm`, `temacs.data` and the pdmp are
+  byte-identical to before; only `temacs.js` changed.
+- `src/runtime/process/base/wasmacs-base.c` (new): the system module without
+  Emacs, an empty program with the Emscripten FS (53 KB + 7 KB).
+- Worker: one boot sequence for both cases (user image, system module, kernel,
+  userland, init). Page: `?init=<command line>`; without Emacs no pdmp or
+  Emacs artifact is fetched. When init exits the system halts.
+
+Validation:
+
+- Kernel tests 55/55 (3 new `init:` tests: sh is pid 1 with ppid 0 on
+  `/dev/pts/0`, `^C` reaches the foreground job, vi as pid 1 edits a file).
+- `npm test` 115/115, including a new test that boots the published bundle
+  without Emacs and runs sh as pid 1.
+- Emacs as init: process probe 37/37, Python 12/12, Ediff probes; browser
+  smokes shell, persist, ediff, python, term; product probes; git-http with
+  the real extension.
+- `npm run browser:smoke:init` (new, real Chrome): `?init=sh` prompt, pid 1,
+  git and a pipeline, vi with a real ESC, `^C`, resize, a file surviving a
+  reload, `exit 5` halting the system; `?init=vi`; no Emacs artifact fetched.
+
+Known, not from this change: `run-browser-smoke.mjs shell persist ediff` in
+one invocation fails at the Ediff cleanup step on master too; each scenario
+passes on its own.
+
+Not done: starting Emacs from a shell that is init; job control.

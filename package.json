@@ -22,6 +22,7 @@
     "test:python": "node tools/scripts/probe-python.mjs",
     "browser:smoke:python": "node tools/scripts/run-browser-smoke.mjs python",
     "browser:smoke:term": "node tools/scripts/run-browser-smoke.mjs term",
+    "browser:smoke:init": "node tools/scripts/run-browser-smoke.mjs init",
     "test:git-http": "node tools/scripts/probe-git-http.mjs",
     "test:git-http:transport": "node src/userland/git/test-http.mjs",
     "test:product": "npm run test:xterm-pdump-dired && npm run test:xterm-terminal-profile && npm run test:xterm-clipboard-osc52",

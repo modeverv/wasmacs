@@ -268,29 +268,38 @@ patches under `src/c/patches/` (numbered, applied in order by
 
 Emacs の `process.c` / `callproc.c` はそのまま動かし、その下に本物の
 プロセスを用意する。host のプロセスは使わない（`host.process` は引き続き
-unavailable）。代わりに、Emacs の worker の中で動く協調型の小さな kernel
+unavailable）。代わりに、協調型の小さな kernel
 （`src/runtime/process/wasmacs-kernel.js`）が、同梱した userland を別の
-WebAssembly instance として実行する。
+WebAssembly instance として実行する。worker は最初にこの kernel を起動し
+（`src/runtime/process/wasmacs-boot.js`）、kernel の上で init を起動する。
+既定の init は Emacs で、Emacs は host process（pid 1）として kernel に
+attach する。`?init=sh` などで別のプログラムを init にすると、Emacs は
+読み込まれず、kernel の console task（pid 0）が host process になって、
+そのプログラムを pid 1 として疑似端末上で動かす。
 
 ```text
-Emacs (pid 1, Asyncify なし)
-  emacs_spawn / waitpid / kill / pipe2 / poll / idle wait   <- patch 0006, host library
+boot (wasmacs-boot.js): system module の FS 上に kernel を作り、console と program loader をつなぐ
     |
   process kernel (JS, worker 内, 同期のみ)
-    プロセス表、fd table、パイプ、シグナル、タイマー、スケジューラ
+    プロセス表、fd table、パイプ、疑似端末、シグナル、タイマー、スケジューラ
+    |
+  init: Emacs (pid 1, Asyncify なし)
+    emacs_spawn / waitpid / kill / pipe2 / poll / idle wait   <- patch 0006, host library
+  （または別の init: /bin/sh、vi など。pid 1、console の疑似端末上）
     |
   process = Emscripten + Asyncify でビルドしたプログラムの instance
     /bin/sh ほか (BusyBox)、/bin/git、/bin/grep (GNU grep)
     /bin/diff、/bin/diff3 (GNU diffutils)
 ```
 
-- ファイルシステムは1つだけである。全プロセスが Emacs の Emscripten `FS`
+- ファイルシステムは1つだけである。全プロセスが system module（Emacs、
+  または Emacs を読み込まないときの base module）の Emscripten `FS`
   object を共有し、fd table（`FS.streams`）と cwd はコンテキストスイッチで
   差し替える。
 - 待ちが必要なシステムコール（空のパイプの read、waitpid、sleep、fork）は
   Asyncify でプロセスを scheduler まで巻き戻し、待つ理由がなくなったら
   同じシステムコールからやり直す。
-- Emacs は巻き戻せないので、Emacs 自身のシステムコール（idle wait、
+- host process（Emacs）は巻き戻せないので、Emacs 自身のシステムコール（idle wait、
   select/poll、パイプの read、waitpid、kill）が scheduling point になる。
 - Emacs は worker の event loop に戻らない。したがって kernel とプロセス側の
   glue は promise、timer、message に一切依存しない。
