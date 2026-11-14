@@ -5665,3 +5665,24 @@ pages on other origins (their own cache). Measured locally in Chrome: first
 visit 294 ms in the worker with 7 big files downloaded, second visit 153 ms
 with none. The product page (the editor) still downloads everything on every
 start; the same scheme would apply to it.
+
+## Implementation: SQLite in the runtime (2026-11-14)
+
+Status: done. The user asked whether a server written in Emacs Lisp
+(elisp-studio's server.el) could keep its data in SQLite, with attention to
+whether SQLite may be bundled.
+
+- Emacs 30 has SQLite support (`src/sqlite.c`), compiled in when
+  `HAVE_SQLITE3` is defined; configure finds no SQLite for wasm. Now
+  `src/build/build-sqlite.sh` compiles the SQLite 3.54.1 amalgamation with
+  emcc (one thread, no extension loading, no WAL) and the Emacs build defines
+  `HAVE_SQLITE3` and links the object. `temacs.wasm` grows from 2.1 to 3.1 MB.
+- Licence: SQLite is in the public domain, so bundling has no conditions. The
+  source is not vendored: it is downloaded from sqlite.org and checked against
+  the SHA3-256 published there. README has a "Bundled software and licences"
+  section.
+- Validation: `tests/runtime/sqlite-bundle.test.js` (create, parameterized
+  insert, transaction, a second connection, an SQL error) on the published
+  bundle; and the whole existing battery on the new build: `npm test` 121,
+  kernel 55, process probe 37, Python 12, Ediff, eval service probe, product
+  probes, git-http, browser smokes shell/persist/ediff/python/term/init.

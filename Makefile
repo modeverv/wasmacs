@@ -18,6 +18,7 @@ build-artifacts: check-patches
 	src/build/build-system-lisp-image.sh
 	src/build/create-user-filesystem-image.sh
 	src/build/probe-emacs-pdump-configure.sh
+	src/build/build-sqlite.sh
 	src/build/build-emacs-browser-atomics-pdump-profile.sh
 	src/userland/build.sh
 
