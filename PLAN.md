@@ -5640,3 +5640,15 @@ Validation: `npm test` (two new tests on the published bundle);
 `doc/eval-service.md`; the main ones: 150 MB download on every load, no
 interruption of a running request, no async or timers between requests, no
 processes or network, an unversioned API.
+
+### Follow-up: the eval service is published and has its first user (2026-11-14)
+
+PR #6 merged; the service is live at
+`https://modeverv.github.io/wasmacs/app/eval-service.html`. The React
+experiment lives in its own repository,
+[elisp-react](https://github.com/modeverv/elisp-react), which loads
+`app/src/emacs-eval-client.js` from the wasmacs site (cross-origin). Its
+browser test passes against both published sites: Emacs is ready about 3 s
+after navigation on a fast connection, one click costs about 1.2 ms. The
+file layout under `app/src/` and `artifacts/emacs-browser-atomics-pdump/` is
+now depended on from outside this repository.

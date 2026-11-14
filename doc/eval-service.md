@@ -14,6 +14,11 @@ with JavaScript only applying the result to the DOM). Such projects live in
 their own repositories and load the published files; this document is the
 contract.
 
+The first user is [elisp-react](https://github.com/modeverv/elisp-react): its
+components, state and reconciler are Emacs Lisp evaluated here, and its
+JavaScript host calls `eval` once per source file and `call` once per DOM
+event.
+
 ```text
 page                          src/wasm/src/emacs-eval-client.js   (ES module)
   createEmacsEvalService()      eval(source), call(name, ...args): promises
