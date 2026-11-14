@@ -108,7 +108,7 @@ await emacs.eval('(list :sum (+ 1 2) :squares (vconcat (mapcar (lambda (n) (* n 
 
 ### エディタを埋め込む
 
-同じオリジンのページは、このエディタを iframe で表示できます。`xterm-atomics-pdump.html?embed=1` でヘッダーが消えてすぐに起動し、`extra-eval` パラメータで Emacs に `--eval` の式を渡せます。Emacs がファイルを変更するたびに、埋め込み元のページは `/home/user` の tar イメージを `wasmacs:user-image` メッセージで受け取ります。[elisp-studio](https://github.com/modeverv/elisp-studio) はこれを使って、編集中の Emacs の隣でアプリケーションを動かします。
+同じオリジンのページは、このエディタを iframe で表示できます。`xterm-atomics-pdump.html?embed=1` でヘッダーが消えてすぐに起動し、`extra-eval` パラメータで Emacs に `--eval` の式を渡せます（`options=parent` を付けると、URL に収まらない長い式を、埋め込み元のページにメッセージで問い合わせて受け取ります）。Emacs がファイルを変更するたびに、埋め込み元のページは `/home/user` の tar イメージを `wasmacs:user-image` メッセージで受け取ります。双方向のやり取りもできます。Emacs Lisp が OSC 7777 の端末シーケンスで送った文字列は `wasmacs:message` として届き、埋め込み元のページは `wasmacs:input` を送ることで Emacs に入力できます。[elisp-studio](https://github.com/modeverv/elisp-studio) はこれを使って、編集中の Emacs の隣でアプリケーションを動かします。
 
 通常の diagnostic log は静かにしています。詳細ログを見たい場合は次の query を付けます。
 
