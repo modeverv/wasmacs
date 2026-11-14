@@ -31,6 +31,7 @@ The current main route is the browser runtime built on `SharedArrayBuffer`, `Ato
 - There are no raw sockets and no job control (`C-z`, `fg`, `bg`). Git `clone`, `fetch` and `push` support Smart HTTP(S) through the Chrome companion, as well as local repositories.
 - Scheduling is cooperative on one thread. Computation without system calls or explicit polling points delays interruption. CPython's interpreter includes polling points for Python loops.
 - Network access requires the Chrome companion extension (`extension/`) and is limited to the hosts it allows. Without it, `package-refresh-contents`, `git clone` and other network features fail. See [Network Access](#network-access).
+- There is no GnuTLS and there are no dynamic modules: Lisp has `secure-hash` (SHA-2) and random bytes from the browser, but no HMAC primitive, no cipher and no public-key operation, and Emacs cannot listen on a socket. The bundled Python has no OpenSSL either (`hashlib` without `pbkdf2_hmac` and `scrypt`, no `ssl`). See [doc/eval-service.md](doc/eval-service.md#hashes-random-bytes-sockets).
 - This is not a port of native GUI Emacs frames. The current route is terminal Emacs running on xterm.js.
 - Pages artifacts under `docs/` are split and constrained so they can be hosted by GitHub Pages.
 

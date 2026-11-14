@@ -31,6 +31,7 @@
 - raw socket とジョブ制御（`C-z`、`fg`、`bg`）はありません。Git の `clone` / `fetch` / `push` は Chrome 拡張経由の Smart HTTP(S) とローカルリポジトリに対応します
 - スケジューリングは1スレッド上の協調型です。システムコールや定期チェックを行わない長時間の計算では中断が遅れます。CPython のインタープリターには Python のループ用の定期チェックを追加しています
 - ネットワークアクセスには Chrome companion 拡張（`extension/`）が必要で、接続先は拡張が許可する host に限られます。拡張がなければ `package-refresh-contents` や `git clone` などのネットワーク機能は失敗します。[ネットワークアクセス](#ネットワークアクセス) を参照してください
+- GnuTLS と dynamic module はありません。Lisp から使えるのは `secure-hash`（SHA-2）とブラウザの乱数で、HMAC のプリミティブ、暗号、公開鍵の演算はありません。Emacs が socket で待ち受けることもできません。同梱の Python にも OpenSSL はありません（`hashlib` に `pbkdf2_hmac` と `scrypt` がなく、`ssl` もありません）。[doc/eval-service.md](doc/eval-service.md#hashes-random-bytes-sockets) を参照してください
 - GUI Emacs の native frame を移植しているわけではなく、現状は xterm.js 上の terminal Emacs です
 - `docs/` に置く Pages 用 artifact は、GitHub Pages で扱える形に分割・制限しています
 

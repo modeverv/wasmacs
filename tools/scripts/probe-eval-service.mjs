@@ -115,6 +115,21 @@ try {
   assert.equal(await lisp("(progn (require 'cl-lib) (require 'seq) (require 'subr-x) (cl-reduce #'+ (seq-filter #'cl-evenp (number-sequence 1 10))))"), 30);
   pass("message output is returned, buffers, files and the bundled Lisp libraries work");
 
+  // What Lisp has for hashes, random bytes and sockets (doc/eval-service.md).
+  assert.equal(await lisp("(secure-hash 'sha256 \"abc\")"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+  assert.deepEqual(await lisp("(vconcat (mapcar #'symbol-name (secure-hash-algorithms)))"), ["md5", "sha1", "sha224", "sha256", "sha384", "sha512"]);
+  assert.deepEqual(await lisp("(vector (fboundp 'gnutls-hash-mac) (fboundp 'gnutls-symmetric-encrypt) (fboundp 'module-load))"), [null, null, null]);
+  assert.deepEqual(await lisp("(vector (fboundp 'json-serialize) (fboundp 'base64url-encode-string) (sqlite-available-p))"), [true, true, true]);
+  const randomBytes = '(with-temp-buffer (set-buffer-multibyte nil) (insert-file-contents-literally "/dev/urandom" nil nil 16) (mapconcat (lambda (byte) (format "%02x" byte)) (buffer-string) ""))';
+  const drawn = [await lisp(randomBytes), await lisp(randomBytes)];
+  assert.match(drawn[0], /^[0-9a-f]{32}$/);
+  assert.notEqual(drawn[0], drawn[1]);
+  assert.equal((await lisp('(with-temp-buffer (insert-file-contents-literally "/dev/urandom" nil 0 16) (buffer-size))')).error, "file-error");
+  assert.equal(await lisp(`(condition-case nil
+      (progn (make-network-process :name "probe" :server t :host "127.0.0.1" :service 8099 :family 'ipv4) "listening")
+    (file-error "no listening socket"))`), "no listening socket");
+  pass("SHA-2 is there, random bytes are the browser's; no GnuTLS, no modules, no listening socket");
+
   // Deep recursion ends as a Lisp error, not as a JavaScript stack overflow.
   assert.equal(await lisp("(defun wasmacs-probe-deep (n) (if (= n 0) 0 (1+ (wasmacs-probe-deep (1- n)))))", { format: "lisp" }), "wasmacs-probe-deep");
   assert.equal(await lisp("(wasmacs-probe-deep 200)"), 200);

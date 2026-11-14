@@ -271,7 +271,7 @@ fallback).
 | `git-http` | same pinned Git source | Original `remote-curl.c` with a browser HTTP adapter. Provides `git-remote-http` and `git-remote-https` for Smart HTTP clone/fetch/push. |
 | `grep` | GNU grep 3.12, `src/userland/grep` | Unpatched. Emacs uses `--null`, `--color`, `--exclude` and `--directories=skip`, which the BusyBox applet lacks. `egrep` and `fgrep` are two-line shell scripts. |
 | `diff`, `diff3` | GNU diffutils 3.12, `src/userland/diffutils` | Separate process images. Normal/context/unified diff and three-way comparison for Emacs's existing Ediff implementation. |
-| `python` | CPython 3.14.10, `src/userland/python` | `python3` and `python` aliases; basic pipe REPL, static modules and standard-library ZIP. Startup/I/O glue and evaluator polling adapted to the child runtime. |
+| `python` | CPython 3.14.10, `src/userland/python` | `python3` and `python` aliases; basic pipe REPL, static modules and standard-library ZIP. Startup/I/O glue and evaluator polling adapted to the child runtime. Built without OpenSSL: `hashlib` has the SHA functions and `hmac` and `os.urandom` work, but `hashlib.pbkdf2_hmac`, `hashlib.scrypt` and `ssl` are missing. |
 
 `src/userland/build.sh` builds the programs and Git HTTP helper and writes
 `build/artifacts/userland/manifest.json`; `src/build/build-site.mjs` publishes

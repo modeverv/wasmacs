@@ -24,6 +24,12 @@ export const pythonBatchCases = [
     expected: '(0 "{\\"answer\\": 42, \\"root\\": 9}\n")',
   },
   {
+    // CPython is built without OpenSSL (doc/eval-service.md, "Hashes, random bytes, sockets").
+    name: "hashlib without OpenSSL: SHA-2, hmac and os.urandom; no pbkdf2_hmac, scrypt or ssl",
+    form: capture("import hashlib, hmac, os, importlib.util; print(hashlib.sha256(b'abc').hexdigest()[:8], hmac.new(b'key', b'message', hashlib.sha256).hexdigest()[:8], len(os.urandom(16)), hasattr(hashlib, 'pbkdf2_hmac'), hasattr(hashlib, 'scrypt'), importlib.util.find_spec('_ssl') is None)"),
+    expected: '(0 "ba7816bf 6e9ef29b 16 False False True\n")',
+  },
+  {
     name: "a Python script shares UTF-8 files with Emacs",
     form: `(progn
       (write-region ${lispString("from pathlib import Path\np = Path('/home/user/python-file.txt')\np.write_text('hello \\u65e5\\u672c\\u8a9e\\n', encoding='utf-8')\nprint(p.read_text(encoding='utf-8'), end='')\n")} nil "/tmp/python-file.py" nil 'silent)

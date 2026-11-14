@@ -115,6 +115,31 @@ client rejects everything after it. Create a new service.
 - With the cache below, a later visit of the public site is ready in about
   0.16 s (first visit: 1-4 s on a fast connection).
 
+## Hashes, random bytes, sockets
+
+What Lisp has in this Emacs for an application that signs people in, makes
+tokens or wants to be a server.  Checked on 2026-11-15 in Chrome (Emacs 30.2);
+`npm run test:eval-service` keeps the rows of the eval service true.
+
+| | |
+|---|---|
+| `secure-hash` | `md5`, `sha1`, `sha224`, `sha256`, `sha384`, `sha512`: Emacs's own C, as in a native Emacs. |
+| GnuTLS | Not linked. `gnutls-hash-mac`, `gnutls-hash-digest` and `gnutls-symmetric-encrypt` are not defined: there is no HMAC primitive and no cipher. HMAC-SHA-256 is six lines of Lisp on `secure-hash`. |
+| Public-key operations | None, as in a native Emacs: a signature (RS256, ES256, ...) cannot be checked in Lisp. |
+| Dynamic modules | `module-load` is not defined: bindings to C libraries (libsodium and the like) cannot be loaded. |
+| Random bytes | `(insert-file-contents-literally "/dev/urandom" nil nil N)` in a unibyte buffer gives N bytes of the browser's `crypto.getRandomValues`. With a start position (`nil 0 N`) Emacs 30 signals "cannot use a start position in a non-seekable file/device". `random` is Emacs's ordinary generator, not one for secrets. |
+| JSON, base64 | `json-serialize`, `json-parse-string` and `base64url-encode-string` are there. |
+| SQLite | `sqlite-available-p` is t. |
+| Listening | `make-network-process` with `:server` fails ("Protocol not available"): this Emacs cannot be a web server. A page that wants one answers its own requests by calling Lisp, as [elisp-studio](https://github.com/modeverv/elisp-studio) does. |
+| Programs | The eval service starts none (limit 4 below): no `python3`, no `openssl`. In the editor, with the process service, `python3` has the SHA functions of `hashlib`, `hmac` and `os.urandom`; it has no `hashlib.pbkdf2_hmac`, no `hashlib.scrypt` and no `ssl` (CPython is built without OpenSSL), and there is no `openssl` program. |
+
+Slow arithmetic belongs to the page.  PBKDF2-HMAC-SHA-256 with 600,000 rounds
+takes 3.4 s in byte-compiled Lisp here, and the service answers nothing
+meanwhile (limit 2); the page's Web Crypto does it in 0.07 s.  With these
+parts a token signed with a shared secret (a JWT with HS256) can be made and
+checked in Lisp, in about 0.05 ms; one signed with a private key cannot be
+checked.
+
 ## Limits and open issues
 
 1. **Download size on the first visit.** The service loads the whole product
@@ -160,4 +185,4 @@ client rejects everything after it. Create a new service.
 | Command | What runs |
 |---|---|
 | `npm test` | `tests/runtime/eval-service-bundle.test.js`: the published core and Lisp on the published Emacs under Node: values, errors, `call`, output, recursion limit, garbage collection. |
-| `npm run test:eval-service` | `tools/scripts/probe-eval-service.mjs`: real Chrome, `docs/` from a plain static server without isolation headers: the worker, the client, the demo page, a failed engine, and a page on another origin. |
+| `npm run test:eval-service` | `tools/scripts/probe-eval-service.mjs`: real Chrome, `docs/` from a plain static server without isolation headers: the worker, the client, the demo page, hashes and random bytes, a failed engine, and a page on another origin. |
