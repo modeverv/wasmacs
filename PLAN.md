@@ -5511,3 +5511,23 @@ Fixed alongside (its own commit): `b5ade32` moved the VS Code extension to
 `archive/extensions/vscode-wasifs`, and its two tests, still in
 `tests/runtime/`, failed CI from then on. They moved into the archive with it
 (`archive/extensions/vscode-wasifs/tests/`, runnable with `node --test`).
+
+## Housekeeping: repository layout and documents (2026-11-14)
+
+The user asked whether the layout and the READMEs were in order, and to tidy
+them if not. The layout was sound; these points were not:
+
+- `doc/` had no index and mixed current design with finished plans. Added
+  `doc/README.md`; moved six finished or superseded notes to `doc/history/`
+  (`p.md`, `async.md`, `os-change.md`, `build-strategy.md`,
+  `small-os-substrate-implementation.md`, `emacs-30.2-source-inventory.md`).
+  Older entries in this file and `LOG.md` name them by their former paths.
+- `CHROME_EXTENSION_PLAN.md` (root) moved to `extension/ORIGINAL-PLAN.md`,
+  next to the `extension/PLAN.md` that implements it.
+- README.md / README.ja.md: the VS Code extension is described as the archived
+  experiment it now is (English gained the section the Japanese one had); the
+  repository layout separates tracked from generated directories and names the
+  top-level documents; the path of the preload chunks was wrong; the Japanese
+  userland list lacked GNU diffutils and CPython.
+- ARCHITECTURE.md layout and the Makefile comment list CPython and
+  `extension/`.

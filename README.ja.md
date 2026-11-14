@@ -31,7 +31,7 @@
 - ネットワークアクセスには Chrome companion 拡張（`extension/`）が必要で、接続先は拡張が許可する host に限られます。拡張がなければ `package-refresh-contents` や `git clone` などのネットワーク機能は失敗します。[ネットワークアクセス](#ネットワークアクセス) を参照してください
 - GUI Emacs の native frame を移植しているわけではなく、現状は xterm.js 上の terminal Emacs です
 - `docs/` に置く Pages 用 artifact は、GitHub Pages で扱える形に分割・制限しています
-- VS Code `.wasifs` extension 用の別ビルドルートを生成できる
+- VS Code `.wasifs` extension はアーカイブ済みの実験です（`archive/extensions/vscode-wasifs`）。残っているのは専用のビルドルートだけです。[VS Code `.wasifs` extension](#アーカイブ済みの実験-vs-code-wasifs-extension) を参照してください
 
 ## リポジトリ構成
 
@@ -42,20 +42,25 @@ src/build/  docs と artifact 生成用スクリプト
 src/c/      Emacs C 側の patch layer
 src/runtime/ host/runtime libraries used by tests and tools
 src/runtime/process/ process service（kernel、プロセスごとの runtime、userland のファイル配置）
-src/userland/ プロセスとして動くプログラム（BusyBox、git、GNU grep）のビルド
+src/userland/ プロセスとして動くプログラム（BusyBox、git、GNU grep、GNU diffutils、CPython）のビルド
 tools/      build / validation / probe / inspection tools
 extension/  Chrome companion 拡張（唯一のネットワーク経路）
 vendor/     pinned upstream GNU Emacs source。read-only
+doc/        設計文書（索引は doc/README.md）。doc/history/ は完了した計画の記録
+docs/       GitHub Pages output（Git 管理。`make build` が生成）
+tests/runtime/ `npm test` と CI が実行する contract test
+tests/process/ process service の kernel test と Emacs 用テストケース
+archive/    退役した仕組み（archive/retired/）、VS Code extension（archive/extensions/）、古い出力。索引は archive/README.md
+logs/       ignored runtime logs。Git には .gitkeep のみ残す
+
+生成物（Git 管理外）:
 build/      copied Emacs working tree、temporary state、generated artifacts
 build/artifacts/ generated wasm / pdmp / wasifs build products
 build2/     VS Code 専用 copied Emacs workspace と runtime artifacts
-doc/        architecture and planning notes
-docs/       GitHub Pages output
 vscode/     generated VS Code webview app bundle
-logs/       ignored runtime logs。Git には .gitkeep のみ残す
-tests/      automated test code
-archive/    退役した仕組み（archive/retired/、索引は archive/README.md）と古い出力
 ```
+
+トップレベルの文書: `ARCHITECTURE.md`（責務の境界）、`PLAN.md`（マイルストーンと日付つきの実装記録）、`LOG.md` と `MEMORY.md`（エージェント作業の作業ログとプロジェクトメモ）、`AGENTS.md`（コーディングエージェント向けの指示）。
 
 `vendor/emacs` は pinned upstream GNU Emacs source です。直接編集しません。製品が Emacs に加える変更は `src/c/patches/` の番号付き patch で、copied build tree に適用します（`src/c/README.md` を参照）。
 
@@ -76,7 +81,7 @@ Pages bundle は次の方針で構成されています。
 - `SharedArrayBuffer` のために root の `coi-serviceworker.js` で COOP/COEP 相当の環境を作る
 - project pages でも動くように app / artifact URL は relative にする
 - Emscripten glue は `temacs.js` として配信し、静的サーバーが JavaScript MIME type を返せるようにする
-- 大きな Emscripten preload package は、単一の巨大な `temacs.data` ではなく `docs/artifacts/temacs.data.parts/` 以下の chunk として置く
+- 大きな Emscripten preload package は、単一の巨大な `temacs.data` ではなく `docs/artifacts/emacs-browser-atomics-pdump/temacs.data.parts/` 以下の chunk として置く
 
 通常の diagnostic log は静かにしています。詳細ログを見たい場合は次の query を付けます。
 
@@ -142,7 +147,7 @@ make dev
 
 `make dev` は開発サーバーを起動します。開発サーバーでは runtime file を `/artifacts/...` として公開し、Pages と同じ URL contract で worker / smoke URL が動くようにしています。
 
-`make vscode-build` は VS Code `.wasifs` extension 用の別ルートを生成します。VS Code 専用 artifact は `build2/artifacts/` に置かれ、webview app bundle は `vscode/app/` に置かれます。このルートは `docs/app` や `docs/artifacts` を消費・更新しません。
+`make vscode-build` は、アーカイブ済みの VS Code `.wasifs` extension 用の別ルートを生成します。VS Code 専用 artifact は `build2/artifacts/` に置かれ、webview app bundle は `vscode/app/` に置かれます。このルートは `docs/app` や `docs/artifacts` を消費・更新しません。
 
 ## サブプロセス: shell、git、grep
 
@@ -408,7 +413,10 @@ user-filesystem.wasifs
 ARCHITECTURE.md
 PLAN.md
 doc/small-os-for-emacs.md
+doc/process-service.md
 ```
+
+設計文書の一覧は `doc/README.md` にあります。
 
 ## 設計上の原則
 
@@ -420,9 +428,9 @@ doc/small-os-for-emacs.md
 - product behavior と diagnostic behavior を分ける
 - low-level substrate は C/wasm-first とし、JavaScript は browser coordinator / host capability provider / diagnostic harness に留める
 
-## (開発中) VS Code `.wasifs` extension
+## (アーカイブ済みの実験) VS Code `.wasifs` extension
 
-VS Code `.wasifs` extension は Pages bundle とは別の lane です。
+`.wasifs` ファイル用の VS Code custom editor を、Pages bundle とは別の lane として作りかけていました。ソースとテストは `archive/extensions/vscode-wasifs` に移してあり、ビルド・テスト・公開の対象外です。次のコマンドは、その extension が使っていた生成物を今も作れます。
 
 ```sh
 make vscode-build
@@ -430,7 +438,7 @@ make vscode-build
 
 このコマンドは VS Code 専用 runtime artifacts を `build2/artifacts/` に生成し、webview app bundle を `vscode/app/` に生成します。`docs/app` や `docs/artifacts` は更新しません。
 
-これにより、GitHub Pages 用 browser app と VS Code webview extension 実験を同じ repository 内で共存させつつ、artifact の責務を分離しています。
+このルートのブラウザ probe は `npm run test:vscode-lane` で実行します。
 
 ## 開発メモ
 

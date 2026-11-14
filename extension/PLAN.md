@@ -1,6 +1,6 @@
 # PLAN.md - wasmacs Chrome Companion CORS Proxy Extension
 
-This directory implements `../CHROME_EXTENSION_PLAN.md` in a root-level `extension/` project, as requested.
+This directory implements `ORIGINAL-PLAN.md` (the original request, formerly `CHROME_EXTENSION_PLAN.md` at the repository root) in a root-level `extension/` project, as requested.
 
 ## Status Legend
 

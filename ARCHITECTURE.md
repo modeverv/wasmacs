@@ -217,18 +217,19 @@ src/build/  docs and generated artifact build scripts
 src/c/      Emacs C-side patch layer
 src/runtime/ host/runtime libraries used by tests and tools
 src/runtime/process/ Process Service: kernel, per-process runtime, userland layout
-src/userland/ builds of the programs that run as processes (BusyBox, git, GNU grep, GNU diffutils)
+src/userland/ builds of the programs that run as processes (BusyBox, git, GNU grep, GNU diffutils, CPython)
+extension/  Chrome companion extension: the only network transport
 tools/      build, validation, probe, and inspection tools
 build/      copied Emacs source/build workspaces and generated artifacts
 build/artifacts/ generated wasm, pdmp, wasifs, and userland build products
 build/userland/ userland build trees and downloaded release tarballs
 build2/     VS Code-only copied Emacs workspaces and generated runtime artifacts
-doc/        architecture and planning notes
+doc/        design documents (index: doc/README.md; finished plans in doc/history/)
 docs/       GitHub Pages output
 vscode/     generated VS Code webview app bundle
 logs/       ignored runtime logs
 tests/      automated tests
-archive/    retired mechanisms (archive/retired/, indexed in archive/README.md) and old outputs
+archive/    retired mechanisms (archive/retired/), the VS Code extension (archive/extensions/) and old outputs; indexed in archive/README.md
 ```
 
 The product route is exactly one page, one worker, one host library and one
@@ -266,7 +267,8 @@ should not be recreated.
 `docs/`; `make clean` removes any legacy `dist/`, empties `build/` and `docs/`,
 and a fresh `make build` recreates the publishable `docs/` tree.
 
-The VS Code extension lane is deliberately outside that Pages lane. VS Code
+The VS Code extension lane is deliberately outside that Pages lane (the
+extension itself is archived under `archive/extensions/vscode-wasifs`). VS Code
 runtime experiments build under `build2/` and copy webview app assets under
 `vscode/app/`. The extension must not point local resource roots at `docs/app`,
 `docs/artifacts`, or `build/artifacts`; those remain owned by the browser

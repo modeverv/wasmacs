@@ -22,7 +22,7 @@ build-artifacts: check-patches
 	src/userland/build.sh
 
 # The programs Emacs can run as subprocesses (busybox sh + tools, git, GNU
-# grep, GNU diffutils). Sources are downloaded once by their pinned builds.
+# grep, GNU diffutils, CPython). Sources are downloaded once by their pinned builds.
 userland:
 	src/userland/build.sh
 
