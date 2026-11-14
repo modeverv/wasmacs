@@ -6,6 +6,7 @@ import {
   DEFAULT_XTERM_FONT_SIZE,
   createXtermEmacsTerminal,
   decodeOsc52ClipboardPayload,
+  decodeOscHostMessage,
   metaKeyEventToBytes,
   stripBracketedPasteMarkers,
   terminalKeyEventToBytes,
@@ -231,4 +232,13 @@ test("writeClipboardText warns when the Clipboard API is unavailable", () => {
     console.warn = originalWarn;
   }
   assert.match(warned[0], /clipboard\.writeText unavailable/);
+});
+
+test("OSC 7777 host message decodes base64 UTF-8 text and rejects anything else", () => {
+  assert.equal(decodeOscHostMessage("eyJ0eXBlIjoiZXZhbCJ9"), '{"type":"eval"}');
+  assert.equal(decodeOscHostMessage("5pel5pys6Kqe"), "日本語");
+  assert.equal(decodeOscHostMessage(""), null);
+  assert.equal(decodeOscHostMessage("not base64!"), null);
+  assert.equal(decodeOscHostMessage("/w=="), null);          // not UTF-8
+  assert.equal(decodeOscHostMessage(undefined), null);
 });

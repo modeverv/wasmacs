@@ -541,6 +541,12 @@ function initTerminal() {
       scheduleTerminalSizePublish(size);
       addLog("info", `resize: ${size.cols}x${size.rows}`);
     },
+    // Emacs Lisp speaks to the page that embeds this editor (OSC 7777).
+    onHostMessage(text) {
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: "wasmacs:message", text }, location.origin);
+      }
+    },
   });
   terminal.onData((data) => sendInputToEmacs(xtermDataToBytes(data)));
   lastTerminalSize = terminal.getDimensions();
@@ -843,10 +849,18 @@ wasifsInput.addEventListener("change", () => {
 });
 
 // ?embed=1: this page is the editor inside another page (an iframe of the
-// same origin): no header, start at once.  The embedding page gets the user
-// image through "wasmacs:user-image" messages and can pass --eval forms with
-// extra-eval parameters.
-if (pageParams.get("embed") === "1") document.body.classList.add("embedded");
+// same origin): no header, start at once.  The embedding page
+//   - passes --eval forms with extra-eval parameters,
+//   - gets the user image in "wasmacs:user-image" messages,
+//   - gets what Emacs Lisp sends with OSC 7777 in "wasmacs:message" messages,
+//   - types into Emacs by posting { type: "wasmacs:input", bytes } here.
+if (pageParams.get("embed") === "1") {
+  document.body.classList.add("embedded");
+  window.addEventListener("message", (event) => {
+    if (event.origin !== location.origin || event.source !== window.parent) return;
+    if (event.data?.type === "wasmacs:input" && Array.isArray(event.data.bytes)) sendInputToEmacs(event.data.bytes);
+  });
+}
 
 // Autostart if ?autostart in URL
 if (pageParams.has("autostart") || pageParams.get("embed") === "1") startSession();

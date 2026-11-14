@@ -129,6 +129,17 @@ export function createXtermEmacsTerminal(container, options = {}) {
     return true;
   });
 
+  // A message from Emacs Lisp to the page that hosts this terminal:
+  // "\e]7777;<base64 of UTF-8 text>\a" (send-string-to-terminal).  The page
+  // decides what the text means; an embedded editor forwards it to the page
+  // that embeds it.
+  const oscHostMessageHandler = term.parser?.registerOscHandler?.(7777, (data) => {
+    const text = decodeOscHostMessage(data);
+    if (text === null) return false;
+    options.onHostMessage?.(text);
+    return true;
+  });
+
   let currentDimensions = initialDimensions;
   const notifyResize = (dimensions) => {
     const next = normalizeTerminalDimensions(dimensions);
@@ -214,9 +225,21 @@ export function createXtermEmacsTerminal(container, options = {}) {
       if (resizeObserver) resizeObserver.disconnect();
       else window.removeEventListener("resize", fit);
       oscClipboardHandler?.dispose();
+      oscHostMessageHandler?.dispose();
       term.dispose();
     },
   };
+}
+
+// The text of an OSC 7777 payload (base64 of UTF-8), or null if it is not one.
+export function decodeOscHostMessage(data) {
+  if (typeof data !== "string" || data === "" || !/^[A-Za-z0-9+/]*={0,2}$/.test(data)) return null;
+  try {
+    const binary = atob(data);
+    return new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(binary, (char) => char.charCodeAt(0)));
+  } catch (_) {
+    return null;
+  }
 }
 
 // Convert xterm onData string to byte array for emacs-input-bytes message.
