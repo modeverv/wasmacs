@@ -5531,3 +5531,19 @@ them if not. The layout was sound; these points were not:
   userland list lacked GNU diffutils and CPython.
 - ARCHITECTURE.md layout and the Makefile comment list CPython and
   `extension/`.
+
+## Retirement: VS Code Asyncify build route (2026-11-14)
+
+The user asked to retire the VS Code build route after archiving the extension.
+Moved to `archive/retired/vscode-asyncify-lane/` with original paths: the
+Asyncify build script, its perl patcher and host library,
+`asyncify-minibuffer-worker.js`, `build-vscode-assets.mjs`, the two
+`probe-browser-xterm-*` probes and `asyncify-build-hygiene.test.js`. Removed
+the `vscode-build`, `vscode-assets` and `clean-vscode` make targets and the
+`vscode:*`, `test:vscode-lane`, `test:xterm-manual-app-smoke` and
+`test:xterm-cold-loadup-failure` npm scripts, the three tests of live files
+that pinned the lane, and the worker's copy in `docs/app/src/`. The
+ARCHITECTURE.md design notes on the VS Code webview moved into the
+`archive/README.md` entry. `npm test` 114/114; the archived extension tests
+9/9. `build2/` and `vscode/` are ignored local outputs and are left to the
+user to delete.

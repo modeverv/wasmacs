@@ -166,7 +166,7 @@ test("VS Code extension-host keybindings inject terminal bytes into the active w
 });
 
 test("Asyncify worker accepts VS Code webview runtime artifact configuration", async () => {
-  const worker = await readFile(join(repoRoot, "src/wasm/src/asyncify-minibuffer-worker.js"), "utf8");
+  const worker = await readFile(join(repoRoot, "archive/retired/vscode-asyncify-lane/src/wasm/src/asyncify-minibuffer-worker.js"), "utf8");
 
   assert.match(worker, /type === "configure-runtime"/);
   assert.match(worker, /function configureRuntime/);

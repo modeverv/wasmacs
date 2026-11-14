@@ -1,5 +1,13 @@
 # OS Compatibility Boundary
 
+> Status (2026-11-14): written during the Asyncify period. The ownership
+> rules still hold, but the scripts and the worker it names
+> (`patch-emacs-host-entrypoint-spike.sh`, `wasmacs-asyncify-host-library.js`,
+> `asyncify-minibuffer-worker.js`, the `emacs-browser-asyncify-spike` build)
+> are retired under `archive/retired/`. The product's Emacs changes are
+> `src/c/patches/`; its host library is
+> `tools/scripts/wasmacs-atomics-host-library.js`.
+
 This document inventories the current wasmacs OS compatibility layer as a
 small runtime contract for GNU Emacs. The goal of this pass is not memory
 reduction. The goal is to make ownership explicit enough that memory, root,

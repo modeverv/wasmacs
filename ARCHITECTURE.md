@@ -129,30 +129,10 @@ user filesystem image
 
 `user-filesystem.wasifs` は runtime から独立して持ち運べる writable image とする。ユーザーが編集したファイル、init.el、ELPA packages、履歴、session metadata はここに入る。
 
-VS Code extension integration treats a `.wasifs` file as this writable user
-image, not as a VS Code-native text workspace. Opening `foo.wasifs` should
-create a custom editor/webview host that mounts the image at `/home/user` and
-hands the runtime an initial `(dired "/home/user")` command. VS Code owns the
-outer document lifecycle, Save/Save As, and asset loading policy; Emacs owns
-Dired, buffers, command loop, keymaps, and filesystem semantics inside the
-mounted image. VS Code webviews may expose local runtime assets as
-`vscode-resource`/CDN URLs that can be fetched but cannot always be passed
-directly to `new Worker(...)` from the `vscode-webview` origin. The VS Code
-host surface should therefore treat webview worker startup as a separate asset
-loading step and wrap fetched worker source in a `blob:` worker when needed.
-The same rule applies to Emscripten-generated runtime entrypoints loaded from a
-worker: the JS glue can be imported from a `blob:` URL, while `locateFile()`
-maps `.wasm` and `.data` payload names to blob URLs. When a VS Code webview
-worker rejects a blob URL created by the outer webview, pass source text and
-binary payloads into the worker and create those blob URLs inside the worker's
-own global scope. If Emscripten's wasm or preload-data fallback tries to use
-`XMLHttpRequest` for those blob URLs, provide `Module.wasmBinary` and
-`Module.getPreloadedPackage()` from the transferred bytes instead of relying on
-runtime URL loading. Keyboard handoff follows the same ownership split: while
-the `.wasifs` custom editor is active, VS Code may contribute explicit
-keybindings that inject terminal bytes into the webview, but those bindings are
-transport only. They must not reinterpret Emacs keymaps, minibuffer semantics,
-Dired behavior, or buffer editing outside the Emacs runtime.
+A VS Code custom editor for `.wasifs` files was an experiment; it and its
+Asyncify build route are retired (`archive/extensions/vscode-wasifs`,
+`archive/retired/vscode-asyncify-lane`, whose README section in
+`archive/README.md` keeps the design notes).
 
 起動時の mount は次を基本形にする。
 
@@ -223,10 +203,8 @@ tools/      build, validation, probe, and inspection tools
 build/      copied Emacs source/build workspaces and generated artifacts
 build/artifacts/ generated wasm, pdmp, wasifs, and userland build products
 build/userland/ userland build trees and downloaded release tarballs
-build2/     VS Code-only copied Emacs workspaces and generated runtime artifacts
 doc/        design documents (index: doc/README.md; finished plans in doc/history/)
 docs/       GitHub Pages output
-vscode/     generated VS Code webview app bundle
 logs/       ignored runtime logs
 tests/      automated tests
 archive/    retired mechanisms (archive/retired/), the VS Code extension (archive/extensions/) and old outputs; indexed in archive/README.md
@@ -266,14 +244,6 @@ should not be recreated.
 `dist/` is retired from the active layout. The maintained Pages bundle is
 `docs/`; `make clean` removes any legacy `dist/`, empties `build/` and `docs/`,
 and a fresh `make build` recreates the publishable `docs/` tree.
-
-The VS Code extension lane is deliberately outside that Pages lane (the
-extension itself is archived under `archive/extensions/vscode-wasifs`). VS Code
-runtime experiments build under `build2/` and copy webview app assets under
-`vscode/app/`. The extension must not point local resource roots at `docs/app`,
-`docs/artifacts`, or `build/artifacts`; those remain owned by the browser
-docs/Pages build. `make clean-vscode` removes only `build2/` and `vscode/`,
-while `make clean` removes only the docs/browser generated lane.
 
 For GitHub Pages, `docs/index.html` is a lightweight redirect to the canonical
 Atomics/pdump xterm entrypoint at `docs/app/xterm-atomics-pdump.html`. Keeping

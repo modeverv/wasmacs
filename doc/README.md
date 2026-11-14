@@ -10,7 +10,7 @@ here go into one subject each.
 | --- | --- |
 | `process-service.md` | The process kernel: processes, pipes, signals, pseudoterminals, process HTTP, the bundled programs, the rules for kernel code, tests. |
 | `small-os-for-emacs.md` | wasmacs as a small compatibility OS for Emacs: the services Emacs needs and their contracts. |
-| `os-compatibility-boundary.md` | Inventory of the OS compatibility layer: who owns memory, roots, lifecycle, preloaded state and entry points. |
+| `os-compatibility-boundary.md` | Inventory of the OS compatibility layer: who owns memory, roots, lifecycle, preloaded state and entry points. Written in the Asyncify period; the rules hold, the file names it cites are retired. |
 | `host-abi.md` | The boundary between the Emacs core and the browser host. Checked by `tools/scripts/validate-host-abi.sh`. |
 | `wasifs-format.md` | The `.wasifs` image format. Checked by `tools/scripts/validate-user-filesystem-image.sh`. |
 | `clipboard-kill-ring-boundary.md` | Clipboard and kill ring: what Emacs owns and what the browser does. |

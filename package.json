@@ -6,8 +6,6 @@
     "dev": "node tools/scripts/serve-app.mjs",
     "build": "node src/build/build-site.mjs",
     "userland:build": "src/userland/build.sh",
-    "vscode:assets": "node src/build/build-vscode-assets.mjs",
-    "vscode:build": "tools/scripts/build-emacs-browser-asyncify-spike.sh && node src/build/build-vscode-assets.mjs",
     "wasifs": "node tools/scripts/wasifs.mjs",
     "wasifs:list": "node tools/scripts/wasifs.mjs list",
     "wasifs:pack": "node tools/scripts/wasifs.mjs pack",
@@ -29,10 +27,7 @@
     "test:product": "npm run test:xterm-pdump-dired && npm run test:xterm-terminal-profile && npm run test:xterm-clipboard-osc52",
     "test:xterm-pdump-dired": "node tools/scripts/probe-browser-pdump-atomics-dired-without-ls.mjs",
     "test:xterm-terminal-profile": "node tools/scripts/probe-browser-pdump-atomics-terminal-profile.mjs",
-    "test:xterm-clipboard-osc52": "node tools/scripts/probe-browser-pdump-atomics-clipboard-osc52.mjs",
-    "test:vscode-lane": "npm run test:xterm-manual-app-smoke && npm run test:xterm-cold-loadup-failure",
-    "test:xterm-manual-app-smoke": "node tools/scripts/probe-browser-xterm-manual-app-smoke.mjs",
-    "test:xterm-cold-loadup-failure": "node tools/scripts/probe-browser-xterm-cold-loadup-failure.mjs"
+    "test:xterm-clipboard-osc52": "node tools/scripts/probe-browser-pdump-atomics-clipboard-osc52.mjs"
   },
   "engines": {
     "node": ">=24"

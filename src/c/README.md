@@ -56,6 +56,3 @@ make check-patches
    to confirm the tree and the patch layer agree.
 
 Build scripts must never edit `vendor/emacs`.
-
-The VS Code Asyncify lane does not use this layer yet; it still patches its own
-copied tree with `tools/scripts/patch-emacs-host-entrypoint-spike.sh`.

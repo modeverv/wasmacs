@@ -38,21 +38,6 @@ test("wasmacs url.el loader is an overlay, not a vendor/emacs patch", async () =
   assert.doesNotMatch(source, /\(open-network-stream\b/);
 });
 
-test("VS Code lane Emacs patch script registers the relay-only host network fetch primitive", async () => {
-  const source = await readFile(join(repoRoot, "tools/scripts/patch-emacs-host-entrypoint-spike.sh"), "utf8");
-
-  assert.match(source, /EM_JS \(const char \*, wasmacs_host_network_fetch_json/);
-  assert.match(source, /DEFUN \("wasmacs-os-network-fetch-json"/);
-  assert.match(source, /Swasmacs_os_network_fetch_json/);
-  assert.match(source, /wasmacs_os_url_fetch_loader_state/);
-  assert.match(source, /function returnJson/);
-  assert.match(source, /_malloc\(size\)/);
-  assert.match(source, /stringToUTF8\(json, ptr, size\)/);
-  assertRelayOnlyHostFetch(source);
-  assert.match(source, /xfree \(\(void \*\) response\)/);
-  assert.doesNotMatch(source, /stringToNewUTF8/);
-});
-
 test("product Emacs patch layer carries the relay-only host network fetch primitive", async () => {
   const source = await readFile(
     join(repoRoot, "src/c/patches/0001-emacs-host-entrypoints-and-os-services.patch"),

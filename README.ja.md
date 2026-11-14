@@ -31,7 +31,6 @@
 - ネットワークアクセスには Chrome companion 拡張（`extension/`）が必要で、接続先は拡張が許可する host に限られます。拡張がなければ `package-refresh-contents` や `git clone` などのネットワーク機能は失敗します。[ネットワークアクセス](#ネットワークアクセス) を参照してください
 - GUI Emacs の native frame を移植しているわけではなく、現状は xterm.js 上の terminal Emacs です
 - `docs/` に置く Pages 用 artifact は、GitHub Pages で扱える形に分割・制限しています
-- VS Code `.wasifs` extension はアーカイブ済みの実験です（`archive/extensions/vscode-wasifs`）。残っているのは専用のビルドルートだけです。[VS Code `.wasifs` extension](#アーカイブ済みの実験-vs-code-wasifs-extension) を参照してください
 
 ## リポジトリ構成
 
@@ -50,21 +49,19 @@ doc/        設計文書（索引は doc/README.md）。doc/history/ は完了�
 docs/       GitHub Pages output（Git 管理。`make build` が生成）
 tests/runtime/ `npm test` と CI が実行する contract test
 tests/process/ process service の kernel test と Emacs 用テストケース
-archive/    退役した仕組み（archive/retired/）、VS Code extension（archive/extensions/）、古い出力。索引は archive/README.md
+archive/    退役した仕組み（archive/retired/）、VS Code extension の実験（archive/extensions/）、古い出力。索引は archive/README.md
 logs/       ignored runtime logs。Git には .gitkeep のみ残す
 
 生成物（Git 管理外）:
 build/      copied Emacs working tree、temporary state、generated artifacts
 build/artifacts/ generated wasm / pdmp / wasifs build products
-build2/     VS Code 専用 copied Emacs workspace と runtime artifacts
-vscode/     generated VS Code webview app bundle
 ```
 
 トップレベルの文書: `ARCHITECTURE.md`（責務の境界）、`PLAN.md`（マイルストーンと日付つきの実装記録）、`LOG.md` と `MEMORY.md`（エージェント作業の作業ログとプロジェクトメモ）、`AGENTS.md`（コーディングエージェント向けの指示）。
 
 `vendor/emacs` は pinned upstream GNU Emacs source です。直接編集しません。製品が Emacs に加える変更は `src/c/patches/` の番号付き patch で、copied build tree に適用します（`src/c/README.md` を参照）。
 
-製品ルートは、ページ1つ・worker 1つ・ビルド1つです。`src/wasm/xterm-atomics-pdump.html`、`src/wasm/src/emacs-atomics-pdump-worker.js`、`src/build/build-emacs-browser-atomics-pdump-profile.sh` がそれにあたります。以前の仕組み（command bridge を使う textarea アプリ、Asyncify の command protocol、初期の build spike、self-hosted fetch proxy）は `archive/retired/` に移してあり、`tests/runtime/canonical-route.test.js` が、現役のファイルがそれらに依存しないことを確認します。
+製品ルートは、ページ1つ・worker 1つ・ビルド1つです。`src/wasm/xterm-atomics-pdump.html`、`src/wasm/src/emacs-atomics-pdump-worker.js`、`src/build/build-emacs-browser-atomics-pdump-profile.sh` がそれにあたります。以前の仕組み（command bridge を使う textarea アプリ、Asyncify の command protocol、VS Code `.wasifs` extension の実験とその Asyncify ビルドルート、初期の build spike、self-hosted fetch proxy）は `archive/retired/` に移してあり、`tests/runtime/canonical-route.test.js` が、現役のファイルがそれらに依存しないことを確認します。
 
 ## ブラウザアプリ
 
@@ -132,7 +129,6 @@ make test
 make build
 make userland
 make test-process
-make vscode-build
 make docs
 make dev
 ```
@@ -146,8 +142,6 @@ make dev
 `make test`（`npm test`）は CI が実行するものです。runtime contract のテストに加えて、checked-in の `docs/` bundle を Node 上で起動し、Emacs から `sh`・`git`・`grep` を実行するテストを含みます。`make test-process` は process service の全テスト（kernel のテストと、本物の Emacs が本物のサブプロセスを動かすテスト）を実行します。`npm run browser:smoke:processes` と `npm run browser:smoke:term` は headless Chrome で実際のページを操作します。
 
 `make dev` は開発サーバーを起動します。開発サーバーでは runtime file を `/artifacts/...` として公開し、Pages と同じ URL contract で worker / smoke URL が動くようにしています。
-
-`make vscode-build` は、アーカイブ済みの VS Code `.wasifs` extension 用の別ルートを生成します。VS Code 専用 artifact は `build2/artifacts/` に置かれ、webview app bundle は `vscode/app/` に置かれます。このルートは `docs/app` や `docs/artifacts` を消費・更新しません。
 
 ## サブプロセス: shell、git、grep
 
@@ -365,7 +359,7 @@ publishable な `docs/` tree には、checked-in browser bundle と Pages-safe r
 
 古い 512MB pdump restore failure は現在の browser status ではありません。現在の Atomics/pdump xterm route は、bundled pdmp を materialize し、dev server と static Pages bundle の両方で interactive waitpoint に到達することを確認しています。
 
-`make clean` は legacy `dist/` があれば削除し、`build/` と `docs/` を空にします。ただし、`build2/` と `vscode/` は意図的に残します。Pages 用ルートと VS Code 用ルートを独立して検証できるようにするためです。
+`make clean` は legacy `dist/` があれば削除し、`build/` と `docs/` を空にします。
 
 runtime / validation log は `logs/` に書かれますが、log file は Git ignore されます。reorganization baseline 以前の historical logs は `archive/old-logs/` に置きます。
 
@@ -427,18 +421,6 @@ doc/process-service.md
 - process は host ではなく compatibility layer（`src/runtime/process`）の service として提供する。Emacs 自身の process code はそのまま動く。擬似端末もこの layer が提供する。socket は明示的に unavailable boundary のままとする
 - product behavior と diagnostic behavior を分ける
 - low-level substrate は C/wasm-first とし、JavaScript は browser coordinator / host capability provider / diagnostic harness に留める
-
-## (アーカイブ済みの実験) VS Code `.wasifs` extension
-
-`.wasifs` ファイル用の VS Code custom editor を、Pages bundle とは別の lane として作りかけていました。ソースとテストは `archive/extensions/vscode-wasifs` に移してあり、ビルド・テスト・公開の対象外です。次のコマンドは、その extension が使っていた生成物を今も作れます。
-
-```sh
-make vscode-build
-```
-
-このコマンドは VS Code 専用 runtime artifacts を `build2/artifacts/` に生成し、webview app bundle を `vscode/app/` に生成します。`docs/app` や `docs/artifacts` は更新しません。
-
-このルートのブラウザ probe は `npm run test:vscode-lane` で実行します。
 
 ## 開発メモ
 

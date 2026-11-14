@@ -10,7 +10,8 @@ not depend on it; `tests/runtime/canonical-route.test.js` enforces that.
 archive/
   retired/     mechanisms retired on 2026-11-13, one directory per mechanism
   extensions/  the VS Code .wasifs extension (moved here 2026-11-14) with its
-               tests; run them with node --test archive/extensions/vscode-wasifs/tests/
+               tests; run them with node --test archive/extensions/vscode-wasifs/tests/.
+               Its build route is retired/vscode-asyncify-lane
   old-app/     earlier backups of the app directory
   old-logs/    validation and probe evidence from before the ignored-logs policy
 ```
@@ -26,12 +27,6 @@ untracked.
   `build/artifacts/emacs-browser-atomics-pdump`, built by
   `src/build/build-emacs-browser-atomics-pdump-profile.sh` from `vendor/emacs` +
   `src/c/patches` with `tools/scripts/wasmacs-atomics-host-library.js`.
-- **VS Code `.wasifs` lane (in development): Asyncify.** The extension itself
-  is archived (`archive/extensions/vscode-wasifs`); the runtime route remains:
-  `src/wasm/src/asyncify-minibuffer-worker.js`,
-  `tools/scripts/build-emacs-browser-asyncify-spike.sh` (with the perl patcher
-  `tools/scripts/patch-emacs-host-entrypoint-spike.sh` and
-  `tools/scripts/wasmacs-asyncify-host-library.js`), artifacts under `build2/`.
 - **Network: the Chrome companion extension** (`extension/`), the only network
   transport. The page relays `host.network.fetch` to it and has no fallback.
 
@@ -51,6 +46,7 @@ restore its `package.json` script from the history of that file.
 | `retired/pdump-bringup-experiments` | Probes and alternative builds used to get pdumper working under wasm (purecopy tracing, `bindings.el` bisects, `-O2` experiments, Asyncify pdump profiles, the assertions build, the diagnostic page). | pdump works and is part of the product build. Several of these scripts rewrite the live product build tree, so they must not be run casually. |
 | `retired/early-build-spikes` | Milestone 2/7 core and batch spikes and the milestone validators that still assumed the pre-`tools/` layout. | Superseded by the canonical build chain in `src/build/`. |
 | `retired/self-hosted-fetch-proxy` | `proxy/`: user-operated fetch proxy samples (Node, PHP, Rust, Perl, Ruby with an mkcert HTTPS variant, Python, PowerShell) and their test. With them went inline parts of live files: the page's direct `fetch` and proxy fallbacks with the `network-proxy` / `wasmacs-network-proxy` / `network-transport` parameters and the `wasmacs.networkProxyUrl` localStorage key, the worker's `wasmacsNetworkProxyUrl`, the dev server's `/__wasmacs_network_fetch` route, the `wasmacs-url-fetch-proxy-url` Lisp variable, and the direct XHR + proxy fallback in the C-side `wasmacs_host_network_fetch_json` (product patch and VS Code lane patcher). Recover those from the history of `src/wasm/xterm-atomics-pdump.html`, `src/wasm/src/emacs-atomics-pdump-worker.js`, `tools/scripts/serve-app.mjs`, `src/emacs-lisp/wasmacs-url-fetch.el`, `src/c/patches/0001-emacs-host-entrypoints-and-os-services.patch` and `tools/scripts/patch-emacs-host-entrypoint-spike.sh`. | Decided on 2026-11-13: the Chrome companion extension is the only network transport, so requests no longer fall back to a direct page fetch or a proxy. |
+| `retired/vscode-asyncify-lane` | The build route of the VS Code `.wasifs` extension (`archive/extensions/vscode-wasifs`), retired on 2026-11-14: the Asyncify Emacs build (`build-emacs-browser-asyncify-spike.sh`, its perl patcher `patch-emacs-host-entrypoint-spike.sh`, `wasmacs-asyncify-host-library.js`), the worker `asyncify-minibuffer-worker.js`, `build-vscode-assets.mjs`, the two browser probes of the route and its build-hygiene test, with the `make vscode-build` / `vscode-assets` / `clean-vscode` targets and the `vscode:*` / `test:vscode-lane` npm scripts. Design notes: a `.wasifs` file is the writable user image mounted at `/home/user`; VS Code owns the document lifecycle and asset loading, Emacs everything inside; webview workers had to be started from `blob:` URLs with wasm and preload data passed as bytes; keybindings only injected terminal bytes. | The extension was archived, so nothing consumed the route. It was the last user of Asyncify and of the perl patcher; the product uses `Atomics.wait` and `src/c/patches/`. Its outputs were `build2/` and `vscode/` (ignored; delete them locally). |
 | `retired/stale-c-patch-layer` | `src/c/patches/0001-wasmacs-host-entrypoint-and-terminal.patch` and `src/build/prepare-emacs-source.sh`. | The patch had drifted from the product (the build patched Emacs with a perl script instead) and the prepared tree was consumed by nothing. Replaced by `src/c/patches/000*.patch` + `src/build/apply-emacs-patches.sh`, which the product build applies. |
 
 The npm scripts that drove these mechanisms (`test:asyncify`, `test:persistent`,

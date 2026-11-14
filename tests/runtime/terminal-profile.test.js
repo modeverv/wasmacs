@@ -7,7 +7,6 @@ import { dirname, join } from "node:path";
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
 for (const relativePath of [
-  "tools/scripts/wasmacs-asyncify-host-library.js",
   "tools/scripts/wasmacs-atomics-host-library.js",
 ]) {
   test(`${relativePath} advertises xterm truecolor with cursor keys and mouse-ready terminal profile`, () => {

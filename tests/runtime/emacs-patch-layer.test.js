@@ -48,16 +48,6 @@ test("product build applies the patch layer and nothing else to Emacs sources", 
   assert.deepEqual([...new Set(edited)].sort(), ["src/Makefile", "src/config.h"]);
 });
 
-test("the perl patcher is confined to the VS Code Asyncify lane", () => {
-  const users = execFileSync("git", ["grep", "-l", "patch-emacs-host-entrypoint-spike.sh", "--", "src", "tools", "Makefile", "package.json", ".github"], {
-    cwd: repoRoot,
-    encoding: "utf8",
-  }).split("\n").filter(Boolean)
-    .filter((file) => existsSync(join(repoRoot, file)) && !file.endsWith(".md"))
-    .sort();
-  assert.deepEqual(users, ["tools/scripts/build-emacs-browser-asyncify-spike.sh"]);
-});
-
 test("C patch layer README documents the workflow", () => {
   const readme = read("src/c/README.md");
   assert.match(readme, /apply-emacs-patches\.sh/);
