@@ -462,9 +462,21 @@ Runtime and validation logs are written under `logs/`, but log files are ignored
 
 `dist/` is not part of the current layout.
 
-## Bundled software and licences
+## Licence
 
-The published runtime contains, besides GNU Emacs (GPL-3.0-or-later) and the programs of the process userland (see `src/userland/*/README.md`), SQLite 3.54.1. SQLite is in the [public domain](https://www.sqlite.org/copyright.html): it may be bundled and redistributed without conditions. Its source is not kept in this repository; `src/build/build-sqlite.sh` downloads the amalgamation from sqlite.org and checks it against the SHA3-256 published there. The database code that uses it, `src/sqlite.c`, is Emacs's own. Database files live in Emacs's in-memory filesystem (under `/home/user` they are part of the persistent user image); there is no write-ahead log and no extension loading.
+The code written for wasmacs is under the MIT licence ([LICENSE](LICENSE)), which asks only that its notice be kept. Some of this code runs inside GNU Emacs or is linked into GPL programs; the GPL asks that such code be under a GPL-compatible licence, and MIT is one (the FSF lists it as the Expat licence).
+
+wasmacs also changes, compiles and publishes other people's programs, and those keep their own licences:
+
+- **Changes to them** are under the licence of the program they change: the Emacs patches in `src/c/patches/` are GPL-3.0-or-later, the BusyBox patches and the git adapter GPL-2.0-only, the CPython patches PSF-2.0.
+- **The published site** (`docs/artifacts/`) holds GNU Emacs 30.2, GNU grep and GNU diffutils (GPL-3.0-or-later), BusyBox and git (GPL-2.0-only), CPython (PSF-2.0) and SQLite (public domain), compiled with Emscripten (MIT). It is not under MIT.
+- **Their source**, the exact archives they were built from, is kept as the files of the release [`sources-2026-11-15`](https://github.com/modeverv/wasmacs/releases/tag/sources-2026-11-15); with the patches and build scripts of this repository it is the complete corresponding source.
+
+[NOTICE.md](NOTICE.md) has the whole table: which file is under which licence, versions, checksums. The texts are in [LICENSES/](LICENSES), and the site publishes all of it under [`licenses/`](https://modeverv.github.io/wasmacs/licenses/NOTICE.txt). A copy of the published files on another site distributes these programs under the same licences and should carry that directory. When the published programs are rebuilt from other sources, the release and `NOTICE.md` change with them.
+
+### SQLite
+
+The published runtime contains, besides GNU Emacs and the programs of the process userland (see `src/userland/*/README.md`), SQLite 3.54.1. SQLite is in the [public domain](https://www.sqlite.org/copyright.html): it may be bundled and redistributed without conditions. Its source is not kept in this repository; `src/build/build-sqlite.sh` downloads the amalgamation from sqlite.org and checks it against the SHA3-256 published there. The database code that uses it, `src/sqlite.c`, is Emacs's own. Database files live in Emacs's in-memory filesystem (under `/home/user` they are part of the persistent user image); there is no write-ahead log and no extension loading.
 
 ## Architecture
 

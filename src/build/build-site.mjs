@@ -1,4 +1,4 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
@@ -166,6 +166,19 @@ await rm(join(docsRoot, "coi-serviceworker.js"), { force: true });
 await cp(wasmSource, docsApp, { recursive: true });
 await cp(join(wasmSource, "coi-serviceworker.js"), join(docsRoot, "coi-serviceworker.js"));
 await copyIfExists(screenshotSource, docsScreenshots);
+
+// The licences go where the programs go.  NOTICE says which program is under
+// which licence and where its source is; files.txt lists the directory, for
+// a script that copies the published files (elisp-studio's fetch-emacs.sh).
+const docsLicenses = join(docsRoot, "licenses");
+await rm(docsLicenses, { recursive: true, force: true });
+await mkdir(docsLicenses, { recursive: true });
+const licenseFiles = [["NOTICE.txt", "NOTICE.md"], ["LICENSE.txt", "LICENSE"]];
+for (const name of (await readdir(join(repoRoot, "LICENSES"))).sort()) {
+  licenseFiles.push([name, join("LICENSES", name)]);
+}
+for (const [name, source] of licenseFiles) await cp(join(repoRoot, source), join(docsLicenses, name));
+await writeFile(join(docsLicenses, "files.txt"), licenseFiles.map(([name]) => `${name}\n`).join(""));
 
 const pagesIndex = `<!doctype html>
 <html lang="en">

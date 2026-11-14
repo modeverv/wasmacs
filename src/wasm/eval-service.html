@@ -26,7 +26,8 @@
     <main>
       <h1>wasmacs eval service <span id="status">loading Emacs…</span></h1>
       <p>GNU Emacs 30.2 as a Lisp engine: the page sends Lisp, Emacs evaluates it and returns the value.
-         No terminal and no command loop. Definitions stay until the page is reloaded. Ctrl+Enter evaluates.</p>
+         No terminal and no command loop. Definitions stay until the page is reloaded. Ctrl+Enter evaluates.
+         Emacs is free software under the GNU GPL: <a href="../licenses/NOTICE.txt">licences and source</a>.</p>
       <textarea id="source" spellcheck="false">(defun fib (n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))
 (list :emacs emacs-version
       :fib20 (fib 20)

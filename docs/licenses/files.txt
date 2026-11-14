@@ -1,0 +1,10 @@
+NOTICE.txt
+LICENSE.txt
+Emscripten.txt
+GPL-2.0-only.txt
+GPL-3.0-or-later.txt
+LLVM-compiler-rt.txt
+PSF-2.0.txt
+Zlib.txt
+coi-serviceworker.txt
+musl.txt

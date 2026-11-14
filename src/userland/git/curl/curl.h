@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /* Private source-compatibility surface for Git 2.52.1 remote-curl.c.
  * This is NOT libcurl: only the options used by that pinned source exist.
  * All HTTP, redirects and TLS are owned by wasmacs's browser host.

@@ -401,9 +401,21 @@ runtime / validation log は `logs/` に書かれますが、log file は Git ig
 
 `dist/` は現在の layout には含まれません。
 
-## 同梱ソフトウェアとライセンス
+## ライセンス
 
-公開しているランタイムには、GNU Emacs（GPL-3.0-or-later）と process userland の各プログラム（`src/userland/*/README.md` を参照）に加えて、SQLite 3.54.1 が含まれます。SQLite は[パブリックドメイン](https://www.sqlite.org/copyright.html)で、条件なしに同梱・再配布できます。ソースはこのリポジトリには置いていません。`src/build/build-sqlite.sh` が sqlite.org から amalgamation をダウンロードし、sqlite.org が公開している SHA3-256 と照合します。これを使うデータベースのコード（`src/sqlite.c`）は Emacs 自身のものです。データベースファイルは Emacs のメモリ上のファイルシステムに置かれます（`/home/user` 以下なら永続化される user image の一部になります）。write-ahead log と拡張の読み込みはありません。
+wasmacs のために書いたコードは MIT ライセンスです（[LICENSE](LICENSE)）。条件は、ライセンスの表示を残すことだけです。このコードの一部は GNU Emacs の中で動き、GPL のプログラムにリンクされます。GPL は、そうしたコードに GPL と両立するライセンスを求めます。MIT はその1つです（FSF の一覧では Expat ライセンスという名前です）。
+
+wasmacs は、他の人が書いたプログラムを変更し、コンパイルし、公開してもいます。それらのライセンスは元のままです。
+
+- **変更部分**は、変更対象のプログラムのライセンスに従います。`src/c/patches/` の Emacs へのパッチは GPL-3.0-or-later、BusyBox へのパッチと git 用のアダプターは GPL-2.0-only、CPython へのパッチは PSF-2.0 です。
+- **公開サイト**（`docs/artifacts/`）には、GNU Emacs 30.2、GNU grep、GNU diffutils（GPL-3.0-or-later）、BusyBox、git（GPL-2.0-only）、CPython（PSF-2.0）、SQLite（パブリックドメイン）を、Emscripten（MIT）でコンパイルしたものが入っています。これらは MIT ではありません。
+- **ソース**は、ビルドに使ったアーカイブそのものを、リリース [`sources-2026-11-15`](https://github.com/modeverv/wasmacs/releases/tag/sources-2026-11-15) のファイルとして置いています。このリポジトリのパッチとビルドスクリプトを合わせると、公開しているプログラムに対応するソースの全体になります。
+
+どのファイルがどのライセンスか、バージョン、チェックサムの一覧は [NOTICE.md](NOTICE.md) にあります。ライセンスの全文は [LICENSES/](LICENSES) にあり、公開サイトも同じものを [`licenses/`](https://modeverv.github.io/wasmacs/licenses/NOTICE.txt) で配信しています。公開しているファイルを別のサイトにコピーすると、これらのプログラムを同じライセンスで配布することになります。そのときは、このディレクトリも一緒に置いてください。公開するプログラムを別のソースからビルドし直したときは、リリースと `NOTICE.md` も合わせて更新します。
+
+### SQLite
+
+公開しているランタイムには、GNU Emacs と process userland の各プログラム（`src/userland/*/README.md` を参照）に加えて、SQLite 3.54.1 が含まれます。SQLite は[パブリックドメイン](https://www.sqlite.org/copyright.html)で、条件なしに同梱・再配布できます。ソースはこのリポジトリには置いていません。`src/build/build-sqlite.sh` が sqlite.org から amalgamation をダウンロードし、sqlite.org が公開している SHA3-256 と照合します。これを使うデータベースのコード（`src/sqlite.c`）は Emacs 自身のものです。データベースファイルは Emacs のメモリ上のファイルシステムに置かれます（`/home/user` 以下なら永続化される user image の一部になります）。write-ahead log と拡張の読み込みはありません。
 
 ## アーキテクチャ
 

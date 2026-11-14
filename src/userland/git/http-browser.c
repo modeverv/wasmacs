@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /* Browser HTTP adapter for the unmodified, pinned Git remote-curl.c.
  * Git owns the remote-helper protocol, discovery, negotiation, fetch-pack,
  * send-pack, authentication helpers and pack validation. This file owns only
