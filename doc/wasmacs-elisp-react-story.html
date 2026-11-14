@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="wasmacsとelisp-react。Emacs好きから、VS Codeを使うエンジニアへ。ブラウザのボタンを押すと本物のEmacsがUIを計算する仕組みと、その面白さ。">
+<title>ブラウザのボタンを押すと、Emacs が考える。</title>
+<style>
+*{box-sizing:border-box}html{scroll-behavior:auto}body{margin:0;background:var(--background,#f7f7f5);color:var(--foreground,#202527);font-family:var(--font-sans,-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif);line-height:1.85;font-size:16px}a{color:var(--primary,#4258a8);text-underline-offset:4px}button,a{touch-action:manipulation}button{font:inherit;cursor:pointer}button:focus-visible,a:focus-visible,summary:focus-visible{outline:3px solid var(--ring,#785ac2);outline-offset:4px}button:disabled{cursor:default;opacity:.45}::selection{background:#ded3fa;color:#222}main{max-width:1100px;margin:auto;padding:0 32px 48px}.topline{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:25px 0;border-bottom:1px solid var(--border,#d8dcdd);font:12px var(--font-mono,monospace);letter-spacing:.09em}.topline a{color:var(--muted-foreground,#5e6870)}.brand{font-weight:800;letter-spacing:.04em}.hero{padding:72px 0 52px}.eyebrow{font-size:12px;font-weight:750;letter-spacing:.13em;color:var(--muted-foreground,#5e6870);text-transform:uppercase;margin:0 0 16px}.hero h1{font-size:clamp(33px,5.2vw,58px);line-height:1.42;letter-spacing:-.055em;margin:0 0 26px;font-weight:850}.hero h1 span{color:var(--chart-3,#7654ab)}.lead{font-size:19px;max-width:780px;line-height:1.95;margin:0}.intro-note{color:var(--muted-foreground,#5e6870);font-size:13px;margin-top:20px}.actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:26px}.btn{border:1px solid var(--border,#d8dcdd);background:var(--card,#fff);color:var(--card-foreground,#202527);border-radius:8px;padding:10px 18px;font-size:14px;font-weight:650;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:9px}.btn.primary{background:var(--primary,#403455);color:var(--primary-foreground,#fff);border-color:transparent}.btn:hover{background:var(--accent,#ede8f7);color:var(--accent-foreground,#33284b)}.ribbon{display:grid;grid-template-columns:1fr 40px 1fr;gap:16px;padding:24px;border:1px solid var(--border,#d8dcdd);border-radius:14px;background:var(--card,#fff)}.ribbon .arrow{display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--muted-foreground,#5e6870)}.ribbon strong{font-size:20px;display:block}.ribbon p{font-size:14px;margin:4px 0 0;color:var(--muted-foreground,#5e6870)}.tag{font:11px var(--font-mono,monospace);letter-spacing:.06em;display:inline-block;color:var(--muted-foreground,#5e6870)}section{margin-top:66px;scroll-margin-top:24px}.section-head{display:grid;grid-template-columns:48px 1fr;gap:12px;align-items:start;margin-bottom:22px}.section-head .num{font:18px var(--font-mono,monospace);color:var(--chart-3,#7654ab);padding-top:10px}.section-head h2{font-size:27px;line-height:1.55;letter-spacing:-.025em;margin:0}.section-head p{margin:6px 0 0;color:var(--muted-foreground,#5e6870);font-size:14px}.talk{padding:30px 36px;border-left:4px solid var(--chart-3,#7654ab);background:var(--card,#fff);border-radius:0 14px 14px 0;margin:0}.talk p{margin:0 0 17px;font-size:17px}.talk p:last-child{margin-bottom:0}.talk strong{font-weight:800}.talk-credit{font-size:12px;color:var(--muted-foreground,#5e6870);margin:12px 0 0}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.card{padding:25px;border:1px solid var(--border,#d8dcdd);border-radius:12px;background:var(--card,#fff)}.card h3{font-size:19px;line-height:1.6;margin:10px 0}.card p{font-size:14px;margin:0}.card .mark{font:24px var(--font-mono,monospace);color:var(--chart-3,#7654ab)}.code,code{font-family:var(--font-mono,"SFMono-Regular",Consolas,monospace)}p code,td code{font-size:.88em;background:var(--muted,#eeedf1);color:var(--foreground,#202527);padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}.small{font-size:13px;color:var(--muted-foreground,#5e6870)}.diagram{display:grid;grid-template-columns:1fr 42px 1.55fr;gap:12px;align-items:stretch;margin-top:22px}.zone{border:1px solid var(--border,#d8dcdd);border-radius:14px;background:var(--card,#fff);padding:24px}.zone h3{margin:6px 0 17px;font-size:20px}.zone p{margin:7px 0;font-size:14px}.bridge{display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--chart-3,#7654ab)}.chiprow{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px}.chip{font-size:12px;padding:4px 10px;border-radius:5px;background:var(--muted,#eeedf1);color:var(--foreground,#202527)}.engine{border:1px solid var(--border,#d8dcdd);border-radius:9px;padding:15px 18px;margin-top:16px}.engine strong{display:block;font-size:16px}.engine small{color:var(--muted-foreground,#5e6870)}.note{font-size:13px;color:var(--muted-foreground,#5e6870);margin:14px 0 0}.lab{margin-top:24px;border:1px solid var(--border,#d8dcdd);border-radius:14px;overflow:hidden;background:var(--card,#fff)}.lab-top{padding:18px 22px;background:var(--muted,#eeedf1);display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}.lab-top strong{font-size:15px}.lab-top small{font-size:12px;color:var(--muted-foreground,#5e6870)}.lab-body{display:grid;grid-template-columns:200px 1fr;gap:24px;padding:25px}.mini-counter{border-right:1px solid var(--border,#d8dcdd);padding-right:24px;text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center}.mini-counter output{font:64px var(--font-mono,monospace);line-height:1.25;margin:10px 0 15px}.mini-counter p{margin:0;font-size:12px;color:var(--muted-foreground,#5e6870)}.mini-counter .btn{width:100%}.flow-steps{display:flex;gap:7px;margin-bottom:16px;flex-wrap:wrap}.step{padding:6px 10px;border:1px solid var(--border,#d8dcdd);border-radius:6px;background:var(--background,#f7f7f5);color:var(--muted-foreground,#5e6870);font-size:12px}.step[aria-current="step"]{background:var(--primary,#403455);color:var(--primary-foreground,#fff);border-color:transparent}.flow-text{min-height:145px}.flow-text h4{margin:0 0 6px;font-size:17px}.flow-text p{font-size:14px;margin:0 0 10px}.flow-text pre{background:var(--muted,#eeedf1);color:var(--foreground,#202527);padding:12px 14px;font-size:13px;border-radius:6px;overflow:auto;line-height:1.6;margin:12px 0}.flow-buttons{display:flex;gap:8px;flex-wrap:wrap}.flow-buttons .btn{padding:6px 13px;font-size:12px}.code-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:20px}.code-panel{background:#20242f;color:#e8eaf0;border-radius:12px;overflow:hidden}.code-label{font:12px var(--font-mono,monospace);padding:14px 20px;background:#2c313e;color:#c3c9db}.code-panel pre{margin:0;padding:22px;font:13px/1.9 var(--font-mono,Consolas,monospace);overflow-x:auto;tab-size:2}.code-panel .kw{color:#d1acff}.code-panel .str{color:#b7d89a}.code-panel .comment{color:#a3adc3}.read-code{padding:2px 8px}.read-code h3{font-size:18px;margin:10px 0}.read-code p{font-size:14px;margin:0 0 16px}.read-code .term{font:12px var(--font-mono,monospace);color:var(--chart-3,#7654ab);font-weight:700}.table-wrap{overflow-x:auto;border:1px solid var(--border,#d8dcdd);border-radius:12px;margin-top:24px}table{border-collapse:collapse;width:100%;background:var(--card,#fff);font-size:14px}th,td{text-align:left;padding:15px 18px;border-bottom:1px solid var(--border,#d8dcdd);vertical-align:top}th{font-size:12px;background:var(--muted,#eeedf1);font-weight:700}tr:last-child td{border-bottom:0}td:first-child{width:27%;font-weight:650}.status-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.status-grid h3{font-size:18px;margin:0 0 14px}.status-grid ul{padding-left:20px;margin:0;font-size:14px}.status-grid li{margin:8px 0}.status-label{font:11px var(--font-mono,monospace);letter-spacing:.08em;color:var(--chart-3,#7654ab);margin-bottom:10px}.proof{margin-top:18px;padding:17px 22px;background:var(--muted,#eeedf1);border-radius:9px;font-size:13px}.proof p{margin:4px 0}.qa details{border-top:1px solid var(--border,#d8dcdd);padding:18px 3px}.qa details:last-child{border-bottom:1px solid var(--border,#d8dcdd)}summary{font-size:17px;font-weight:650;cursor:pointer}details p{font-size:14px;margin:12px 25px 0}.closing{padding:34px 30px;border-radius:14px;border:1px solid var(--border,#d8dcdd);background:var(--card,#fff)}.closing p{font-size:23px;line-height:1.7;font-weight:700;margin:0;letter-spacing:-.025em}.closing small{display:block;margin-top:13px;color:var(--muted-foreground,#5e6870);font-size:13px}.sources{margin-top:40px;border-top:1px solid var(--border,#d8dcdd);padding-top:22px}.sources summary{font-size:13px}.sources ol{font-size:12px;padding-left:22px}.sources li{margin:10px 0;overflow-wrap:anywhere}.footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;font-size:11px;color:var(--muted-foreground,#5e6870);margin-top:28px}.no-js{padding:12px 20px;font-size:14px}.sep{height:1px;background:var(--border,#d8dcdd);margin:24px 0}
+@media(max-width:760px){main{padding:0 19px 32px}.topline{font-size:10px}.hero{padding:42px 0 32px}.lead{font-size:16px}.ribbon{padding:19px;grid-template-columns:1fr;gap:10px}.ribbon .arrow{transform:rotate(90deg);height:22px}.cards,.code-grid,.status-grid,.diagram{grid-template-columns:1fr}.bridge{transform:rotate(90deg);height:26px}.section-head{grid-template-columns:32px 1fr;gap:8px}.section-head h2{font-size:23px}.section-head .num{font-size:14px}section{margin-top:46px}.talk{padding:22px}.talk p{font-size:15px}.lab-body{grid-template-columns:1fr;padding:20px}.mini-counter{border-right:0;border-bottom:1px solid var(--border,#d8dcdd);padding:0 0 20px;flex-direction:row;gap:18px;flex-wrap:wrap}.mini-counter output{font-size:42px;margin:0}.mini-counter .btn{width:auto}.flow-text{min-height:0}.closing p{font-size:20px}th,td{padding:12px;font-size:12px}.code-panel pre{padding:17px;font-size:11px}.table-wrap td:first-child{width:28%}}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+@media print{body{background:#fff;color:#111;font-size:11pt}main{max-width:none;padding:0}.topline,.actions,.flow-buttons,.mini-counter .btn{display:none}.hero{padding:0 0 20px}.hero h1{font-size:30pt}.lead{font-size:12pt}section{margin-top:28px}.cards{gap:10px}.card,.talk,.zone,.lab,.closing,.code-panel{break-inside:avoid}.section-head h2{font-size:18pt}.talk p{font-size:11pt}.sources details>*{display:block}.code-panel{print-color-adjust:exact;-webkit-print-color-adjust:exact}.footer{font-size:9pt}}
+</style>
+</head>
+<body>
+<main>
+<header class="topline"><span class="brand">(wasmacs × elisp-react)</span><a href="#talk">Emacs Church からの技術談義 ↘</a></header>
+<div class="hero">
+  <p class="eyebrow">For engineers who usually live in VS Code</p>
+  <h1>ブラウザのボタンを押すと、<br><span>Emacs が考える。</span></h1>
+  <p class="lead">ページの裏で、本物の GNU Emacs が動く。<br>Elisp が状態を変え、次の UI と差分を計算し、ブラウザがそれを描く。<br>wasmacs と elisp-react は、そんな境界越えの実験です。</p>
+  <p class="intro-note">Emacs 好きが、いつもの Web 開発の言葉で面白さを語るための説明ページ。</p>
+  <div class="actions"><a class="btn primary" href="#mechanism">クリックの中身を見る <span aria-hidden="true">↓</span></a><a class="btn" href="https://modeverv.github.io/elisp-react/examples/counter/" target="_blank" rel="noopener noreferrer">本物のデモを開く ↗</a></div>
+</div>
+<div class="ribbon" aria-label="二つのプロジェクトの関係">
+  <div><span class="tag">01 / WASMACS</span><strong>Emacs を、ブラウザの中へ。</strong><p>C コアと Elisp の実行環境を WebAssembly に載せる。</p></div>
+  <div class="arrow" aria-hidden="true">→</div>
+  <div><span class="tag">02 / ELISP-REACT</span><strong>その Emacs で、Web UI を作る。</strong><p>状態・コンポーネント・差分計算を Elisp で書く。</p></div>
+</div>
+
+<section id="talk">
+  <div class="section-head"><span class="num">01</span><div><h2>まず、こんなふうに話したい。</h2><p>約 1 分の導入。エディタの好みを越えて共有できる話から。</p></div></div>
+  <blockquote class="talk">
+    <p>Emacs 好きが「Emacs は環境なんだ」と言うと、だいたい話が長くなるんですが、今日はボタンひとつで説明できます。</p>
+    <p>このボタンを押すと、ブラウザの中にいる本物の Emacs が Lisp を実行するんです。Lisp が状態を更新して、次の画面を組み立てて、前の画面との差分を計算する。JavaScript がそれを DOM に反映します。</p>
+    <p>React でおなじみの「状態から UI を作る」を、Emacs Lisp で作ってみた。それを動かしているのが、Emacs 本体を WebAssembly に載せた wasmacs です。</p>
+    <p>面白いのはここで、<strong>Emacs をブラウザで使えるようにしたら、今度は Emacs を使ってブラウザのアプリを作れるようになった。</strong></p>
+    <p>VS Code でコードを書いていても、この面白さは共有できると思うんです。エディタとして知っていたものが、Web アプリの実行エンジンとして働いているんですよ。</p>
+  </blockquote>
+  <p class="talk-credit">説明用に作成した語り口の案です。実在の人物の発言や、作者の逐語引用ではありません。</p>
+</section>
+
+<section>
+  <div class="section-head"><span class="num">02</span><div><h2>エンジニアとして、どこが楽しい？</h2></div></div>
+  <div class="cards">
+    <article class="card"><span class="mark">λ</span><h3>いつもの言語の<br>行き先が増える。</h3><p>普段はエディタの動作を変える Elisp の関数が、Web ページの振る舞いを決める。クリック先のハンドラも、Emacs の中にいる Lisp のクロージャです。</p></article>
+    <article class="card"><span class="mark">ƒ</span><h3>UI の仕組みを、<br>手でつかめる。</h3><p>状態、描画、差分、DOM 更新を分けて実装する。「宣言的 UI」が具体的に何をしているのかを、自分で追える規模の Lisp で観察できます。</p></article>
+    <article class="card"><span class="mark">↔</span><h3>実行環境と画面を、<br>組み替えられる。</h3><p>UI を計算する場所と、実際に描く場所をプロトコルでつなぐ。画面が普通の HTML でも、その背後でどの言語が考えるかは選べる、という実例です。</p></article>
+  </div>
+  <p class="note">ここでの「面白さ」は、この構成から読み取れる技術的な価値の説明です。性能や実用性の優位を測定した結論ではありません。</p>
+</section>
+
+<section id="mechanism">
+  <div class="section-head"><span class="num">03</span><div><h2>ひとつのクリックが、二つの世界を往復する。</h2><p>UI ≈ render(props, state)。その計算を担当するのが Elisp。</p></div></div>
+  <div class="diagram">
+    <div class="zone"><span class="tag">BROWSER / MAIN THREAD</span><h3>JavaScript のホスト</h3><div class="chiprow"><span class="chip">イベント転送</span><span class="chip">DOM 操作</span></div><p>ボタンや入力欄は普通の HTML。イベントを小さなデータにして送り、返ってきた操作列を DOM に適用します。</p><p class="small">タイマー・fetch・localStorage の実行も、ブラウザ側が担当します。</p></div>
+    <div class="bridge" aria-label="JSONによる双方向通信">⇄</div>
+    <div class="zone"><span class="tag">WEB WORKER / WASMACS EVAL SERVICE</span><h3>GNU Emacs の中で動く Elisp</h3><div class="chiprow"><span class="chip">コンポーネント</span><span class="chip">props / state</span><span class="chip">差分計算</span></div><p>イベントのクロージャを呼ぶ → 状態を更新 → 新しい UI の木を作る → 前の木と比較して、必要な操作を返す。</p><div class="engine"><strong>GNU Emacs 30.2 → WebAssembly</strong><small>C コア / Elisp 評価器 / バイトコード実行系<br>eval service ではエディタ画面を起動せず、Lisp エンジンとして使います。</small></div></div>
+  </div>
+  <p class="note">定義や状態は Worker が生きている間保持されます。イベントごとに Emacs を起動し直す構成ではありません。<a href="https://github.com/modeverv/wasmacs/blob/c640e7c420559074efeaee7f930b65d54f7cc90c/doc/eval-service.md" target="_blank" rel="noopener noreferrer">eval service の契約 ↗</a></p>
+  <div class="lab">
+    <div class="lab-top"><strong>クリックから DOM 更新までを追う</strong><small>説明用の JavaScript シミュレーション / ここでは Emacs を読み込みません</small></div>
+    <noscript><p class="no-js">操作デモには JavaScript が必要です。流れは「イベント → state 更新 → 差分計算 → DOM 反映」です。</p></noscript>
+    <div class="lab-body">
+      <div class="mini-counter"><p>画面に見えている値</p><output id="counter" aria-live="polite">3</output><button id="trigger" class="btn primary" type="button">+1 をクリック</button></div>
+      <div>
+        <div class="flow-steps" aria-label="処理の段階"><span class="step" data-step="1">1 イベント</span><span class="step" data-step="2">2 状態</span><span class="step" data-step="3">3 差分</span><span class="step" data-step="4">4 DOM</span></div>
+        <div id="flow-text" class="flow-text" aria-live="polite" aria-atomic="true"><h4>ボタンを押すと、旅が始まります。</h4><p>「+1 をクリック」の後、「次へ」で一段ずつ進めてください。状態の更新と、画面の更新を分けて観察できます。</p><pre class="code">state: 3   →   表示: 3</pre></div>
+        <div class="flow-buttons"><button id="advance" type="button" class="btn" disabled>次へ →</button><button id="reset" type="button" class="btn">最初に戻す</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="section-head"><span class="num">04</span><div><h2>括弧の中にも、見慣れた UI がある。</h2><p>elisp-react の既存 API を使ったカウンター。コンポーネントを宣言し、状態から表示を返す。</p></div></div>
+  <div class="code-grid">
+    <div class="code-panel"><div class="code-label">counter.el / Emacs Lisp</div><pre><code><span class="comment">;;; -*- lexical-binding: t; -*-</span>
+(<span class="kw">react-define-component</span> 'counter
+  :initial-state
+  (<span class="kw">lambda</span> (props)
+    (list :count (or (plist-get props :start) 0)))
+  :render
+  (<span class="kw">lambda</span> (self)
+    `(div (:class <span class="str">"counter"</span>)
+       (p () ,(format <span class="str">"Count: %d"</span>
+                      (react-state self :count)))
+       (button
+        (:on-click
+         ,(<span class="kw">lambda</span> (_event)
+            (react-set-state self :count
+              (1+ (react-state self :count)))))
+        <span class="str">"+1"</span>))))
+
+(<span class="kw">react-mount</span> '(counter (:start 3)) <span class="str">"#app"</span>)</code></pre></div>
+    <div class="read-code">
+      <span class="term">STATE → VIEW</span><h3>数字から、UI の木を返す。</h3><p><code>react-state</code> で状態を読み、<code>render</code> が要素の木を返します。<code>div</code> や <code>button</code> は Lisp のリストです。</p>
+      <span class="term">EVENT → STATE</span><h3>イベントに、関数を渡す。</h3><p><code>lambda</code> は無名関数。<code>self</code> を捕まえたクロージャが、そのカウンターの状態を更新します。JS 側に増分のロジックを書く必要はありません。</p>
+      <span class="term">CODE AS DATA</span><h3>UI も、Lisp が扱えるデータ。</h3><p>バッククォートはリストのひな型、カンマは式の結果を埋める位置。JSX に慣れた人向けには、同じリストを作る <code>jsx</code> マクロもあります。</p>
+      <p class="small"><a href="https://github.com/modeverv/elisp-react/blob/2fc332892e33887e77d512bd0db5a29c9e4dc701/README.ja.md" target="_blank" rel="noopener noreferrer">実際の API と使用例 ↗</a></p>
+    </div>
+  </div>
+  <div class="table-wrap"><table><thead><tr><th scope="col">Web 開発で知っていること</th><th scope="col">この実験での対応</th></tr></thead><tbody>
+    <tr><td>コンポーネントと props</td><td><code>react-define-component</code> と Lisp のプロパティリスト。</td></tr>
+    <tr><td>state の更新 → 再描画</td><td><code>react-set-state</code> が更新を記録し、イベント処理の後に描画と差分計算。</td></tr>
+    <tr><td>仮想 DOM と reconciliation</td><td>Lisp の木を比較し、<code>set-text</code> などの操作列にする。key による再利用・並べ替えも実装。</td></tr>
+    <tr><td>画面への commit</td><td>JS ホストが操作列を読み、ブラウザの DOM API を呼ぶ。</td></tr>
+  </tbody></table></div>
+  <p class="note">React との対応は考え方の比較です。elisp-react は初期 React の核を題材にした独自実装で、公式 React の移植や API 互換実装ではありません。Hooks / useState の実装でもありません。<a href="https://react.dev/learn/render-and-commit" target="_blank" rel="noopener noreferrer">React の render / commit 解説 ↗</a></p>
+</section>
+
+<section>
+  <div class="section-head"><span class="num">05</span><div><h2>小さいボタンから、広い問いが見える。</h2></div></div>
+  <div class="cards">
+    <article class="card"><span class="tag">IDENTITY</span><h3>行を動かしても、<br>「同じ部品」でいられる？</h3><p>key を付けた行の並べ替えで、DOM と state の同一性を保つ。見た目の移動と、コンポーネントの寿命が別物だと分かります。</p></article>
+    <article class="card"><span class="tag">EFFECTS</span><h3>副作用も、<br>データとして渡せる。</h3><p>「この URL を取得して」「タイマーを登録して」という依頼をホストへ送り、結果で Lisp のコールバックを呼ぶ。現行実装にはその橋渡しがあります。</p></article>
+    <article class="card"><span class="tag">TESTABILITY</span><h3>DOM がなくても、<br>UI の判断を試せる。</h3><p>Lisp が返した操作列を検査すれば、描画や通信の判断を Emacs 単体でもテストできる。実際のブラウザとの接続は、別に検証できます。</p></article>
+  </div>
+  <p class="note">これらは現行コードで確認した仕組みです。<a href="https://github.com/modeverv/elisp-react/blob/2fc332892e33887e77d512bd0db5a29c9e4dc701/doc/design.md" target="_blank" rel="noopener noreferrer">設計と境界を読む ↗</a></p>
+</section>
+
+<section>
+  <div class="section-head"><span class="num">06</span><div><h2>いま動くことと、実験の余白。</h2><p>2026年11月14日のコード・文書・確認結果に基づく整理。</p></div></div>
+  <div class="status-grid">
+    <article class="card"><div class="status-label">IMPLEMENTED</div><h3>動く仕組みが、すでにある。</h3><ul><li>Elisp のコンポーネント・props・state・差分計算。</li><li>key を使った再利用と並べ替え、マウント／更新／破棄のライフサイクル。</li><li>タイマー・fetch・localStorage のホスト連携。</li><li>カウンター、リスト、TODO、非同期処理の公開例。</li></ul></article>
+    <article class="card"><div class="status-label">EXPERIMENTAL</div><h3>フレームワークとしては発展途上。</h3><ul><li>初回は Emacs 一式で約150 MB。後続起動向けのキャッシュあり。</li><li>非同期 API はコールバック式。返らない Lisp 処理を止めるには Worker の終了・再起動が必要。</li><li>SVG・context・再描画の細かな最適化などに未対応の領域。</li><li>Worker の状態は再読み込みで失われる。保存したいアプリデータは別に扱う。</li></ul></article>
+  </div>
+  <div class="proof"><p><strong>この資料を作る際の確認：</strong>公開カウンターで Apples 3 → 4 → reset 0、Oranges 0 → 1 の表示変化をブラウザで確認。ネイティブ Emacs の Lisp テストは 25 / 25 成功。</p><p>他の公開例のブラウザ動作を網羅的に再試験したわけではありません。速度比較も実施していません。実装内容はソース確認、UI の実測は上記カウンターの範囲です。</p></div>
+  <p class="note">wasmacs のエディタ本体と eval service は用途が異なります。エディタ側のファイル永続化やサブプロセス機能が、そのままこのサービスに備わるわけではありません。</p>
+</section>
+
+<section class="qa">
+  <div class="section-head"><span class="num">07</span><div><h2>たぶん、こう聞かれる。</h2></div></div>
+  <details open><summary>「React でよくない？」</summary><p>アプリを作る選択肢として React は自然です。この実験では、UI の状態管理と差分計算を別の言語・実行環境で組み立てることで、フレームワークの仕組みと Emacs の使い道を探れます。その過程そのものが楽しいんです。</p></details>
+  <details open><summary>「Emacs を覚えないと楽しめない？」</summary><p>入口は、状態・関数・イベント・DOM です。普段のエディタで <code>.el</code> を書いても構いません。Web 開発の知識を使って、クリックから描画までを読めます。</p></details>
+  <details><summary>「それ、Lisp を JavaScript に変換しているの？」</summary><p>Elisp は WebAssembly 化された GNU Emacs で評価します。ブラウザとの接点に JavaScript は使いますが、コンポーネントのロジックや差分計算を実行するのは Emacs です。</p></details>
+  <details><summary>「Emacs の資産が、そのまま全部 Web で使える？」</summary><p>使える範囲は各パッケージが要求する機能次第です。eval service はリクエストを順番に評価するエンジンで、通常の対話 Emacs と同じ常駐イベントループや OS 機能を備えてはいません。elisp-react は必要なブラウザ機能を、明示的なホスト連携で足しています。</p></details>
+</section>
+
+<section class="closing">
+  <p>「Emacs は環境なんだ」が、<br>ブラウザのボタンひとつで伝わる。</p>
+  <small>Emacs Church 的な愛着を、状態・関数・プロトコルという共通言語にすると、この実験の面白さが届きます。</small>
+  <div class="actions"><a class="btn primary" href="https://modeverv.github.io/elisp-react/" target="_blank" rel="noopener noreferrer">公開デモ集を触る ↗</a><a class="btn" href="https://github.com/modeverv/elisp-react" target="_blank" rel="noopener noreferrer">実装を読む ↗</a><a class="btn" href="#talk">話すための台本に戻る ↑</a></div>
+</section>
+
+<div class="sources"><details><summary>出典と確認範囲</summary><ol>
+  <li><a href="https://github.com/modeverv/wasmacs/blob/c640e7c420559074efeaee7f930b65d54f7cc90c/doc/eval-service.md" target="_blank" rel="noopener noreferrer">wasmacs: Eval Service</a> — Worker、実 Emacs、JSON、状態の寿命、キャッシュ、サービスの制約。</li>
+  <li><a href="https://github.com/modeverv/elisp-react/blob/2fc332892e33887e77d512bd0db5a29c9e4dc701/README.ja.md" target="_blank" rel="noopener noreferrer">elisp-react: README 日本語版</a> — プロジェクトの目的、既存 API、サンプル。</li>
+  <li><a href="https://github.com/modeverv/elisp-react/blob/2fc332892e33887e77d512bd0db5a29c9e4dc701/lisp/react.el" target="_blank" rel="noopener noreferrer">lisp/react.el</a> / <a href="https://github.com/modeverv/elisp-react/blob/2fc332892e33887e77d512bd0db5a29c9e4dc701/js/elisp-react.js" target="_blank" rel="noopener noreferrer">js/elisp-react.js</a> — 状態更新、reconciler、イベント配送、操作列の適用と副作用のホスト。</li>
+  <li><a href="https://github.com/modeverv/elisp-react/blob/2fc332892e33887e77d512bd0db5a29c9e4dc701/doc/design.md" target="_blank" rel="noopener noreferrer">設計</a> / <a href="https://github.com/modeverv/elisp-react/blob/2fc332892e33887e77d512bd0db5a29c9e4dc701/doc/experiment-notes.md" target="_blank" rel="noopener noreferrer">実験記録</a> — key、ライフサイクル、副作用、制約。初期段階の未実装事項は現行実装と区別。</li>
+  <li><a href="https://react.dev/learn/render-and-commit" target="_blank" rel="noopener noreferrer">React: Render and Commit</a> — 状態から描画を計算し DOM へ反映する、という比較の基礎。</li>
+  <li>ローカル確認：wasmacs <code>c640e7c</code> / elisp-react <code>2fc3328</code>。<code>npm run test:lisp</code> 25/25。公開カウンターは Orca のブラウザで操作確認。説明用デモは、このページ内の JavaScript で段階を再現したもの。</li>
+</ol></details></div>
+<footer class="footer"><span>wasmacs × elisp-react · 説明資料 / 作成: Codex</span><span>確認日 2026-11-14 · 単一 HTML / 外部依存なし</span></footer>
+</main>
+<script>
+(() => {
+  let phase = 0;
+  let shown = 3;
+  let nextValue = 3;
+  const counter = document.getElementById('counter');
+  const text = document.getElementById('flow-text');
+  const trigger = document.getElementById('trigger');
+  const advance = document.getElementById('advance');
+  const steps = Array.from(document.querySelectorAll('[data-step]'));
+  function render() {
+    counter.value = String(shown);
+    trigger.disabled = phase > 0 && phase < 4;
+    advance.disabled = phase === 0 || phase === 4;
+    for (const el of steps) {
+      if (Number(el.dataset.step) === phase) el.setAttribute('aria-current', 'step');
+      else el.removeAttribute('aria-current');
+    }
+    const stages = [
+      ['ボタンを押すと、旅が始まります。', '「+1 をクリック」の後、「次へ」で一段ずつ進めてください。状態の更新と、画面の更新を分けて観察できます。', `state: ${shown}   →   表示: ${shown}`],
+      ['1 / JS が、イベントを Emacs に送る。', '実装では react-dispatch-event を呼び、対象の ID とイベント名・データを渡します。ブラウザのイベント全体を渡すわけではありません。', 'DOM click → emacs.call("react-dispatch-event", …)'],
+      ['2 / Elisp のクロージャが、状態を変える。', 'react-set-state が次の状態を記録し、コンポーネントを更新対象にします。この段階では画面はまだ変わりません。', `state: ${shown} → ${nextValue}   /   表示: ${shown} のまま`],
+      ['3 / Elisp が、新しい木と前の木を比べる。', 'render の結果から変更を探し、操作列を作ります。ここでは数字を含むテキストの更新を一例として示しています。', `操作のイメージ: set-text → "Count: ${nextValue}"`],
+      ['4 / JS が、操作列を DOM に適用する。', 'ここで画面の数字が変わります。state と UI の計算は Elisp、ブラウザ API の実行は JS。この往復が一つのクリックです。', `state: ${nextValue}   →   表示: ${nextValue}`]
+    ];
+    const item = stages[phase];
+    text.replaceChildren();
+    for (const [tag, value] of [['h4', item[0]], ['p', item[1]], ['pre', item[2]]]) {
+      const el = document.createElement(tag); el.textContent = value; text.appendChild(el);
+    }
+  }
+  trigger.addEventListener('click', () => { nextValue = shown + 1; phase = 1; render(); advance.focus(); });
+  advance.addEventListener('click', () => {
+    if (phase < 1 || phase > 3) return;
+    phase += 1;
+    if (phase === 4) shown = nextValue;
+    render();
+    if (phase === 4) trigger.focus();
+  });
+  document.getElementById('reset').addEventListener('click', () => { phase = 0; shown = nextValue = 3; render(); });
+  render();
+})();
+</script>
+</body>
+</html>

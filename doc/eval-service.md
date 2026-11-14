@@ -108,6 +108,12 @@ client rejects everything after it. Create a new service.
 - Round trip of a small request: 0.07-0.09 ms. A request that conses 100000
   cells: 0.8 ms. `(fib 25)`: 45 ms interpreted, 8 ms after `byte-compile`.
 - `(require 'org)` 64 ms; exporting a small Org document to HTML 145 ms.
+- Source passed to `eval` is interpreted, and the interpreter expands macros at
+  every call. A library should be byte-compiled inside the service (write the
+  source to a file, `byte-compile-file`, `load`): elisp-react's reconciler ran
+  35 times faster that way (1000 rows: 4.7 s interpreted, 0.13 s compiled).
+- With the cache below, a later visit of the public site is ready in about
+  0.16 s (first visit: 1-4 s on a fast connection).
 
 ## Limits and open issues
 
