@@ -5614,3 +5614,29 @@ Not done: starting Emacs from a shell that is init; job control.
   1.6-2.0 s (the branch's run includes the new frame-size wait); the `shell`
   browser scenario 10.9 s vs 11.2 s. No measurable regression. `?init=sh`
   reaches its prompt without downloading Emacs.
+
+## Implementation: eval service, Emacs as a Lisp engine (2026-11-14)
+
+Status: working, on branch `feature/eval-service`. The user wants to try a
+React-like library written in Emacs Lisp, in a separate project; the part that
+belongs to wasmacs is a way to use Emacs as an engine: send Lisp, get the
+value. The user asked to build that until it works and then to look at the
+open issues together.
+
+- No Emacs change and no rebuild: Emacs starts once in batch mode (which
+  returns), then every request is one call of the existing export
+  `wasmacs_eval_string`.
+- `src/wasm/src/emacs-eval-core.js` (shared with Node), `emacs-eval-worker.js`,
+  `emacs-eval-client.js` (ES module, promises), `wasmacs-eval-service.el`
+  (reply format, JSON conventions), demo page `src/wasm/eval-service.html`.
+- Works without `SharedArrayBuffer`, so without cross-origin isolation, and
+  from a page on another origin (CORS fetches, blob worker).
+- Guards found necessary while probing: `max-lisp-eval-depth` 1000 (a
+  JavaScript stack overflow at about 2000 left Emacs with a corrupted eval
+  depth), and a failed engine refuses further requests.
+
+Validation: `npm test` (two new tests on the published bundle);
+`npm run test:eval-service` in Chrome. Numbers and the nine open issues are in
+`doc/eval-service.md`; the main ones: 150 MB download on every load, no
+interruption of a running request, no async or timers between requests, no
+processes or network, an unversioned API.

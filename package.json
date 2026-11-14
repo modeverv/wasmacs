@@ -20,6 +20,7 @@
     "test:ediff": "node tools/scripts/probe-ediff.mjs",
     "browser:smoke:ediff": "node tools/scripts/run-browser-smoke.mjs ediff",
     "test:python": "node tools/scripts/probe-python.mjs",
+    "test:eval-service": "node tools/scripts/probe-eval-service.mjs",
     "browser:smoke:python": "node tools/scripts/run-browser-smoke.mjs python",
     "browser:smoke:term": "node tools/scripts/run-browser-smoke.mjs term",
     "browser:smoke:init": "node tools/scripts/run-browser-smoke.mjs init",

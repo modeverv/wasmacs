@@ -21,6 +21,7 @@
 - Emacs からサブプロセスを起動する（`call-process`、`make-process`、`shell-command`、`M-x shell`、外部コマンドとパイプを使う eshell）
 - `M-x term` / `ansi-term` を使う。擬似端末上のシェルで、行編集、`vi`、`less`、`stty`、ウィンドウサイズの変更に対応します
 - POSIX シェル（BusyBox の `ash`）と約150個のコマンド、git 2.52、GNU grep 3.12、GNU diffutils 3.12、CPython 3.14 を、パイプ・シグナル・`fork`・`exec` を備えた本物のプロセスとして動かす
+- Emacs を Lisp エンジンとして Web ページから使う。Lisp を送ると JSON が返る（eval service、[doc/eval-service.md](doc/eval-service.md)）
 - `M-x grep`、`rgrep`、`lgrep`、xref / project の検索、`vc-git`、Magit（status、stage、Emacs でメッセージを編集する commit、log、diff）を使う
 
 ## まだ制限があること
@@ -91,6 +92,19 @@ Pages bundle は次の方針で構成されています。
 ```
 
 シェルでは同梱のツール、git、Python が使えます。`/home/user` は Emacs と同じ永続イメージです。init が終了するとシステムは停止するので、ページを再読み込みして起動し直します。ジョブ制御はなく、このシェルから Emacs を起動することはできません。このルートは `npm run browser:smoke:init` で Chrome 上で検証します。
+
+### Emacs を Lisp エンジンとして使う: eval service
+
+同じ Emacs のビルドを、ライブラリとして使えます。ページから Lisp を送ると、Emacs が評価して値を JSON で返します。端末もコマンドループもなく、ページの cross-origin isolation も不要です。
+
+```js
+import { createEmacsEvalService } from "./src/emacs-eval-client.js";
+const emacs = createEmacsEvalService();
+await emacs.eval('(list :sum (+ 1 2) :squares (vconcat (mapcar (lambda (n) (* n n)) [1 2 3])))');
+// { sum: 3, squares: [1, 4, 9] }
+```
+
+`/app/eval-service.html` で試せます。API、値の変換規則、未解決の課題（最大のものは、約150MBあるビルド全体をダウンロードすること）は [doc/eval-service.md](doc/eval-service.md) にあります。Chrome での検証は `npm run test:eval-service` です。
 
 通常の diagnostic log は静かにしています。詳細ログを見たい場合は次の query を付けます。
 
