@@ -21,6 +21,7 @@ The current main route is the browser runtime built on `SharedArrayBuffer`, `Ato
 - Start subprocesses from Emacs: `call-process`, `make-process`, `shell-command`, `M-x shell`, eshell with external commands and pipelines
 - Use `M-x term` / `ansi-term`: a shell on a pseudoterminal, with line editing, `vi`, `less`, `stty` and window resizing
 - Run a POSIX shell (BusyBox `ash`) and about 150 command line tools, git 2.52, GNU grep 3.12, GNU diffutils 3.12 and CPython 3.14 as real processes with pipes, signals, `fork` and `exec`
+- Use Emacs as a Lisp engine from a web page: send Lisp, get JSON back (the eval service, [doc/eval-service.md](doc/eval-service.md))
 - Use `M-x grep`, `rgrep`, `lgrep`, the xref/project search commands, `vc-git`, and Magit (status, staging, commit with the message edited in Emacs, log, diff)
 
 ## Current Limitations
@@ -91,6 +92,19 @@ The kernel boots first and then starts an init program as process 1. That is Ema
 ```
 
 The shell has the bundled tools, git and Python, and `/home/user` is the same persistent image Emacs uses. When init exits the system halts; reload the page to boot again. There is no job control, and Emacs cannot be started from this shell. `npm run browser:smoke:init` checks this route in Chrome.
+
+### Emacs as a Lisp engine: the eval service
+
+The same Emacs build can be used as a library: a page sends Lisp, Emacs evaluates it and returns the value as JSON. There is no terminal and no command loop, and the page needs no cross-origin isolation.
+
+```js
+import { createEmacsEvalService } from "./src/emacs-eval-client.js";
+const emacs = createEmacsEvalService();
+await emacs.eval('(list :sum (+ 1 2) :squares (vconcat (mapcar (lambda (n) (* n n)) [1 2 3])))');
+// { sum: 3, squares: [1, 4, 9] }
+```
+
+Try it at `/app/eval-service.html`. The API, the value conventions and the open issues (above all: it downloads the whole 150 MB build) are in [doc/eval-service.md](doc/eval-service.md). `npm run test:eval-service` checks it in Chrome.
 
 Routine diagnostic logs are quiet by default. Append the following query parameter to enable verbose logs:
 

@@ -400,3 +400,25 @@ export async function initSession({ userland = buildUserlandDir, argv, chunks = 
   });
   return { status, code: (status >> 8) & 0xff, signal: status & 0x7f, text: text(), log, kernel, FS };
 }
+
+/**
+ * Emacs as a Lisp engine under Node: the eval service of the browser
+ * (src/wasm/src/emacs-eval-core.js) on a freshly booted runtime.
+ * Returns { service, info, emacs }: service.eval(source, { format }) and
+ * service.call(name, args) answer { ok, value | error, output }.
+ */
+export async function evalService({ appDir = `${repoRoot}src/wasm/src`, ...bootOptions } = {}) {
+  const emacs = await bootEmacs(bootOptions);
+  vm.runInContext(readFileSync(`${appDir}/emacs-eval-core.js`, "utf8"), emacs.context, { filename: "emacs-eval-core.js" });
+  emacs.context.__wasmacsEvalLisp = readFileSync(`${appDir}/wasmacs-eval-service.el`, "utf8");
+  const core = vm.runInContext("WasmacsEvalService.create({ Module, lisp: __wasmacsEvalLisp })", emacs.context);
+  // Replies are built in the vm context; hand out objects of this realm.
+  const local = (value) => JSON.parse(JSON.stringify(value));
+  const info = local(core.start());
+  const service = {
+    eval: (source, options) => local(core.eval(source, options)),
+    call: (name, args, options) => local(core.call(name, args, options)),
+    collectGarbage: () => core.collectGarbage(),
+  };
+  return { service, info, emacs };
+}

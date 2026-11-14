@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>wasmacs eval service</title>
+    <style>
+      body { margin: 0; background: #1a1a1a; color: #e0e0e0; font: 13px/1.5 monospace; }
+      main { max-width: 860px; margin: 0 auto; padding: 16px; }
+      h1 { font-size: 15px; margin: 0 0 4px; }
+      p { color: #9e9e9e; margin: 0 0 12px; }
+      #status { color: #80cbc4; }
+      #status.error { color: #ef9a9a; }
+      textarea { width: 100%; box-sizing: border-box; height: 140px; background: #111; color: #e0e0e0;
+                 border: 1px solid #444; padding: 8px; font: inherit; }
+      .row { display: flex; gap: 12px; align-items: center; margin: 8px 0; }
+      button { background: #00695c; color: #fff; border: 0; padding: 6px 14px; font: inherit; cursor: pointer; }
+      button:disabled { background: #444; cursor: default; }
+      pre { background: #111; border: 1px solid #333; padding: 8px; min-height: 60px; white-space: pre-wrap;
+            word-break: break-word; margin: 0; }
+      .error { color: #ef9a9a; }
+      .output { color: #9e9e9e; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>wasmacs eval service <span id="status">loading Emacs…</span></h1>
+      <p>GNU Emacs 30.2 as a Lisp engine: the page sends Lisp, Emacs evaluates it and returns the value.
+         No terminal and no command loop. Definitions stay until the page is reloaded. Ctrl+Enter evaluates.</p>
+      <textarea id="source" spellcheck="false">(defun fib (n) (if (< n 2) n (+ (fib (- n 1)) (fib (- n 2)))))
+(list :emacs emacs-version
+      :fib20 (fib 20)
+      :squares (vconcat (mapcar (lambda (n) (* n n)) (number-sequence 1 8))))</textarea>
+      <div class="row">
+        <button id="run" type="button" disabled>Evaluate</button>
+        <label><input id="lisp-format" type="checkbox"> printed Lisp value instead of JSON</label>
+        <span id="timing"></span>
+      </div>
+      <pre id="result"></pre>
+    </main>
+    <script type="module">
+import { createEmacsEvalService } from "./src/emacs-eval-client.js";
+
+const statusEl = document.querySelector("#status");
+const sourceEl = document.querySelector("#source");
+const runBtn = document.querySelector("#run");
+const resultEl = document.querySelector("#result");
+const timingEl = document.querySelector("#timing");
+const lispFormat = document.querySelector("#lisp-format");
+
+const emacs = createEmacsEvalService();
+// For the console and for tests.
+window.wasmacsEval = emacs;
+
+emacs.ready.then((info) => {
+  statusEl.textContent = `Emacs ${info.version} ready (${info.bootMs} ms)`;
+  runBtn.disabled = false;
+}, (error) => {
+  statusEl.textContent = error.message;
+  statusEl.className = "error";
+});
+
+async function run() {
+  runBtn.disabled = true;
+  resultEl.textContent = "";
+  const line = (text, className = "") => {
+    const span = document.createElement("span");
+    span.className = className;
+    span.textContent = text + "\n";
+    resultEl.append(span);
+  };
+  const t0 = performance.now();
+  try {
+    const { value, output, ms } = await emacs.eval(sourceEl.value, { format: lispFormat.checked ? "lisp" : "json", detailed: true });
+    if (output) line(output.trimEnd(), "output");
+    line(lispFormat.checked ? value : JSON.stringify(value, null, 2));
+    timingEl.textContent = `${ms.toFixed(2)} ms in Emacs, ${(performance.now() - t0).toFixed(2)} ms round trip`;
+  } catch (error) {
+    if (error.output) line(error.output.trimEnd(), "output");
+    line(`${error.symbol || "error"}: ${error.message}`, "error");
+    timingEl.textContent = "";
+  }
+  runBtn.disabled = false;
+}
+
+runBtn.addEventListener("click", run);
+sourceEl.addEventListener("keydown", (event) => {
+  if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !runBtn.disabled) {
+    event.preventDefault();
+    run();
+  }
+});
+    </script>
+  </body>
+</html>

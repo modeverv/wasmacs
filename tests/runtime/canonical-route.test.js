@@ -20,6 +20,12 @@ const canonicalFiles = [
   "src/wasm/src/emacs-atomics-pdump-worker.js",
   "src/wasm/src/pdump-diagnostic-worker.js",
   "src/wasm/src/xterm-emacs-terminal.js",
+  // Eval service: Emacs as a Lisp engine (doc/eval-service.md).
+  "src/wasm/eval-service.html",
+  "src/wasm/src/emacs-eval-client.js",
+  "src/wasm/src/emacs-eval-worker.js",
+  "src/wasm/src/emacs-eval-core.js",
+  "src/wasm/src/wasmacs-eval-service.el",
   "src/build/apply-emacs-patches.sh",
   "src/build/build-native-baseline.sh",
   "src/build/build-system-lisp-image.sh",

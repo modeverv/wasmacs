@@ -9,6 +9,7 @@ here go into one subject each.
 | Document | Subject |
 | --- | --- |
 | `process-service.md` | The process kernel: processes, pipes, signals, pseudoterminals, process HTTP, the bundled programs, the rules for kernel code, tests. |
+| `eval-service.md` | Emacs as a Lisp engine for other projects: a page sends Lisp and gets JSON back. API, value conventions, limits and open issues. |
 | `small-os-for-emacs.md` | wasmacs as a small compatibility OS for Emacs: the services Emacs needs and their contracts. |
 | `os-compatibility-boundary.md` | Inventory of the OS compatibility layer: who owns memory, roots, lifecycle, preloaded state and entry points. Written in the Asyncify period; the rules hold, the file names it cites are retired. |
 | `host-abi.md` | The boundary between the Emacs core and the browser host. Checked by `tools/scripts/validate-host-abi.sh`. |
