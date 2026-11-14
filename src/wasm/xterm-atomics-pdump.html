@@ -14,6 +14,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0/lib/addon-fit.js"></script>
     <style>
       body { margin: 0; background: #1a1a1a; color: #eee; font-family: monospace; }
+      body.embedded .header { display: none; }
       .shell { display: flex; flex-direction: column; height: 100vh; }
       .header {
         display: flex; align-items: center; gap: 8px; padding: 6px 12px;
@@ -639,6 +640,11 @@ function startSystem(pdmpBytes) {
       const bytes = new Uint8Array(msg.bytes);
       latestWasifsBytes = bytes;
       saveWasifsToIDB(bytes); // fire-and-forget: main page event loop is free
+      // A page that embeds this one (same origin) follows the files: the tar
+      // image of /home/user, whenever Emacs has changed something in it.
+      if (window.parent !== window) {
+        window.parent.postMessage({ type: "wasmacs:user-image", bytes, reason: msg.reason }, location.origin);
+      }
     }
 
     if (msg.type === "terminal-output-bytes" && terminal) {
@@ -836,8 +842,14 @@ wasifsInput.addEventListener("change", () => {
   wasifsInput.value = "";
 });
 
+// ?embed=1: this page is the editor inside another page (an iframe of the
+// same origin): no header, start at once.  The embedding page gets the user
+// image through "wasmacs:user-image" messages and can pass --eval forms with
+// extra-eval parameters.
+if (pageParams.get("embed") === "1") document.body.classList.add("embedded");
+
 // Autostart if ?autostart in URL
-if (new URLSearchParams(window.location.search).has("autostart")) startSession();
+if (pageParams.has("autostart") || pageParams.get("embed") === "1") startSession();
     </script>
   </body>
 </html>

@@ -106,6 +106,10 @@ await emacs.eval('(list :sum (+ 1 2) :squares (vconcat (mapcar (lambda (n) (* n 
 
 最初の利用者は [elisp-react](https://github.com/modeverv/elisp-react) です。Emacs Lisp で書いた React で、Web ページのプログラムが `.el` ファイルになり、ネイティブの Emacs をサーバーにすればアプリケーション全体が Emacs Lisp になります。サービス単体は `/app/eval-service.html` で試せます。API、値の変換規則、未解決の課題（最大のものは、約150MBあるビルド全体をダウンロードすること）は [doc/eval-service.md](doc/eval-service.md) にあります。Chrome での検証は `npm run test:eval-service` です。
 
+### エディタを埋め込む
+
+同じオリジンのページは、このエディタを iframe で表示できます。`xterm-atomics-pdump.html?embed=1` でヘッダーが消えてすぐに起動し、`extra-eval` パラメータで Emacs に `--eval` の式を渡せます。Emacs がファイルを変更するたびに、埋め込み元のページは `/home/user` の tar イメージを `wasmacs:user-image` メッセージで受け取ります。[elisp-studio](https://github.com/modeverv/elisp-studio) はこれを使って、編集中の Emacs の隣でアプリケーションを動かします。
+
 通常の diagnostic log は静かにしています。詳細ログを見たい場合は次の query を付けます。
 
 ```text
