@@ -6,6 +6,8 @@
 #     created by probe-emacs-pdump-configure.sh).
 #   - C/Lisp changes: src/c/patches/*.patch, applied by apply-emacs-patches.sh.
 #   - Host library: tools/scripts/wasmacs-atomics-host-library.js.
+#   - SQLite: build/sqlite/sqlite3.o (build-sqlite.sh) is linked in and
+#     HAVE_SQLITE3 defined, so that sqlite-open and friends work.
 #   - bootstrap-emacs.pdmp is generated with the final runtime under Node and
 #     bundled next to temacs.wasm.
 #
@@ -40,6 +42,10 @@ if [ ! -x "${native_baseline}/lib-src/make-docfile" ] \
   echo "error: native baseline helper tools are missing; run src/build/build-native-baseline.sh first" >&2
   exit 1
 fi
+
+echo "=== SQLite for the runtime ==="
+"${repo_root}/src/build/build-sqlite.sh"
+sqlite_dir="${repo_root}/build/sqlite"
 
 echo "=== Syncing native generated Lisp for pdump redisplay/autoloads ==="
 if [ ! -f "${native_baseline}/lisp/international/charprop.el" ]; then
@@ -127,10 +133,15 @@ echo "=== Building pdumper+Atomics profile (${initial_memory} bytes) ==="
   perl -0pi -e 's@^#define TERMINFO 1$@/* #undef TERMINFO */@m;
                 s@^#define HAVE_LINUX_SYSINFO 1$@/* #undef HAVE_LINUX_SYSINFO */@m;
                 s@^#define HAVE_PTHREAD 1$@/* #undef HAVE_PTHREAD */@m;
-                s@^#define HAVE_PTHREAD_SIGMASK 1$@/* #undef HAVE_PTHREAD_SIGMASK */@m' \
+                s@^#define HAVE_PTHREAD_SIGMASK 1$@/* #undef HAVE_PTHREAD_SIGMASK */@m;
+                s@^/\* #undef HAVE_SQLITE3 \*/$@#define HAVE_SQLITE3 1@m' \
     src/config.h
   perl -0pi -e 's/^LIBS_TERMCAP=.*$/LIBS_TERMCAP=/m;
                 s/^TERMCAP_OBJ=.*$/TERMCAP_OBJ=termcap.o tparam.o/m' \
+    src/Makefile
+  # configure found no SQLite for wasm; the object built above is one.
+  SQLITE_DIR="${sqlite_dir}" perl -0pi -e 's@^SQLITE3_LIBS = .*$@SQLITE3_LIBS = $ENV{SQLITE_DIR}/sqlite3.o@m;
+                s@^SQLITE3_CFLAGS = .*$@SQLITE3_CFLAGS = -I$ENV{SQLITE_DIR}@m' \
     src/Makefile
   perl -0pi -e 's/\n# wasmacs: Atomics pdump browser link flags\.\ntemacs\Q$(EXEEXT)\E: LDFLAGS \+= .*\n/\n/s' src/Makefile
   {

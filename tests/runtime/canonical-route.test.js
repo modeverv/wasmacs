@@ -32,6 +32,7 @@ const canonicalFiles = [
   "src/build/create-user-filesystem-image.sh",
   "src/build/probe-emacs-pdump-configure.sh",
   "src/build/build-emacs-browser-atomics-pdump-profile.sh",
+  "src/build/build-sqlite.sh",
   "src/build/build-site.mjs",
   "src/build/generate-host-abi-wit.mjs",
   "src/emacs-lisp/wasmacs-url-fetch.el",

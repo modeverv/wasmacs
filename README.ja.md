@@ -21,6 +21,7 @@
 - Emacs からサブプロセスを起動する（`call-process`、`make-process`、`shell-command`、`M-x shell`、外部コマンドとパイプを使う eshell）
 - `M-x term` / `ansi-term` を使う。擬似端末上のシェルで、行編集、`vi`、`less`、`stty`、ウィンドウサイズの変更に対応します
 - POSIX シェル（BusyBox の `ash`）と約150個のコマンド、git 2.52、GNU grep 3.12、GNU diffutils 3.12、CPython 3.14 を、パイプ・シグナル・`fork`・`exec` を備えた本物のプロセスとして動かす
+- Emacs Lisp から SQLite を使う（`sqlite-open`、`sqlite-execute`、`sqlite-select`）。SQLite 3.54 をランタイムにリンク済み
 - Emacs を Lisp エンジンとして Web ページから使う。Lisp を送ると JSON が返る（eval service、[doc/eval-service.md](doc/eval-service.md)）
 - `M-x grep`、`rgrep`、`lgrep`、xref / project の検索、`vc-git`、Magit（status、stage、Emacs でメッセージを編集する commit、log、diff）を使う
 
@@ -398,6 +399,10 @@ runtime / validation log は `logs/` に書かれますが、log file は Git ig
 `build/artifacts/host-abi.wit` は `src/build/generate-host-abi-wit.mjs` から生成される build artifact です。`src/` 以下の source ではありません。検証は `tools/scripts/validate-host-abi.sh` が担当します。
 
 `dist/` は現在の layout には含まれません。
+
+## 同梱ソフトウェアとライセンス
+
+公開しているランタイムには、GNU Emacs（GPL-3.0-or-later）と process userland の各プログラム（`src/userland/*/README.md` を参照）に加えて、SQLite 3.54.1 が含まれます。SQLite は[パブリックドメイン](https://www.sqlite.org/copyright.html)で、条件なしに同梱・再配布できます。ソースはこのリポジトリには置いていません。`src/build/build-sqlite.sh` が sqlite.org から amalgamation をダウンロードし、sqlite.org が公開している SHA3-256 と照合します。これを使うデータベースのコード（`src/sqlite.c`）は Emacs 自身のものです。データベースファイルは Emacs のメモリ上のファイルシステムに置かれます（`/home/user` 以下なら永続化される user image の一部になります）。write-ahead log と拡張の読み込みはありません。
 
 ## アーキテクチャ
 
