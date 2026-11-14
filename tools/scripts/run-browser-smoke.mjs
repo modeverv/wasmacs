@@ -257,6 +257,12 @@ try {
     await evaluate(client, sessionId, "document.querySelector('#start-btn').click(); true");
     await waitFor(client, sessionId, "document.querySelector('#status')?.classList.contains('interactive')", 180_000, "xterm-interactive-status");
     await waitForScreen(/\*scratch\*/, `${label}: emacs is up`, 60_000);
+    // Right after a reload Emacs may still have the frame size of the first
+    // layout pass; the mode line reaches the bottom when the real size arrived.
+    await waitForScreen((text) => {
+      const rows = text.split("\n");
+      return rows.findLastIndex((row) => /^-.*\*scratch\*/.test(row)) >= rows.length - 2;
+    }, `${label}: the frame fills the terminal`, 30_000);
   };
 
   {
@@ -277,7 +283,17 @@ try {
     console.log("browser smoke scenario passed: xterm");
   }
 
+  // Scenarios can be combined in one run.  Each expects the Emacs of a new
+  // boot (one window, no processes), so a scenario that follows another one
+  // boots the page again.
+  let emacsUsed = false;
+  const freshEmacs = async (scenario) => {
+    if (emacsUsed) await bootPage(`fresh boot for ${scenario}`);
+    emacsUsed = true;
+  };
+
   if (scenarios.includes("shell")) {
+    emacsUsed = true;
     await logEvent("SCENARIO_START shell");
     // Idle waits Emacs entered per second (each one posts a message).
     const idleWaitsPerSecond = async (label) => {
@@ -346,7 +362,7 @@ try {
 
   if (scenarios.includes("persist")) {
     await logEvent("SCENARIO_START persist");
-    if (scenarios.includes("shell")) await bootPage("fresh boot");
+    await freshEmacs("persist");
     await sendKeys("\x1bxshell\r");
     await waitForScreen(/^\S* ?[#$]$/m, "persist: shell prompt", 60_000);
     await sendKeys("cd /home/user && git init -q repo && cd repo && printf '#!/bin/sh\\necho ran-$((20 + 3))\\n' > run.sh && chmod +x run.sh && echo text > notes.txt && git add . && git commit -q -m first && echo committed-$(git status --porcelain | wc -l)\r");
@@ -367,10 +383,12 @@ try {
 
   if (scenarios.includes("ediff")) {
     await logEvent("SCENARIO_START ediff");
+    await freshEmacs("ediff");
     const evalLisp = (form) => sendKeys(`\x1b:${form.replace(/\n/g, " ")}\r`);
     const fixtureForms = Object.entries(fixtureContents).map(([path, text]) =>
       `(write-region ${JSON.stringify(text)} nil ${JSON.stringify(path)} nil 'silent)`).join(" ");
-    await evalLisp(`(progn ${fixtureForms} ${ediffSetup}
+    // Earlier scenarios may have left processes (M-x shell): count what Ediff adds.
+    await evalLisp(`(progn (setq wasmacs-ediff-processes-before (length (process-list))) ${fixtureForms} ${ediffSetup}
       (setq wasmacs-ediff-control (ediff-buffers
         (wasmacs-ediff-buffer "*ediff-test-A*" "/tmp/ediff-A.txt")
         (wasmacs-ediff-buffer "*ediff-test-B*" "/tmp/ediff-B.txt"))))`);
@@ -416,7 +434,7 @@ try {
     await waitForScreen(/Quit this Ediff session/, "Ediff merge quit confirmation");
     await sendKeys("y");
     await pause(200);
-    await evalLisp('(message "ediff-cleanup-%d" (length (process-list)))');
+    await evalLisp('(message "ediff-cleanup-%d" (- (length (process-list)) wasmacs-ediff-processes-before))');
     await waitForScreen(/ediff-cleanup-0/, "Ediff leaves no live process after quit");
     await logEvent("SCENARIO_PASS ediff");
     console.log("browser smoke scenario passed: ediff");
@@ -424,6 +442,7 @@ try {
 
   if (scenarios.includes("python")) {
     await logEvent("SCENARIO_START python");
+    await freshEmacs("python");
     const evalLisp = (form) => sendKeys(`\x1b:${form}\r`);
     const command = async (text) => {
       await waitForScreen(/^(?:\.\.\. )*>>> ?$/m, "Python is ready for the next command");
@@ -482,6 +501,7 @@ try {
 
   if (scenarios.includes("term")) {
     await logEvent("SCENARIO_START term");
+    await freshEmacs("term");
     // A Python script for the terminal, written while still in *scratch*.
     const termScript = 'import os\nprint(os.listdir("/"))\n\nimport subprocess\nprint(subprocess.run(["git", "--version"], capture_output=True, text=True))\n\nimport sys\nprint(sys.stdin.isatty())\n';
     await sendKeys(`\x1b:(write-region ${JSON.stringify(termScript)} nil "/tmp/term-script.py")\r`);
