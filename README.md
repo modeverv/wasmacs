@@ -108,7 +108,9 @@ Its first user is [elisp-react](https://github.com/modeverv/elisp-react): React 
 
 ### Embedding the editor
 
-A page of the same origin can show this editor in an iframe: `xterm-atomics-pdump.html?embed=1` hides the header and starts at once, `extra-eval` parameters pass `--eval` forms to Emacs (with `options=parent` the page asks the embedding page for them by message instead, for forms too long for a URL), and the embedding page receives the tar image of `/home/user` in a `wasmacs:user-image` message whenever Emacs has changed a file. The two can also talk: Emacs Lisp sends text with an OSC 7777 terminal sequence, which arrives as a `wasmacs:message`, and the embedding page types into Emacs by posting `wasmacs:input`. [elisp-studio](https://github.com/modeverv/elisp-studio) uses this to run an application next to the Emacs that edits it.
+A page of the same origin can show this editor in an iframe: `xterm-atomics-pdump.html?embed=1` hides the header and starts at once, `extra-eval` parameters pass `--eval` forms to Emacs (with `options=parent` the page asks the embedding page for them by message instead, for forms too long for a URL), and the embedding page receives the tar image of `/home/user` in a `wasmacs:user-image` message whenever Emacs has changed a file. The two can also talk: Emacs Lisp sends text with an OSC 7777 terminal sequence, which arrives as a `wasmacs:message`, and the embedding page types into Emacs by posting `wasmacs:input`.
+
+[![elisp-studio: a web application runs next to the Emacs that edits it](https://raw.githubusercontent.com/modeverv/elisp-studio/main/doc/images/demo.gif)](https://github.com/modeverv/elisp-studio) [elisp-studio](https://github.com/modeverv/elisp-studio) uses this to run an application next to the Emacs that edits it.
 
 Routine diagnostic logs are quiet by default. Append the following query parameter to enable verbose logs:
 
