@@ -5652,3 +5652,16 @@ browser test passes against both published sites: Emacs is ready about 3 s
 after navigation on a fast connection, one click costs about 1.2 ms. The
 file layout under `app/src/` and `artifacts/emacs-browser-atomics-pdump/` is
 now depended on from outside this repository.
+
+### Follow-up: the eval service keeps Emacs in the browser's cache (2026-11-14)
+
+The user asked whether the Emacs module could be kept (as a PWA would) so
+that later visits are light. The eval worker fetched every file with
+`no-store` on every start. It now keeps them in Cache Storage under a build id
+(`docs/app/eval-build-id.json`, one hash over the files the worker loads,
+written by `build-site.mjs`; `npm test` fails when it is stale). A later start
+requests only the id. No service worker is involved, so it also works for
+pages on other origins (their own cache). Measured locally in Chrome: first
+visit 294 ms in the worker with 7 big files downloaded, second visit 153 ms
+with none. The product page (the editor) still downloads everything on every
+start; the same scheme would apply to it.

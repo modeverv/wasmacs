@@ -35,8 +35,11 @@ const foreignPage = (origin) => `<!doctype html><meta charset="utf-8"><title>ano
 import { createEmacsEvalService } from "${origin}/app/src/emacs-eval-client.js";
 window.wasmacsEval = createEmacsEvalService();
 </script>`;
+// Requests for the big files of Emacs (the pdmp, the parts of temacs.data).
+let bigDownloads = 0;
 const handler = (request, response) => {
   const path = normalize(decodeURIComponent(new URL(request.url, "http://localhost").pathname));
+  if (/bootstrap-emacs\.pdmp$|temacs\.data\.parts\/part-|temacs\.wasm$/.test(path)) bigDownloads += 1;
   if (path === "/foreign.html") {
     response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(foreignPage(new URL(pageUrl).origin));
     return;
@@ -82,7 +85,9 @@ try {
   await waitUntil(() => js("Boolean(window.wasmacsEval)").catch(() => false), "the page loads the client");
   const info = await js("window.wasmacsEval.ready");
   assert.equal(info.version, "30.2");
-  pass(`Emacs ${info.version} is ready: ${info.bootMs} ms in the worker, ${Date.now() - t0} ms from navigation`);
+  assert.equal(info.cached, false);
+  assert.equal(bigDownloads > 3, true);
+  pass(`Emacs ${info.version} is ready: ${info.bootMs} ms in the worker, ${Date.now() - t0} ms from navigation (${bigDownloads} big files downloaded)`);
   assert.equal(await js("window.crossOriginIsolated"), false);
   assert.equal(await js("typeof SharedArrayBuffer"), "undefined");
   pass("the page is not cross-origin isolated and has no SharedArrayBuffer");
@@ -136,6 +141,18 @@ try {
   await js("document.querySelector('#source').value = '(list :answer (* 6 7))'; document.querySelector('#run').click(); true");
   await waitUntil(() => js("/\"answer\": 42/.test(document.querySelector('#result').textContent)"), "the page shows the result");
   pass("the demo page evaluates the form in its text area");
+  // A second visit takes Emacs from Cache Storage: no big file is requested.
+  await pause(1500);               // the first visit is still writing the cache
+  bigDownloads = 0;
+  const t1 = Date.now();
+  await client.send("Page.navigate", { url: pageUrl }, sessionId);
+  await waitUntil(() => js("Boolean(window.wasmacsEval)").catch(() => false), "the page loads again");
+  const again = await js("window.wasmacsEval.ready");
+  assert.equal(again.cached, true);
+  assert.equal(bigDownloads, 0);
+  assert.equal(await lisp("(+ 1 2)"), 3);
+  pass(`a second visit starts from the browser's cache: ${again.bootMs} ms in the worker, ${Date.now() - t1} ms from navigation, nothing big downloaded`);
+
   // kill-emacs takes the engine down: that request and every later one reject.
   const killed = await lisp("(kill-emacs 0)");
   assert.equal(killed.error, "host-error");

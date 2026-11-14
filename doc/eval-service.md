@@ -103,19 +103,24 @@ client rejects everything after it. Create a new service.
 ## Measured (2026-11-14, Chrome, local server)
 
 - Ready in about 250-350 ms after the files are there.
+- From the public site (2026-11-14, a fast connection): about 3 s for the
+  first visit, see below for later ones.
 - Round trip of a small request: 0.07-0.09 ms. A request that conses 100000
   cells: 0.8 ms. `(fib 25)`: 45 ms interpreted, 8 ms after `byte-compile`.
 - `(require 'org)` 64 ms; exporting a small Org document to HTML 145 ms.
 
 ## Limits and open issues
 
-1. **Download size.** The service loads the whole product build:
-   `temacs.wasm` 2.1 MB, the pdmp 12.2 MB and `temacs.data` 139 MB (all of
-   Emacs's `lisp/` and `etc/`). The worker fetches with `no-store`, as the
-   product worker does, so this is downloaded on every page load. An engine
-   for other projects needs a small data package (the preloaded Lisp is in
-   the pdmp already; most of `lisp/` is only needed for `require`) and
-   cacheable, versioned URLs.
+1. **Download size on the first visit.** The service loads the whole product
+   build: `temacs.wasm` 2.1 MB, the pdmp 12.2 MB and `temacs.data` 139 MB (all
+   of Emacs's `lisp/` and `etc/`). The worker keeps these in the browser's
+   Cache Storage under the build id of the site (`app/eval-build-id.json`), so
+   later visits download nothing but that id; a new build is downloaded once
+   and replaces the old one. The cache belongs to the page's origin: another
+   site that uses the service has its own copy. The first visit is still
+   150 MB: a small data package (the preloaded Lisp is in the pdmp already;
+   most of `lisp/` is only needed for `require`) remains to be done. There is
+   no service worker, so the page itself does not work offline.
 2. **No interruption.** A request that does not return (`(while t)`) blocks
    the worker; the only way out is `terminate()` and a new service, which
    loses all Lisp state. There is no timeout in the client yet.

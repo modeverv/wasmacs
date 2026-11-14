@@ -203,4 +203,10 @@ await patchTemacsJsForAsyncPreload(docsTemacsJs);
 await patchTemacsJsForHostNetworkRelay(docsTemacsJs);
 await splitLargeDataFile(join(docsAtomicsPdump, "temacs.data"));
 
+// What the eval service caches in the browser, and under which id.
+if (existsSync(join(docsAtomicsPdump, "temacs.wasm"))) {
+  const { evalBuildId } = await import("./eval-build-id.mjs");
+  await writeFile(join(docsApp, "eval-build-id.json"), `${JSON.stringify({ id: await evalBuildId(docsRoot) })}\n`);
+}
+
 console.log("Built docs GitHub Pages bundle.");
