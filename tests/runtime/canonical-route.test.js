@@ -119,7 +119,11 @@ test("canonical route files exist", () => {
 test("the Pages bundle holds the current app sources", { skip: !existsSync(join(repoRoot, "docs/app")) && "no docs/app" }, () => {
   const visible = (dir) => walk(dir).map((file) => relative(dir, file)).filter((file) => !basename(file).startsWith(".")).sort();
   const sources = visible("src/wasm");
-  assert.deepEqual(visible("docs/app"), sources, "docs/app and src/wasm hold different files; run `npm run build`");
+  // The build adds one file that has no source: the eval service's build id
+  // (checked against the published files in eval-service-bundle.test.js).
+  const generated = ["eval-build-id.json"];
+  assert.deepEqual(visible("docs/app").filter((file) => !generated.includes(file)), sources,
+    "docs/app and src/wasm hold different files; run `npm run build`");
   for (const file of sources) {
     assert.equal(
       readFileSync(join(repoRoot, "docs/app", file)).equals(readFileSync(join(repoRoot, "src/wasm", file))),
