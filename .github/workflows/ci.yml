@@ -7,16 +7,14 @@ on:
   pull_request:
 
 jobs:
-  build-test-pages:
-    name: Build, Test, And Publish Pages
+  # Runs for pull requests too.  It must not name the github-pages
+  # environment: that one only accepts master, and a job that names it is
+  # rejected for a pull request before any step runs.
+  test:
+    name: Test
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -34,12 +32,24 @@ jobs:
         run: |
           git ls-files -z docs/artifacts | xargs -0 -I{} sh -c 'test -f "$1" && printf "%s %s\n" "$(wc -c <"$1")" "$1"' sh {} | sort -nr | head -20
           tools/scripts/validate-git-artifact-policy.sh
+
+  pages:
+    name: Publish Pages
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       - uses: actions/upload-pages-artifact@v3
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         with:
           path: docs
       - id: deployment
         uses: actions/deploy-pages@v4
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'

@@ -40,7 +40,7 @@ src/assets/ 生成 docs にコピーされるソースアセット
 src/build/  docs と artifact 生成用スクリプト
 src/c/      Emacs C 側の patch layer
 src/runtime/ host/runtime libraries used by tests and tools
-src/runtime/process/ process service（kernel、プロセスごとの runtime、userland のファイル配置）
+src/runtime/process/ process service（kernel、その起動コード（kernel が先、次に init）、プロセスごとの runtime、userland のファイル配置）
 src/userland/ プロセスとして動くプログラム（BusyBox、git、GNU grep、GNU diffutils、CPython）のビルド
 tools/      build / validation / probe / inspection tools
 extension/  Chrome companion 拡張（唯一のネットワーク経路）
@@ -79,6 +79,18 @@ Pages bundle は次の方針で構成されています。
 - project pages でも動くように app / artifact URL は relative にする
 - Emscripten glue は `temacs.js` として配信し、静的サーバーが JavaScript MIME type を返せるようにする
 - 大きな Emscripten preload package は、単一の巨大な `temacs.data` ではなく `docs/artifacts/emacs-browser-atomics-pdump/temacs.data.parts/` 以下の chunk として置く
+
+### Emacs なしで起動する: `?init=sh`
+
+最初に kernel が起動し、その kernel が init をプロセス1として起動します。既定の init は Emacs です。ページの `init` パラメータで userland の別のプログラムを指定すると、Emacs を一切ダウンロードせずに、そのプログラムがページの端末で動きます。
+
+```text
+?init=sh          POSIX シェル（BusyBox ash）が pid 1。小さな UNIX 端末になる
+?init=vi          BusyBox vi
+?init=python3     CPython の REPL
+```
+
+シェルでは同梱のツール、git、Python が使えます。`/home/user` は Emacs と同じ永続イメージです。init が終了するとシステムは停止するので、ページを再読み込みして起動し直します。ジョブ制御はなく、このシェルから Emacs を起動することはできません。このルートは `npm run browser:smoke:init` で Chrome 上で検証します。
 
 通常の diagnostic log は静かにしています。詳細ログを見たい場合は次の query を付けます。
 
@@ -145,7 +157,7 @@ make dev
 
 ## サブプロセス: shell、git、grep
 
-ブラウザにはプロセスがありません。そこで wasmacs は UNIX 風の小さな kernel を自前で持ちます（`src/runtime/process/wasmacs-kernel.js`）。kernel は Emacs の worker の中で動きます。Emacs がプロセス1で、それ以外のプロセスは、Emscripten と Asyncify でビルドしたプログラムの WebAssembly instance です。プロセスごとに独立したメモリを持ち、ファイルシステムは Emacs と共有します。kernel は `fork`、`exec`、`posix_spawn`、`wait`、パイプ、シグナル、プロセスグループ、タイマーを提供し、どれかのプロセス（または Emacs）がシステムコールをするたびにプロセスを切り替えます。
+ブラウザにはプロセスがありません。そこで wasmacs は UNIX 風の小さな kernel を自前で持ちます（`src/runtime/process/wasmacs-kernel.js`）。worker はまず kernel を起動し、kernel が init として Emacs をプロセス1で起動します（別のプログラムを init にもできます。[Emacs なしで起動する](#emacs-なしで起動する-initsh) を参照）。それ以外のプロセスは、Emscripten と Asyncify でビルドしたプログラムの WebAssembly instance です。プロセスごとに独立したメモリを持ち、ファイルシステムは Emacs と共有します。kernel は `fork`、`exec`、`posix_spawn`、`wait`、パイプ、シグナル、プロセスグループ、タイマーを提供し、どれかのプロセス（または Emacs）がシステムコールをするたびにプロセスを切り替えます。
 
 ```text
 Emacs (callproc.c, process.c)        emacs_spawn / waitpid / kill / pipe / poll

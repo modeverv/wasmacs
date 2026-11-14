@@ -1,19 +1,30 @@
 /**
  * emacs-atomics-pdump-worker.js
  *
- * Web Worker for Emacs wasm booting from bootstrap-emacs.pdmp.
- * Uses SharedArrayBuffer + Atomics.wait for input blocking.
+ * The system worker: it boots the process kernel and starts init on it.
  *
- * Architecture identical to emacs-atomics-worker.js except:
- *   - ARTIFACT_DIR points to emacs-browser-atomics-pdump (pdumper-enabled)
- *   - thisProgram: "/temacs"  (leading slash fixes load_pdump --dump-file path)
- *   - Accepts { type: "start", pdmpBytes: ArrayBuffer } to load from pdmp
+ *   init = "emacs" (default)   GNU Emacs from bootstrap-emacs.pdmp, as pid 1
+ *   init = a command line      that program as pid 1 on the console terminal
+ *                              ("/bin/sh", "vi", "python3", ...); Emacs is
+ *                              not loaded at all
  *
- * Boot sequence:
- *   1. Module loads + TTY patched
- *   2. pdmpBytes written to MEMFS at /bootstrap-emacs.pdmp
- *   3. callMain(["--dump-file=/bootstrap-emacs.pdmp", "--quick", "--no-splash", "-nw"])
- *   4. Emacs enters command loop, Atomics.wait blocks at input
+ * Boot sequence (the order is the same for both):
+ *   1. /home/user is read from IndexedDB (the last asynchronous step but for
+ *      loading modules).
+ *   2. The system module loads and provides the filesystem: Emacs's module
+ *      (temacs.js), or the base module (wasmacs-base.js) without Emacs.
+ *   3. WasmacsBoot.boot() creates the kernel on that filesystem, connected to
+ *      the console (SharedArrayBuffer keyboard, terminal output) and to the
+ *      program loader.  /home/user and the userland (/bin, /etc) are mounted.
+ *   4. Init starts.  Emacs: callMain(["--dump-file=/bootstrap-emacs.pdmp",
+ *      "--quick", "--no-splash", "-nw"]); Emacs attaches to the kernel as the
+ *      host process and blocks in Atomics.wait at its command loop.  Another
+ *      program: WasmacsBoot.runInit() runs it on a pseudoterminal.
+ *
+ * From step 4 on the worker never returns to its event loop.
+ *
+ * Emacs notes: thisProgram is "/temacs" (the leading slash fixes the
+ * load_pdump --dump-file path).
  */
 function resolveRuntimeUrl(relativePath, fallbackPath) {
   if (typeof URL !== "undefined" && self.location?.href) {
@@ -33,8 +44,10 @@ const USER_WASIFS_URL = resolveRuntimeUrl(
   "/artifacts/user-filesystem-empty.wasifs",
 );
 
-// Userland of the process service: program images (busybox, git) plus
-// manifest.json and wasmacs-userland.js, built by src/userland/build.sh.
+// The process service: the kernel and its boot code (wasmacs-kernel.js,
+// wasmacs-boot.js), the base system module, and the userland: program images
+// (busybox, git, ...) plus manifest.json and wasmacs-userland.js.  Built by
+// src/userland/build.sh.
 const USERLAND_DIR = resolveRuntimeUrl(
   "../../artifacts/userland/",
   "/artifacts/userland/",
@@ -229,12 +242,22 @@ self.onmessage = async (event) => {
   }
   if (msg?.type === "start") {
     updateTerminalSize(msg.terminalSize);
-    const pdmpBytes = msg.pdmpBytes ? new Uint8Array(msg.pdmpBytes) : null;
-    await startEmacs(pdmpBytes, msg.debugOptions || {});
+    const debugOptions = msg.debugOptions || {};
+    globalThis.__wasmacsDiagnosticLog = debugOptions.debugLog === true;
+    post("ready", { sab: INPUT_SAB, terminalSizeSAB: TERMINAL_SIZE_SAB });
+    const init = typeof msg.init === "string" && msg.init.trim() ? msg.init.trim() : "emacs";
+    const userNodes = await loadUserImage();
+    loadKernelScripts(debugOptions);
+    if (init === "emacs") {
+      const pdmpBytes = msg.pdmpBytes ? new Uint8Array(msg.pdmpBytes) : null;
+      await startEmacs(pdmpBytes, userNodes, debugOptions);
+    } else {
+      await startInit(init, userNodes);
+    }
   }
   if (msg?.type === "export-wasifs") {
     try {
-      const bytes = exportUserImage(self.Module?.FS);
+      const bytes = exportUserImage(systemFS);
       self.postMessage({
         type: "wasifs-export-data",
         bytes: bytes.buffer,
@@ -248,8 +271,8 @@ self.onmessage = async (event) => {
     try {
       const bytes = new Uint8Array(msg.bytes);
       const nodes = parseUserTar(bytes);
-      if (self.Module?.FS) {
-        mountUserImage(self.Module.FS, nodes);
+      if (systemFS) {
+        mountUserImage(systemFS, nodes);
         saveToLocalStorage(bytes);
         post("wasifs-imported", {});
       }
@@ -667,13 +690,66 @@ function createUserTar(nodes) {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// Process service userland
+// Process kernel and userland
 // ═══════════════════════════════════════════════════════════════
-// Emacs starts subprocesses through the kernel that is linked into temacs.js
-// (src/runtime/process/wasmacs-kernel.js).  The programs themselves are
-// separate images; here the worker makes them visible in the filesystem
-// (/bin/sh, /bin/git, ... marker files) and tells the kernel how to load an
-// image when one is executed.
+// The kernel (src/runtime/process/wasmacs-kernel.js) is booted on the
+// filesystem of the system module before init starts.  The programs are
+// separate images; the worker makes them visible in the filesystem (/bin/sh,
+// /bin/git, ... marker files) and tells the kernel how to load an image when
+// one is executed.
+
+// The filesystem of the system module, once it is loaded.
+let systemFS = null;
+
+// Load wasmacs-kernel.js and wasmacs-boot.js.  Without them Emacs still runs,
+// with no subprocesses.
+function loadKernelScripts(debugOptions = {}) {
+  try {
+    // Development aid (see the page): a kernel under development.
+    const kernelUrl = typeof debugOptions.processKernelUrl === "string"
+      ? debugOptions.processKernelUrl
+      : `${USERLAND_DIR}/wasmacs-kernel.js?v=${ARTIFACT_CACHE_BUST}`;
+    importScripts(kernelUrl);
+    importScripts(`${USERLAND_DIR}/wasmacs-boot.js?v=${ARTIFACT_CACHE_BUST}`);
+    if (typeof debugOptions.processKernelUrl === "string") {
+      post("status", { text: `process kernel from ${debugOptions.processKernelUrl}` });
+    }
+    return true;
+  } catch (e) {
+    post("stderr", { text: `process kernel not available: ${e}` });
+    return false;
+  }
+}
+
+function kernelLog(msg) {
+  const diagnostic = globalThis.__wasmacsDiagnosticLog || globalThis.__wasmacsProcessDebug;
+  if (diagnostic) console.warn(msg);
+  if (diagnostic || /killed by signal|cannot load|failed/.test(String(msg))) {
+    post("stderr", { text: String(msg) });
+  }
+}
+
+// Create the kernel on FS, for INIT ("emacs", or the program the console task
+// will start).  Returns null when the kernel scripts could not be loaded.
+function bootKernel(FS, init, views = null) {
+  systemFS = FS;
+  if (!self.WasmacsKernel || !self.WasmacsBoot) return null;
+  const kernel = self.WasmacsBoot.boot({
+    FS,
+    init,
+    views,
+    console: self.WasmacsBoot.createConsole({ post: (message) => self.postMessage(message) }),
+    debug: !!globalThis.__wasmacsProcessDebug,
+    log: kernelLog,
+    loadProgram(name) {
+      const load = globalThis.__wasmacsLoadProgram;
+      if (typeof load !== "function") throw new Error("no program loader is installed");
+      return load(name);
+    },
+  });
+  post("status", { text: `kernel booted (init: ${init})` });
+  return kernel;
+}
 
 async function installProcessUserland(FS) {
   let manifest;
@@ -744,12 +820,7 @@ function installProgramLoader(FS, manifest) {
 // Emacs bootstrap
 // ═══════════════════════════════════════════════════════════════
 
-async function startEmacs(pdmpBytes, debugOptions = {}) {
-  globalThis.__wasmacsDiagnosticLog = debugOptions.debugLog === true;
-  post("ready", { sab: INPUT_SAB, terminalSizeSAB: TERMINAL_SIZE_SAB });
-
-  const userNodes = await loadUserImage();
-
+async function startEmacs(pdmpBytes, userNodes, debugOptions = {}) {
   post("status", { text: "loading Emacs wasm (pdump profile)..." });
 
   let resolveReady;
@@ -853,12 +924,9 @@ async function startEmacs(pdmpBytes, debugOptions = {}) {
 
   await ready;
 
-  if (typeof debugOptions.processKernelUrl === "string") {
-    // Development aid (see the page): replaces the kernel linked into temacs.js
-    // before Emacs creates it.
-    importScripts(debugOptions.processKernelUrl);
-    post("status", { text: `process kernel from ${debugOptions.processKernelUrl}` });
-  }
+  // The kernel comes first: Emacs is its init and attaches to it (as the host
+  // process, pid 1) with its first process system call.
+  bootKernel(Module.FS, "emacs");
 
   try {
     const originalAtomicsWait = Atomics.wait.bind(Atomics);
@@ -954,4 +1022,89 @@ async function startEmacs(pdmpBytes, debugOptions = {}) {
     }
     post("session-ended", { status: err?.status ?? 1, error: err?.message, stack: err?.stack });
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Another init: a userland program on the console
+// ═══════════════════════════════════════════════════════════════
+// ?init=sh (or vi, python3, any command line of the userland).  Emacs is not
+// loaded: the base module provides the filesystem, init runs as pid 1 on a
+// pseudoterminal, and the kernel's console task connects that terminal to
+// the page.  When init exits the system halts.
+
+async function startInit(commandLine, userNodes) {
+  const halt = (status, error) => post("session-ended", error ? { status, error } : { status });
+  if (!self.WasmacsKernel || !self.WasmacsBoot) {
+    halt(1, "the process kernel is not available");
+    return;
+  }
+  let base;
+  try {
+    post("status", { text: "loading the base system..." });
+    importScripts(`${USERLAND_DIR}/wasmacs-base.js?v=${ARTIFACT_CACHE_BUST}`);
+    base = await self.wasmacsBase({
+      locateFile(path) { return `${USERLAND_DIR}/${path}?v=${ARTIFACT_CACHE_BUST}`; },
+      print(text) { post("stdout", { text }); },
+      printErr(text) { post("stderr", { text: String(text) }); },
+    });
+  } catch (e) {
+    halt(1, `base system: ${e}`);
+    return;
+  }
+  const FS = base.FS;
+  const kernel = bootKernel(FS, commandLine,
+    () => ({ HEAPU8: base.HEAPU8, HEAP32: base.HEAP32, HEAP16: base.HEAP16 }));
+  try { mountUserImage(FS, userNodes); } catch (e) { post("stderr", { text: `user mount failed: ${e}` }); }
+  const manifest = await installProcessUserland(FS);
+  if (!manifest) {
+    halt(1, "the process userland is not available");
+    return;
+  }
+
+  const argv = commandLine.split(/\s+/).filter(Boolean);
+  if (!argv[0].includes("/")) argv[0] = `${self.WasmacsUserland.BIN_DIR}/${argv[0]}`;
+  const cons = kernel.console;
+  try {
+    FS.lookupPath(argv[0], { follow: true });
+  } catch (_) {
+    cons.writeText(`wasmacs: init: ${argv[0]}: not found\r\n`);
+    cons.flushTerminalOutput();
+    halt(127, `init ${argv[0]} not found`);
+    return;
+  }
+  const environment = {
+    ...self.WasmacsUserland.ENVIRONMENT,
+    HOME: "/home/user", USER: "user", LOGNAME: "user", LANG: "C",
+    TERM: "xterm-256color", COLORTERM: "truecolor",
+  };
+  post("binary-info", { artifactDir: USERLAND_DIR, thisProgram: argv[0], callMainType: "init" });
+  post("status", { text: `init: ${argv.join(" ")}` });
+  let status;
+  let lastSnapshot = -Infinity;
+  try {
+    status = self.WasmacsBoot.runInit(kernel, {
+      argv,
+      env: Object.keys(environment).map((name) => `${name}=${environment[name]}`),
+      cwd: "/home/user",
+      // Save /home/user when the system goes idle, at most once a second: a
+      // program that polls (Python's REPL) goes idle many times a second.
+      beforeIdle() {
+        const now = performance.now();
+        if (now - lastSnapshot < 1000) return;
+        lastSnapshot = now;
+        postUserImageSnapshot(FS, "before-wait");
+      },
+    });
+  } catch (err) {
+    postUserImageSnapshot(FS, "session-error");
+    console.error("[system worker] init failed:", err);
+    halt(1, err?.message || String(err));
+    return;
+  }
+  postUserImageSnapshot(FS, "session-ended");
+  const signal = status & 0x7f;
+  const code = signal ? 128 + signal : (status >> 8) & 0xff;
+  cons.writeText(`\r\n[init ${argv[0]} ${signal ? `was killed by signal ${signal}` : `exited with status ${code}`}: system halted]\r\n`);
+  cons.flushTerminalOutput();
+  halt(code);
 }

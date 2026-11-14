@@ -40,7 +40,7 @@ src/assets/ source assets copied into generated docs output
 src/build/  docs and artifact generation scripts
 src/c/      Emacs C-side patch layer
 src/runtime/ host/runtime libraries used by tests and tools
-src/runtime/process/ process service: kernel, per-process runtime, filesystem layout of the userland
+src/runtime/process/ process service: kernel, its boot code (kernel first, then init), per-process runtime, filesystem layout of the userland
 src/userland/ builds of the programs that run as processes (BusyBox, git, GNU grep, GNU diffutils, CPython)
 tools/      build / validation / probe / inspection tools
 extension/  Chrome companion extension: the only network transport
@@ -79,6 +79,18 @@ The Pages bundle follows these rules:
 - Keep app and artifact URLs relative so project pages also work.
 - Publish the Emscripten glue as `temacs.js` so static servers return a JavaScript MIME type.
 - Store the large Emscripten preload package as chunks under `docs/artifacts/emacs-browser-atomics-pdump/temacs.data.parts/` instead of a single oversized `temacs.data` file.
+
+### Booting without Emacs: `?init=sh`
+
+The kernel boots first and then starts an init program as process 1. That is Emacs by default; the `init` page parameter names another program of the userland, which then runs on the page's terminal without Emacs being downloaded at all:
+
+```text
+?init=sh          a POSIX shell (BusyBox ash) as pid 1: a small UNIX terminal
+?init=vi          BusyBox vi
+?init=python3     the CPython REPL
+```
+
+The shell has the bundled tools, git and Python, and `/home/user` is the same persistent image Emacs uses. When init exits the system halts; reload the page to boot again. There is no job control, and Emacs cannot be started from this shell. `npm run browser:smoke:init` checks this route in Chrome.
 
 Routine diagnostic logs are quiet by default. Append the following query parameter to enable verbose logs:
 
@@ -145,7 +157,7 @@ make dev
 
 ## Subprocesses: shell, git, grep
 
-A browser has no processes, so wasmacs brings a small UNIX-like kernel of its own (`src/runtime/process/wasmacs-kernel.js`). It lives in the Emacs worker. Emacs is process 1; every other process is a separate WebAssembly instance of a program built with Emscripten and Asyncify, with its own memory, sharing Emacs's filesystem. The kernel provides `fork`, `exec`, `posix_spawn`, `wait`, pipes, signals, process groups and timers, and switches between processes whenever one of them (or Emacs) makes a system call.
+A browser has no processes, so wasmacs brings a small UNIX-like kernel of its own (`src/runtime/process/wasmacs-kernel.js`). The worker boots it first, and it starts Emacs as its init, process 1 (or another program: see [Booting without Emacs](#booting-without-emacs-initsh)). Every other process is a separate WebAssembly instance of a program built with Emscripten and Asyncify, with its own memory, sharing Emacs's filesystem. The kernel provides `fork`, `exec`, `posix_spawn`, `wait`, pipes, signals, process groups and timers, and switches between processes whenever one of them (or Emacs) makes a system call.
 
 ```text
 Emacs (callproc.c, process.c)        emacs_spawn / waitpid / kill / pipe / poll

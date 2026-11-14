@@ -34,7 +34,10 @@ const logPath = process.env.WASMACS_BROWSER_SMOKE_LOG || `${repoRoot}/logs/brows
 //            exception recovery, C-c C-c during a CPU loop and repeated exit
 //   term     M-x term: a shell on a pseudoterminal, vi and less in it, ^C
 //            through the line discipline, a window resize, exit
-const knownScenarios = new Set(["xterm", "shell", "persist", "ediff", "python", "term"]);
+//   init     ?init=sh: the kernel boots without Emacs and runs /bin/sh as
+//            pid 1 on the page's terminal: vi, git, ^C, a window resize, a
+//            file that survives a reload, exit halts the system; ?init=vi
+const knownScenarios = new Set(["xterm", "shell", "persist", "ediff", "python", "term", "init"]);
 const scenarios = process.argv.slice(2);
 if (scenarios.length === 0) scenarios.push("xterm");
 for (const scenario of scenarios) {
@@ -254,6 +257,12 @@ try {
     await evaluate(client, sessionId, "document.querySelector('#start-btn').click(); true");
     await waitFor(client, sessionId, "document.querySelector('#status')?.classList.contains('interactive')", 180_000, "xterm-interactive-status");
     await waitForScreen(/\*scratch\*/, `${label}: emacs is up`, 60_000);
+    // Right after a reload Emacs may still have the frame size of the first
+    // layout pass; the mode line reaches the bottom when the real size arrived.
+    await waitForScreen((text) => {
+      const rows = text.split("\n");
+      return rows.findLastIndex((row) => /^-.*\*scratch\*/.test(row)) >= rows.length - 2;
+    }, `${label}: the frame fills the terminal`, 30_000);
   };
 
   {
@@ -274,7 +283,17 @@ try {
     console.log("browser smoke scenario passed: xterm");
   }
 
+  // Scenarios can be combined in one run.  Each expects the Emacs of a new
+  // boot (one window, no processes), so a scenario that follows another one
+  // boots the page again.
+  let emacsUsed = false;
+  const freshEmacs = async (scenario) => {
+    if (emacsUsed) await bootPage(`fresh boot for ${scenario}`);
+    emacsUsed = true;
+  };
+
   if (scenarios.includes("shell")) {
+    emacsUsed = true;
     await logEvent("SCENARIO_START shell");
     // Idle waits Emacs entered per second (each one posts a message).
     const idleWaitsPerSecond = async (label) => {
@@ -343,7 +362,7 @@ try {
 
   if (scenarios.includes("persist")) {
     await logEvent("SCENARIO_START persist");
-    if (scenarios.includes("shell")) await bootPage("fresh boot");
+    await freshEmacs("persist");
     await sendKeys("\x1bxshell\r");
     await waitForScreen(/^\S* ?[#$]$/m, "persist: shell prompt", 60_000);
     await sendKeys("cd /home/user && git init -q repo && cd repo && printf '#!/bin/sh\\necho ran-$((20 + 3))\\n' > run.sh && chmod +x run.sh && echo text > notes.txt && git add . && git commit -q -m first && echo committed-$(git status --porcelain | wc -l)\r");
@@ -364,10 +383,12 @@ try {
 
   if (scenarios.includes("ediff")) {
     await logEvent("SCENARIO_START ediff");
+    await freshEmacs("ediff");
     const evalLisp = (form) => sendKeys(`\x1b:${form.replace(/\n/g, " ")}\r`);
     const fixtureForms = Object.entries(fixtureContents).map(([path, text]) =>
       `(write-region ${JSON.stringify(text)} nil ${JSON.stringify(path)} nil 'silent)`).join(" ");
-    await evalLisp(`(progn ${fixtureForms} ${ediffSetup}
+    // Earlier scenarios may have left processes (M-x shell): count what Ediff adds.
+    await evalLisp(`(progn (setq wasmacs-ediff-processes-before (length (process-list))) ${fixtureForms} ${ediffSetup}
       (setq wasmacs-ediff-control (ediff-buffers
         (wasmacs-ediff-buffer "*ediff-test-A*" "/tmp/ediff-A.txt")
         (wasmacs-ediff-buffer "*ediff-test-B*" "/tmp/ediff-B.txt"))))`);
@@ -413,7 +434,7 @@ try {
     await waitForScreen(/Quit this Ediff session/, "Ediff merge quit confirmation");
     await sendKeys("y");
     await pause(200);
-    await evalLisp('(message "ediff-cleanup-%d" (length (process-list)))');
+    await evalLisp('(message "ediff-cleanup-%d" (- (length (process-list)) wasmacs-ediff-processes-before))');
     await waitForScreen(/ediff-cleanup-0/, "Ediff leaves no live process after quit");
     await logEvent("SCENARIO_PASS ediff");
     console.log("browser smoke scenario passed: ediff");
@@ -421,6 +442,7 @@ try {
 
   if (scenarios.includes("python")) {
     await logEvent("SCENARIO_START python");
+    await freshEmacs("python");
     const evalLisp = (form) => sendKeys(`\x1b:${form}\r`);
     const command = async (text) => {
       await waitForScreen(/^(?:\.\.\. )*>>> ?$/m, "Python is ready for the next command");
@@ -479,6 +501,7 @@ try {
 
   if (scenarios.includes("term")) {
     await logEvent("SCENARIO_START term");
+    await freshEmacs("term");
     // A Python script for the terminal, written while still in *scratch*.
     const termScript = 'import os\nprint(os.listdir("/"))\n\nimport subprocess\nprint(subprocess.run(["git", "--version"], capture_output=True, text=True))\n\nimport sys\nprint(sys.stdin.isatty())\n';
     await sendKeys(`\x1b:(write-region ${JSON.stringify(termScript)} nil "/tmp/term-script.py")\r`);
@@ -530,6 +553,75 @@ try {
     await waitForScreen(/Process terminal finished/, "the shell exits");
     await logEvent("SCENARIO_PASS term");
     console.log("browser smoke scenario passed: term");
+  }
+
+  if (scenarios.includes("init")) {
+    await logEvent("SCENARIO_START init");
+    // Boot the page with another init; Emacs must not be downloaded.
+    const bootInit = async (init, label, extra = "") => {
+      const url = new URL(appUrl);
+      if (extra) url.search = extra;
+      url.searchParams.set("init", init);
+      await logEvent(`PAGE_NAVIGATE ${label} ${url}`);
+      await client.send("Page.navigate", { url: url.href }, sessionId);
+      await waitFor(client, sessionId, "document.readyState === 'complete' && window.crossOriginIsolated === true", 60_000, "cross-origin-isolated");
+      await waitFor(client, sessionId, "Boolean(document.querySelector('#start-btn') && document.querySelector('#xterm-container'))", 30_000, "xterm-page-ready");
+      await evaluate(client, sessionId, "document.querySelector('#start-btn').click(); true");
+      await waitFor(client, sessionId, "document.querySelector('#status')?.classList.contains('interactive')", 60_000, `${label}: interactive`);
+      const loaded = await evaluate(client, sessionId,
+        "performance.getEntriesByType('resource').map((entry) => entry.name).filter((name) => /temacs|bootstrap-emacs/.test(name)).length");
+      if (loaded !== 0) throw new Error(`init scenario: ${label} downloaded ${loaded} Emacs artifacts`);
+    };
+    const halted = (label) => waitFor(client, sessionId,
+      "/^ended/.test(document.querySelector('#status')?.textContent || '')", 30_000, `${label}: session ended`);
+
+    await bootInit("sh", "init=sh");
+    await waitForScreen(/[#$]$/m, "init=sh: the shell prompt");
+    await sendKeys("echo pid=$$ ppid=$PPID; tty; stty size\r");
+    await waitForScreen(/^pid=1 ppid=0$/m, "sh is pid 1, child of the kernel's console task");
+    const initSize = /^([0-9]+) ([0-9]+)$/m.exec(await waitForScreen(/^\/dev\/pts\/0\n[0-9]+ [0-9]+$/m, "the console is a pseudoterminal with the page's size"));
+    await sendKeys("git --version; echo abc | tr a-c A-C\r");
+    await waitForScreen(/^git version 2\.[0-9.]+\nABC$/m, "git and a pipeline run under the shell");
+    await sendKeys("vi /home/user/init-note.txt\r");
+    await waitForScreen(/init-note\.txt/, "vi opens on the console");
+    await sendKeys("ifrom vi as a child of init");
+    await pause(300);
+    await sendKeys("\x1b");            // a real ESC: no meta prefix on this terminal
+    await pause(300);
+    await sendKeys(":wq\r");
+    await sendKeys("cat /home/user/init-note.txt; echo vi-$((1 + 1))\r");
+    await waitForScreen(/^from vi as a child of init\nvi-2$/m, "vi inserts, leaves insert mode with ESC, saves");
+    await sendKeys("sleep 100\r");
+    await pause(500);
+    await sendKeys("\x03");
+    await sendKeys("echo back-$((40 + 2))\r");
+    await waitForScreen(/^back-42$/m, "^C interrupts the foreground job");
+    await client.send("Emulation.setDeviceMetricsOverride", { width: 640, height: 420, deviceScaleFactor: 1, mobile: false }, sessionId);
+    await pause(1500);
+    await sendKeys("stty size; echo resized-$((3 + 3))\r");
+    const initResized = /^([0-9]+) ([0-9]+)\nresized-6$/m.exec(await waitForScreen(/^[0-9]+ [0-9]+\nresized-6$/m, "stty after the resize"));
+    if (initResized[1] === initSize[1] && initResized[2] === initSize[2]) {
+      throw new Error(`init scenario: the console kept its size ${initSize[1]}x${initSize[2]} after the resize`);
+    }
+    await client.send("Emulation.clearDeviceMetricsOverride", {}, sessionId);
+    await pause(1500);                  // the idle system saves /home/user
+    await sendKeys("exit 5\r");
+    await waitForScreen(/init \/bin\/sh exited with status 5: system halted/, "exit halts the system");
+    await halted("init=sh");
+
+    // /home/user is the same persistent image as under Emacs.
+    await bootInit("sh", "init=sh again", "?");
+    await waitForScreen(/[#$]$/m, "second boot: the shell prompt");
+    await sendKeys("cat /home/user/init-note.txt; echo kept-$((2 + 2))\r");
+    await waitForScreen(/^from vi as a child of init\nkept-4$/m, "the file survived the reload");
+
+    await bootInit("vi /home/user/init-note.txt", "init=vi", "?");
+    await waitForScreen(/^from vi as a child of init$/m, "vi is init and shows the file");
+    await sendKeys(":q\r");
+    await waitForScreen(/init \/bin\/vi exited with status 0: system halted/, "leaving vi halts the system");
+    await halted("init=vi");
+    await logEvent("SCENARIO_PASS init");
+    console.log("browser smoke scenario passed: init");
   }
 
   console.log(`browser smoke passed: ${scenarios.join(",")} ${appUrl}`);

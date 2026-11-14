@@ -230,12 +230,16 @@ const liveTerminalResize = pageParams.get("no-live-resize") !== "1";
 const TERMINAL_RESIZE_DEBOUNCE_MS = 250;
 let pendingTerminalResize = null;
 let terminalResizeTimer = null;
+// What the kernel starts as init (pid 1): Emacs by default, or a command line
+// of the userland on the console terminal (?init=sh, ?init=vi, ?init=python3).
+// Without Emacs nothing of it is downloaded.
+const initProgram = (pageParams.get("init") || "emacs").trim() || "emacs";
 const debugBootOptions = {
   noDefaultInit: pageParams.get("no-default-init") === "1",
   debugLog: pageParams.get("debug-log") === "1",
   extraEvals: pageParams.getAll("extra-eval"),
 };
-// Development aid: try a changed process kernel without relinking Emacs
+// Development aid: try a changed process kernel without rebuilding the bundle
 // (?process-kernel=/src/runtime/process/wasmacs-kernel.js).  Local hosts only.
 if (pageParams.get("process-kernel") && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) {
   const kernelUrl = new URL(pageParams.get("process-kernel"), location.href);
@@ -595,8 +599,8 @@ function generatePdmp() {
   });
 }
 
-// ── Phase 2: Run Emacs with pdmp ────────────────────────────────
-function startEmacsWithPdmp(pdmpBytes) {
+// ── Phase 2: Boot the system: kernel, then init (Emacs with its pdmp) ──
+function startSystem(pdmpBytes) {
   if (!sabOK) { setStatus("SAB not available", "error"); return; }
   cancelNetworkRequests();
 
@@ -622,7 +626,7 @@ function startEmacsWithPdmp(pdmpBytes) {
       terminalSizeSAB = msg.terminalSizeSAB;
       publishedTerminalSize = "";
       publishTerminalSize(lastTerminalSize);
-      setStatus("booting Emacs from pdmp…");
+      setStatus(pdmpBytes ? "booting Emacs from pdmp…" : `booting ${initProgram}…`);
     }
 
     if (msg.type === "pdmp-materialized") {
@@ -741,13 +745,14 @@ function startEmacsWithPdmp(pdmpBytes) {
 
   // Send "start" immediately — worker calls startEmacs(pdmpBytes) which posts "ready".
   // Must NOT wait for "ready" first: that message only comes after "start" is received.
-  const copy = new Uint8Array(pdmpBytes);
+  const copy = pdmpBytes ? new Uint8Array(pdmpBytes) : null;
   emacsWorker.postMessage({
     type: "start",
-    pdmpBytes: copy.buffer,
+    init: initProgram,
+    pdmpBytes: copy ? copy.buffer : null,
     terminalSize: lastTerminalSize,
     debugOptions: debugBootOptions,
-  }, [copy.buffer]);
+  }, copy ? [copy.buffer] : []);
 }
 
 // ── Main start flow ─────────────────────────────────────────────
@@ -756,6 +761,13 @@ async function startSession() {
   if (emacsWorker) return;
 
   startBtn.disabled = true;
+
+  if (initProgram !== "emacs") {
+    pdmpEl.textContent = `init: ${initProgram}`;
+    setStatus("starting the system worker…");
+    startSystem(null);
+    return;
+  }
 
   let pdmpBytes;
   try {
@@ -783,7 +795,7 @@ async function startSession() {
   }
 
   setStatus("starting Emacs worker…");
-  startEmacsWithPdmp(pdmpBytes);
+  startSystem(pdmpBytes);
 }
 
 startBtn.addEventListener("click", startSession);

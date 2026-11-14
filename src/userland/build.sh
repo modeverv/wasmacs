@@ -5,7 +5,8 @@
 #   src/userland/build.sh            build BusyBox, git, grep, diffutils and Python
 #   src/userland/build.sh busybox    build only the named programs
 #
-# Output: build/artifacts/userland/<program>.{js,wasm} and manifest.json.
+# Output: build/artifacts/userland/<program>.{js,wasm}, manifest.json, the
+# kernel scripts and wasmacs-base.{js,wasm}.
 # src/build/build-site.mjs publishes that directory with the Pages bundle.
 set -euo pipefail
 
@@ -22,10 +23,25 @@ for program in "${programs[@]}"; do
   "${here}/${program}/build.sh"
 done
 
-# The browser worker loads the filesystem layout from the same directory.
+# The browser worker loads the kernel, its boot code and the filesystem
+# layout from the same directory.
 mkdir -p "${out}"
-cp "${repo_root}/src/runtime/process/wasmacs-userland.js" "${out}/wasmacs-userland.js"
-cp "${repo_root}/src/runtime/process/wasmacs-http.js" "${out}/wasmacs-http.js"
+for script in wasmacs-kernel.js wasmacs-boot.js wasmacs-userland.js wasmacs-http.js; do
+  cp "${repo_root}/src/runtime/process/${script}" "${out}/${script}"
+done
+
+# The system module for a boot without Emacs (init=/bin/sh): it only provides
+# the shared filesystem (src/runtime/process/base/wasmacs-base.c).
+base_src="${repo_root}/src/runtime/process/base/wasmacs-base.c"
+if [ ! -f "${out}/wasmacs-base.wasm" ] || [ "${base_src}" -nt "${out}/wasmacs-base.wasm" ] \
+   || [ "${BASH_SOURCE[0]}" -nt "${out}/wasmacs-base.wasm" ]; then
+  echo "building wasmacs-base"
+  emcc -O2 "${base_src}" -o "${out}/wasmacs-base.js" \
+    -sMODULARIZE=1 -sEXPORT_NAME=wasmacsBase -sEXIT_RUNTIME=0 -sALLOW_MEMORY_GROWTH=1 \
+    -sENVIRONMENT=web,worker,node -sFORCE_FILESYSTEM=1 \
+    -sEXPORTED_FUNCTIONS=_main,_malloc,_free \
+    -sEXPORTED_RUNTIME_METHODS=FS,HEAPU8,HEAP32,HEAP16
+fi
 
 # manifest.json: which images exist and which commands each provides.
 node -e '

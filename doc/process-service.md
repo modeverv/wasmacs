@@ -11,17 +11,22 @@ or `ECHILD`.
 
 The Process Service supplies the missing part. It does not use processes of the
 host machine (`host.process` stays unavailable). It is a small cooperative
-UNIX-like kernel that lives in the Emacs worker and runs other WebAssembly
-programs as processes. Emacs's process code is not rewritten; it runs against
-this kernel the way it runs against Linux.
+UNIX-like kernel that the worker boots first and that then starts an init
+program on top of itself: Emacs by default. It runs other WebAssembly programs
+as processes. Emacs's process code is not rewritten; it runs against this
+kernel the way it runs against Linux.
 
 ```text
-Emacs (pid 1)                      vendor/emacs/src/{callproc,process,sysdep,keyboard}.c
-  emacs_spawn, waitpid, kill       src/c/patches/0006-process-service.patch
-  pipe2, poll, ioctl, idle wait    tools/scripts/wasmacs-atomics-host-library.js
+boot                               src/runtime/process/wasmacs-boot.js
+  kernel on the system filesystem, console, program loader; then init
     |
 kernel                             src/runtime/process/wasmacs-kernel.js
   process table, fd tables, pipes, pseudoterminals, signals, timers, scheduler
+    |
+init: Emacs (pid 1)                vendor/emacs/src/{callproc,process,sysdep,keyboard}.c
+  emacs_spawn, waitpid, kill       src/c/patches/0006-process-service.patch
+  pipe2, poll, ioctl, idle wait    tools/scripts/wasmacs-atomics-host-library.js
+  (or another init: /bin/sh, vi, ... as pid 1 on the console terminal)
     |
 process                            src/runtime/process/child/
   one WebAssembly instance per process, own linear memory, Asyncify
@@ -31,6 +36,43 @@ programs                           src/userland/{busybox,git,grep,diffutils,pyth
   /bin/diff, /bin/diff3 (GNU diffutils)
   /bin/python3, /bin/python (CPython)
 ```
+
+## Boot and init
+
+The worker (`src/wasm/src/emacs-atomics-pdump-worker.js`) and the Node
+harnesses bring the system up in the same order:
+
+1. A *system module* provides the one filesystem: Emacs's Emscripten module,
+   or, when Emacs is not init, the base module
+   (`src/runtime/process/base/wasmacs-base.c`: an empty program linked with the
+   complete Emscripten FS).
+2. `WasmacsBoot.boot()` creates the kernel on that filesystem and connects it
+   to the console (the keyboard `SharedArrayBuffer` and the terminal output the
+   page reads) and to the program loader.
+3. `/home/user` is mounted and the userland installed (`/bin`, `/etc`).
+4. Init starts.
+
+**Emacs as init** (the default). The worker calls Emacs's `main`. With its
+first process system call the host library attaches Emacs to the kernel
+(`kernel.attachHost`) as the *host process*, pid 1: the one process that is
+not built with Asyncify, cannot be unwound, and whose system calls are the
+scheduling points. Emacs brings what only it has: its heap, and the C entry
+points that run its signal handlers and request a quit.
+
+**Another init** (`?init=sh` on the page, or any command line of the userland:
+`?init=vi`, `?init=python3`). Emacs is not loaded or downloaded.
+`WasmacsBoot.runInit()` opens a pseudoterminal, starts the program on its slave
+side as pid 1 (its controlling terminal) and then is the terminal: console
+input goes to the master side, output comes back to the page, a page resize
+becomes a window size change (`SIGWINCH`). This loop is the kernel's *console
+task*: the host process in this configuration, pid 0, the parent of init. It
+runs the scheduler until init exits; then the system halts ("init ... exited:
+system halted") and the page has to be loaded again. `/home/user` is the same
+persistent image as under Emacs and is saved whenever the system goes idle.
+
+What is not there with another init: Emacs cannot be started from that shell
+(it is not a userland program), and the limits below (no job control) weigh
+more in a plain terminal than under Emacs.
 
 ## What Emacs gets
 
@@ -90,17 +132,19 @@ Patch `0007-keyboard-honor-read-timeout.patch` is a fix this work depended on:
 
 ## The kernel
 
-`wasmacs-kernel.js` is plain JavaScript without Emscripten macros. Everything it
-needs from the Emacs runtime comes through the `env` object passed to
-`WasmacsKernel.create` (see `$wasmacs_process` in the host library); the tests
-run the same file with a 30-line stand-in for Emacs.
+`wasmacs-kernel.js` is plain JavaScript without Emscripten macros. The `env`
+object passed to `WasmacsKernel.create` (by `WasmacsBoot.boot`) supplies the
+filesystem, the console and the program loader; Emacs adds its own pieces with
+`attachHost` (see `$wasmacs_process` in the host library). The tests run the
+same file with a 30-line stand-in for Emacs.
 
-**Processes.** Emacs is pid 1. Other pids start at 100. A process has a parent,
+**Processes.** The host process is Emacs (pid 1; other pids start at 100) or
+the console task (pid 0; init is pid 1). A process has a parent,
 a process group and session, an fd table, a working directory, an environment,
 a program image and an instance of it. At most 64 processes exist at a time.
 
-**One filesystem.** There is exactly one filesystem: Emacs's Emscripten `FS`
-object. Every process uses that same JS object. What is per process, the fd
+**One filesystem.** There is exactly one filesystem: the Emscripten `FS`
+object of the system module (Emacs's, or the base module's). Every process uses that same JS object. What is per process, the fd
 table (`FS.streams`) and the working directory (`FS.currentPath`), is swapped
 at each context switch. A file written by `git` is the file Emacs reads.
 
@@ -350,15 +394,24 @@ tree: a very large repository makes every save slow.
 | `npm run browser:smoke:python` | Real Chrome: `run-python` interaction, CPU-loop interruption and continued REPL use. |
 | `npm run browser:smoke:processes` | `tools/scripts/run-browser-smoke.mjs shell persist`: the page in headless Chrome. |
 | `npm run browser:smoke:term` | Real Chrome: `M-x term` on a pseudoterminal, `vi`, `less`, `^C`, a page resize reaching the shell as `SIGWINCH`. |
+| `npm run browser:smoke:init` | Real Chrome: `?init=sh` (sh as pid 1 without Emacs: `vi` with a real ESC, git, `^C`, resize, a file surviving a reload, `exit` halting the system) and `?init=vi`. |
 
-Development aids: `WASMACS_KERNEL_JS=<file>` makes the Node harness use that
-kernel instead of the one linked into Emacs, and on a local development host
-the page parameter `?process-kernel=/src/runtime/process/wasmacs-kernel.js`
-does the same in the browser. Both avoid relinking Emacs while working on the
-kernel.
+The kernel tests also boot systems without Emacs (`init:` tests), and
+`npm test` does so with the published bundle.
+
+The kernel is not linked into Emacs: the worker loads
+`artifacts/userland/wasmacs-kernel.js` and `wasmacs-boot.js` (published by
+`src/userland/build.sh` and `src/build/build-site.mjs`), so a kernel change
+needs `npm run build`, not an Emacs build. Development aids:
+`WASMACS_KERNEL_JS=<file>` makes the Node harness use that kernel, and on a
+local development host the page parameter
+`?process-kernel=/src/runtime/process/wasmacs-kernel.js` does the same in the
+browser.
 
 ## Possible next steps
 
+- Starting Emacs from a shell that is init, and returning to the shell when
+  Emacs exits. Emacs can only be the host process, one at a time.
 - Job control: stopped processes (`SIGTSTP`, `SIGTTIN`, `SIGTTOU`, `SIGCONT`,
   `WUNTRACED`), background reads, and BusyBox `ash` built with job control.
   The pseudoterminal already keeps a foreground process group.

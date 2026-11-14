@@ -16,10 +16,10 @@ const userlandDir = `${repoRoot}build/artifacts/userland`;
 const require = createRequire(`${buildDir}/package.json`);
 const filter = process.argv[2] || "";
 
-for (const file of ["wasmacs-kernel.js", "wasmacs-userland.js"]) {
+for (const file of ["wasmacs-kernel.js", "wasmacs-boot.js", "wasmacs-userland.js"]) {
   vm.runInThisContext(readFileSync(`${repoRoot}src/runtime/process/${file}`, "utf8"), { filename: file });
 }
-const { WasmacsKernel, WasmacsUserland } = globalThis;
+const { WasmacsKernel, WasmacsBoot, WasmacsUserland } = globalThis;
 const C = WasmacsKernel.constants;
 
 const host = await require(`${buildDir}/fshost.js`)();
@@ -967,6 +967,90 @@ if (haveBusybox && existsSync(`${userlandDir}/diff.wasm`) && existsSync(`${userl
   });
 } else {
   console.log("SKIP diffutils tests (run src/userland/build.sh)");
+}
+
+// ---- another init: the kernel without Emacs ----------------------------------
+// WasmacsBoot boots a kernel on the base module's filesystem and runs a
+// userland program as pid 1 on the console terminal; the console task (pid 0)
+// is the host process.
+if (haveBusybox && existsSync(`${userlandDir}/wasmacs-base.js`)) {
+  // Boot a fresh system, run ARGV as init and type CHUNKS: the first at
+  // once, each following one when the system has gone idle (nothing
+  // runnable, no short timer pending).
+  const baseFactory = require(`${userlandDir}/wasmacs-base.js`);
+  const bases = [await baseFactory(), await baseFactory(), await baseFactory()];
+  function initSession(argv, chunks) {
+    const base = bases.shift();
+    const images = new Map();
+    globalThis.__wasmacsInputSAB = new SharedArrayBuffer(264);
+    globalThis.__wasmacsTerminalSizeSAB = null;
+    globalThis.__wasmacsTerminalOutputBytes = [];
+    globalThis.__wasmacsTerminalInputBytes = [];
+    globalThis.__wasmacsSentOutputCount = 0;
+    const pending = chunks.slice();
+    const type = () => {
+      if (!pending.length) return false;
+      globalThis.__wasmacsTerminalInputBytes.push(...Buffer.from(pending.shift(), "latin1"));
+      Atomics.add(new Int32Array(globalThis.__wasmacsInputSAB, 0, 2), 0, 1);
+      return true;
+    };
+    const k = WasmacsBoot.boot({
+      FS: base.FS,
+      init: argv[0],
+      console: WasmacsBoot.createConsole({ post() {}, keepOutput: true }),
+      views: () => ({ HEAPU8: base.HEAPU8, HEAP32: base.HEAP32, HEAP16: base.HEAP16 }),
+      log: (msg) => hostState.log.push(msg),
+      loadProgram: (name) => {
+        if (!images.has(name)) {
+          images.set(name, { factory: require(`${userlandDir}/${name}.js`), wasm: readFileSync(`${userlandDir}/${name}.wasm`) });
+        }
+        return images.get(name);
+      },
+    });
+    WasmacsUserland.install(base.FS, manifest);
+    type();
+    let idles = 0;
+    const started = performance.now();
+    const status = WasmacsBoot.runInit(k, {
+      argv,
+      env: ["PATH=/bin", "HOME=/home/user", "TERM=xterm-256color"],
+      cwd: "/home/user",
+      beforeIdle() {
+        // A process in a short timed wait (vi after ESC) is not idle yet.
+        if (k._nextTimerDelay(k.now()) < 500) return;
+        if (performance.now() - started > 20000) throw new Error(`init did not exit: ${text().slice(-300)}`);
+        if (!type() && ++idles > 20) throw new Error(`init did not exit: ${text().slice(-300)}`);
+      },
+    });
+    function text() { return Buffer.from(globalThis.__wasmacsTerminalOutputBytes).toString(); }
+    return { k, FS: base.FS, status, code: (status >> 8) & 0xff, signal: status & 0x7f, out: text() };
+  }
+
+  test("init: /bin/sh is pid 1 on the console terminal, the console task is pid 0", () => {
+    const r = initSession(["/bin/sh"], ["echo pid=$$ ppid=$PPID; tty; echo piped | cat; sleep 0.05 & wait; echo bg=$?; exit 7\n"]);
+    has(r.out, "pid=1 ppid=0\r\n");
+    has(r.out, "/dev/pts/0\r\n");
+    has(r.out, "piped\r\n");
+    has(r.out, "bg=0\r\n");
+    eq(r.code, 7, "exit status of init");
+    eq(r.k.host.pid, 0, "pid of the host process");
+    eq(r.k.liveCount(), 0, "live processes after init exited");
+  });
+
+  test("init: ^C at the console interrupts the foreground job, not the shell", () => {
+    const r = initSession(["/bin/sh"], ["sleep 30\n", "\x03", "echo after=$?\n", "kill -9 $$\n"]);
+    has(r.out, "after=130\r\n");
+    eq(r.signal, 9, "init was killed");
+    eq(r.k.liveCount(), 0, "live processes after init was killed");
+  });
+
+  test("init: vi as pid 1 edits a file on the console", () => {
+    const r = initSession(["/bin/vi", "/home/user/note.txt"], ["ihello from vi", "\x1b", ":wq\n"]);
+    eq(r.code, 0, `exit status (${JSON.stringify(r.out.slice(-200))})`);
+    eq(r.FS.readFile("/home/user/note.txt", { encoding: "utf8" }), "hello from vi\n", "the file vi wrote");
+  });
+} else {
+  console.log("SKIP init tests (run src/userland/build.sh)");
 }
 
 console.log(`\n${ran - failures}/${ran} kernel tests passed`);

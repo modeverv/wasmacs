@@ -188,7 +188,7 @@ await copyIfExists(buildArtifacts, docsArtifacts);
 // These are host JavaScript, not compiled program images. Publish current
 // sources even when only the page/runtime was edited since the userland build.
 if (existsSync(join(docsArtifacts, "userland", "manifest.json"))) {
-  for (const name of ["wasmacs-userland.js", "wasmacs-http.js"]) {
+  for (const name of ["wasmacs-kernel.js", "wasmacs-boot.js", "wasmacs-userland.js", "wasmacs-http.js"]) {
     await cp(join(repoRoot, "src", "runtime", "process", name), join(docsArtifacts, "userland", name));
   }
 }

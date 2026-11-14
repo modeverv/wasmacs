@@ -7,6 +7,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   batchEval,
+  initSession,
   docsArtifactDir,
   docsUserlandDir,
   repoRoot,
@@ -67,4 +68,21 @@ test("Pages bundle: Emacs runs sh, git and grep as subprocesses", { skip }, asyn
     result.value,
     '("ABC\nrc=0\n" (0 0 0 "first\n") (0 "a.txt\x001:needle\n") 1 ("through a pipe\n" 0))',
   );
+});
+
+test("Pages bundle: the kernel boots without Emacs and runs sh as pid 1", { skip }, async () => {
+  for (const name of ["wasmacs-kernel.js", "wasmacs-boot.js", "wasmacs-base.js", "wasmacs-base.wasm"]) {
+    assert.equal(existsSync(`${docsUserlandDir}/${name}`), true, `docs/artifacts/userland/${name} is not published`);
+  }
+  const session = await initSession({
+    userland: docsUserlandDir,
+    argv: ["/bin/sh"],
+    chunks: ["echo pid=$$ ppid=$PPID; tty; git --version; echo abc | tr a-c A-C; exit 3\n"],
+  });
+  assert.match(session.text, /^pid=1 ppid=0$/m);
+  assert.match(session.text, /^\/dev\/pts\/0$/m);
+  assert.match(session.text, /^git version 2\./m);
+  assert.match(session.text, /^ABC$/m);
+  assert.equal(session.code, 3);
+  assert.equal(session.kernel.liveCount(), 0);
 });
