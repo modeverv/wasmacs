@@ -104,7 +104,7 @@ await emacs.eval('(list :sum (+ 1 2) :squares (vconcat (mapcar (lambda (n) (* n 
 // { sum: 3, squares: [1, 4, 9] }
 ```
 
-Try it at `/app/eval-service.html`. The API, the value conventions and the open issues (above all: it downloads the whole 150 MB build) are in [doc/eval-service.md](doc/eval-service.md). `npm run test:eval-service` checks it in Chrome.
+Its first user is [elisp-react](https://github.com/modeverv/elisp-react): React written in Emacs Lisp, where a web page's program is `.el` files, and with a native Emacs as the server a whole application is Emacs Lisp. Try the service itself at `/app/eval-service.html`. The API, the value conventions and the open issues (above all: it downloads the whole 150 MB build) are in [doc/eval-service.md](doc/eval-service.md). `npm run test:eval-service` checks it in Chrome.
 
 Routine diagnostic logs are quiet by default. Append the following query parameter to enable verbose logs:
 

@@ -104,7 +104,7 @@ await emacs.eval('(list :sum (+ 1 2) :squares (vconcat (mapcar (lambda (n) (* n 
 // { sum: 3, squares: [1, 4, 9] }
 ```
 
-`/app/eval-service.html` で試せます。API、値の変換規則、未解決の課題（最大のものは、約150MBあるビルド全体をダウンロードすること）は [doc/eval-service.md](doc/eval-service.md) にあります。Chrome での検証は `npm run test:eval-service` です。
+最初の利用者は [elisp-react](https://github.com/modeverv/elisp-react) です。Emacs Lisp で書いた React で、Web ページのプログラムが `.el` ファイルになり、ネイティブの Emacs をサーバーにすればアプリケーション全体が Emacs Lisp になります。サービス単体は `/app/eval-service.html` で試せます。API、値の変換規則、未解決の課題（最大のものは、約150MBあるビルド全体をダウンロードすること）は [doc/eval-service.md](doc/eval-service.md) にあります。Chrome での検証は `npm run test:eval-service` です。
 
 通常の diagnostic log は静かにしています。詳細ログを見たい場合は次の query を付けます。
 
