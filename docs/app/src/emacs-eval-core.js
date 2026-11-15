@@ -36,8 +36,11 @@
 
   // Module: the Emscripten module of temacs.js, runtime initialised, with
   // /bootstrap-emacs.pdmp and /temacs in its filesystem.
+  // deferCollection: the host collects after it has answered
+  // (collectIfDue), so that the time a collection takes is not added to
+  // the answer of the request that happened to make it due.
   function create({ Module, lisp, pdmp = '/bootstrap-emacs.pdmp', maxLispEvalDepth = MAX_LISP_EVAL_DEPTH,
-                    now = () => performance.now() }) {
+                    now = () => performance.now(), deferCollection = false }) {
     let requests = 0;
     let lastGc = now();
     let started = false;
@@ -105,9 +108,11 @@
       }
       reply.output = takeOutput();
       requests += 1;
-      if (requests >= GC_EVERY_REQUESTS || now() - lastGc >= GC_EVERY_MS) collectGarbage();
+      // Deferred, but not for ever: a host that never gets round to it.
+      if (deferCollection ? requests >= 4 * GC_EVERY_REQUESTS : due()) collectGarbage();
       return reply;
     }
+    const due = () => requests >= GC_EVERY_REQUESTS || now() - lastGc >= GC_EVERY_MS;
 
     const formatSymbol = (format) => (format === 'lisp' ? "'lisp" : "'json");
     return {
@@ -122,6 +127,12 @@
         return request(`(wasmacs-eval-service-call ${lispString(name)} ${lispString(JSON.stringify(args))} ${formatSymbol(format)})`);
       },
       collectGarbage,
+      // Collect if it is time to (deferCollection).  Returns whether it did.
+      collectIfDue() {
+        if (!started || broken || !due()) return false;
+        collectGarbage();
+        return true;
+      },
     };
   }
 

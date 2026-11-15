@@ -94,6 +94,9 @@ it stays usable, and every request is one call of the exported C entry point
 and stores the printed result for `wasmacs_last_result`. The entry point keeps
 the garbage collector off during a request; the core collects between
 requests (every 200 requests or 2 seconds) through `wasmacs_garbage_collect`.
+The worker does it after it has posted an answer, when no request is
+waiting (`deferCollection`, `collectIfDue`), so that a collection (6 to 18 ms)
+is not added to the answer of the request that made it due.
 
 `max-lisp-eval-depth` is lowered to 1000 (Emacs: 1600). A browser worker has a
 small JavaScript stack that wasm shares, and a JavaScript stack overflow goes
