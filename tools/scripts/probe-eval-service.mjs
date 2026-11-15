@@ -42,13 +42,22 @@ window.wasmacsEval = createEmacsEvalService();
 // what was asked of it: big (the pdmp, temacs.wasm and whole parts of a
 // package), whole (whole parts of a package), ranges, preflights.
 const packageDir = "/artifacts/emacs-browser-atomics-pdump";
+// buildId: how the site answers for app/eval-build-id.json: "ok", "error"
+// (503), "unreachable" (the connection is dropped) or "missing" (404, as a
+// development server).
 function site({ ranges = true, core = false, index = true } = {}) {
   const seen = { big: 0, whole: 0, ranges: 0, rangeBytes: 0, preflights: 0 };
+  const self = { seen, buildId: "ok" };
   const server = createServer((request, response) => {
     let path = normalize(decodeURIComponent(new URL(request.url, "http://localhost").pathname));
     if (request.method === "OPTIONS") {   // GitHub Pages refuses a preflight
       seen.preflights += 1;
       response.writeHead(405).end();
+      return;
+    }
+    if (path === "/app/eval-build-id.json" && self.buildId !== "ok") {
+      if (self.buildId === "unreachable") request.socket.destroy();
+      else response.writeHead(self.buildId === "error" ? 503 : 404).end();
       return;
     }
     if (path === "/foreign.html") {
@@ -82,7 +91,7 @@ function site({ ranges = true, core = false, index = true } = {}) {
     response.writeHead(200, headers);
     createReadStream(file).pipe(response);
   });
-  return { server, seen, listen: (host = "127.0.0.1") => new Promise((resolve) => server.listen(0, host, resolve)) };
+  return Object.assign(self, { server, listen: (host = "127.0.0.1") => new Promise((resolve) => server.listen(0, host, resolve)) });
 }
 const main = site();
 const foreign = site();
@@ -217,6 +226,30 @@ try {
   assert.equal(await lisp("(progn (require 'calc) (calc-eval \"2^10\"))"), "1024");
   assert.deepEqual([main.seen.big, main.seen.whole, main.seen.ranges], [0, 0, 0]);
   pass(`a second visit starts from the browser's cache: ${again.bootMs} ms in the worker, ${Date.now() - t1} ms from navigation, nothing of Emacs requested, calc included`);
+  assert.equal(again.offline, false);
+
+  // The build id cannot be had (a server error, no network): Emacs starts
+  // from the cache of the last build all the same, and asks again next time.
+  for (const failure of ["error", "unreachable"]) {
+    main.buildId = failure;
+    Object.assign(main.seen, { big: 0, ranges: 0 });
+    const offline = await open(pageUrl);
+    assert.deepEqual([offline.cached, offline.offline], [true, true]);
+    assert.equal(await lisp("(progn (require 'calc) (calc-eval \"2^10\"))"), "1024");
+    assert.deepEqual([main.seen.big, main.seen.whole, main.seen.ranges], [0, 0, 0]);
+  }
+  pass("without the build id (HTTP 503, or the connection dropped) Emacs starts from the cache, nothing of Emacs requested");
+  // A server without a build id (a development server) gets nothing from
+  // an older cache: it may serve another build.
+  main.buildId = "missing";
+  Object.assign(main.seen, { big: 0, ranges: 0 });
+  const missing = await open(pageUrl);
+  assert.deepEqual([missing.cached, missing.offline, main.seen.big], [false, false, 2]);
+  main.buildId = "ok";
+  Object.assign(main.seen, { big: 0, ranges: 0 });
+  const back = await open(pageUrl);
+  assert.deepEqual([back.cached, back.offline, main.seen.big], [true, false, 0]);
+  pass("a server that has no build id (404) is not answered from the cache; with the id back, the cache is used again");
 
   // kill-emacs takes the engine down: that request and every later one reject.
   const killed = await lisp("(kill-emacs 0)");

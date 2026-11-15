@@ -2,7 +2,7 @@
 //
 //   import { createEmacsEvalService } from "./src/emacs-eval-client.js";
 //   const emacs = createEmacsEvalService();
-//   await emacs.ready;                                   // { version, bootMs, cached, files }
+//   await emacs.ready;                                   // { version, bootMs, cached, files, offline }
 //   await emacs.eval("(+ 1 2)");                         // 3
 //   await emacs.eval('(list :name "x" :tags ["a" "b"])'); // { name: "x", tags: ["a", "b"] }
 //   await emacs.eval("(defun double (n) (* 2 n))", { format: "lisp" }); // "double"
@@ -62,7 +62,8 @@ export function createEmacsEvalService({
   worker.onmessage = (event) => {
     const msg = event.data || {};
     if (msg.type === "ready") {
-      resolveReady({ version: msg.version, bootMs: msg.bootMs, cached: Boolean(msg.cached), files: msg.files });
+      resolveReady({ version: msg.version, bootMs: msg.bootMs, cached: Boolean(msg.cached), files: msg.files,
+                     offline: Boolean(msg.offline) });
     } else if (msg.type === "failed") {
       failAll(new Error(`Emacs eval service: ${msg.error}`));
     } else if (msg.type === "log") {
