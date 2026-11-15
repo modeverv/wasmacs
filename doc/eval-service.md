@@ -57,6 +57,7 @@ await emacs.call("double", 21);                        // 42
 - A Lisp error rejects with an `EmacsEvalError`: `symbol` (`"void-variable"`),
   `message`, `data` (the printed error object), `output`.
 - `createEmacsEvalService({ onOutput, onProgress })`: `onProgress` gets how the start goes, `{ phase, url, bytes }`: `"build id"`, then `"download"` for each file that was not in the cache (its URL and size), then `"emacs"` while Emacs itself starts. A network error names the URL that failed.
+- A page that enforces Trusted Types (`require-trusted-types-for 'script'`) gets the worker started through a policy named `wasmacs-eval`, which its `trusted-types` directive has to allow.
 - `ready` resolves with `{ version, bootMs, cached, files, offline }`:
   `cached`, nothing of Emacs was downloaded; `files`, `"on demand"` or
   `"all"` (see below); `offline`, the build id could not be asked for and
