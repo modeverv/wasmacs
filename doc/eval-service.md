@@ -100,6 +100,45 @@ out of memory, `kill-emacs`), the engine is in an undefined state. The core
 refuses further requests, the worker reports the result as `fatal`, and the
 client rejects everything after it. Create a new service.
 
+### Emacs's own files
+
+Emacs's `lisp/` and `etc/` are one package of 146 MB (`temacs.data`, 4,211
+files), which the editor downloads whole. The eval service does not: most of
+what a Lisp program needs (the compiler, `cl-lib`, `seq`, `json`, `url`) is
+in the pdmp, and elisp-react's five examples together read seven of those
+files (0.5 MB).
+
+`temacs.files.json` (written by `src/build/emacs-packages.mjs`) says where
+each file is in the package, with a checksum. The worker gives the
+Emscripten glue an empty package, which makes it create every file empty,
+and then gives each file its size and a `contents` that is fetched at the
+first read (`WasmacsEvalFiles` in `emacs-eval-core.js`): a synchronous
+request for that range of the package, which a worker may make. Every file
+is there for `file-exists-p`, `load-path` and `directory-files`; only what
+is read is downloaded. A file that was read is kept in the cache of the
+build and is in place before Emacs starts the next time.
+
+- **Servers without range requests.** The worker asks the server for one
+  byte of the index first. GitHub Pages, nginx, Caddy and elisp-studio's
+  project server send it; Python's `http.server` sends the whole file. Then
+  the package is downloaded whole before the start, as before. `ready` says
+  which it was: `files` is `"on demand"` or `"all"`.
+- **A read that fails** (no network, or bytes that do not have the checksum
+  of the index because the site was updated under a running page) is an
+  input/output error for that file in Lisp; the page's console names the
+  file. The next read tries again.
+- **The core package.** `temacs.core.data` (21.6 MB, 641 files) with its
+  index `temacs.core.files.json` is Emacs Lisp without the editor: the
+  compiled Lisp of `lisp/` itself, `emacs-lisp/`, `international/`, `url/`
+  and `calendar/`, the Unicode tables and the charset maps. No source files,
+  no Org, Gnus, Calc, programming modes or input methods: `(require 'calc)`
+  is `file-missing` there. A site that carries its own copy of Emacs can
+  carry this instead of the 146 MB, under the name `temacs.files.json`
+  (elisp-studio's `fetch-emacs.sh` does that). The published site has both
+  and uses the whole package.
+- **A copy of the site without an index** (made by an older
+  `fetch-emacs.sh`) gets the whole package, as before.
+
 ## Measured (2026-11-14, Chrome, local server)
 
 - Ready in about 250-350 ms after the files are there.
@@ -114,6 +153,21 @@ client rejects everything after it. Create a new service.
   35 times faster that way (1000 rows: 4.7 s interpreted, 0.13 s compiled).
 - With the cache below, a later visit of the public site is ready in about
   0.16 s (first visit: 1-4 s on a fast connection).
+
+Reading files on demand (2026-11-15, Chrome, elisp-react's TODO example, a
+local server that compresses and answers range requests as GitHub Pages
+does):
+
+| | whole package | on demand |
+|---|---|---|
+| Downloaded on the first visit | 43.1 MB | 4.8 MB |
+| First visit until the page shows, at 30 Mbit/s | 12.3 s | 2.1 s |
+| Later visits | 0.2-0.3 s | 0.2-0.3 s |
+| Kept in the browser's storage | 162.5 MB | 16.9 MB |
+| Memory of the tab's process | 630 MB | 230 MB |
+
+`(require 'calc)` then fetches 13 files: 0.08 s locally, 0.8 s at 30 Mbit/s
+with 40 ms of latency.
 
 ## Hashes, random bytes, sockets
 
@@ -142,16 +196,19 @@ checked.
 
 ## Limits and open issues
 
-1. **Download size on the first visit.** The service loads the whole product
-   build: `temacs.wasm` 2.1 MB, the pdmp 12.2 MB and `temacs.data` 139 MB (all
-   of Emacs's `lisp/` and `etc/`). The worker keeps these in the browser's
-   Cache Storage under the build id of the site (`app/eval-build-id.json`), so
-   later visits download nothing but that id; a new build is downloaded once
-   and replaces the old one. The cache belongs to the page's origin: another
-   site that uses the service has its own copy. The first visit is still
-   150 MB: a small data package (the preloaded Lisp is in the pdmp already;
-   most of `lisp/` is only needed for `require`) remains to be done. There is
-   no service worker, so the page itself does not work offline.
+1. **Download size on the first visit.** Emacs itself is downloaded before
+   the start: `temacs.wasm` 3.2 MB and the pdmp 12.8 MB (1.2 MB and 3.4 MB as
+   GitHub Pages compresses them), and the index of its files (0.08 MB). Its
+   `lisp/` and `etc/` come file by file, see [Emacs's own
+   files](#emacss-own-files). The worker keeps all of this in the browser's
+   Cache Storage under the build id of the site (`app/eval-build-id.json`),
+   so later visits download nothing but that id; a new build is downloaded
+   once and replaces the old one. The cache belongs to the page's origin:
+   another site that uses the service has its own copy. There is no service
+   worker, so the page itself does not work offline. Reading on demand was
+   tried in Chrome only; a browser that sends a preflight for a range
+   request to another origin gets the whole package from GitHub Pages
+   instead (the same origin is not affected).
 2. **No interruption.** A request that does not return (`(while t)`) blocks
    the worker; the only way out is `terminate()` and a new service, which
    loses all Lisp state. There is no timeout in the client yet.
@@ -170,8 +227,9 @@ checked.
    the JavaScript stack and end the engine.
 7. **The API is not versioned.** Another project that imports
    `emacs-eval-client.js` from the Pages site gets whatever is deployed. The
-   file layout (`app/src/`, `artifacts/emacs-browser-atomics-pdump/`) is part
-   of the contract now.
+   file layout (`app/src/`, `artifacts/emacs-browser-atomics-pdump/` with
+   `temacs.files.json`, `temacs.data.parts/`, `temacs.core.data` and
+   `temacs.core.files.json`) is part of the contract now.
 8. **Memory.** The module reserves 1 GiB of linear memory at start (the
    product's setting) and can grow to 4 GiB. Lisp cannot see how much is used:
    `garbage-collect` is inhibited during a request and returns nil.
@@ -184,5 +242,5 @@ checked.
 
 | Command | What runs |
 |---|---|
-| `npm test` | `tests/runtime/eval-service-bundle.test.js`: the published core and Lisp on the published Emacs under Node: values, errors, `call`, output, recursion limit, garbage collection. |
-| `npm run test:eval-service` | `tools/scripts/probe-eval-service.mjs`: real Chrome, `docs/` from a plain static server without isolation headers: the worker, the client, the demo page, hashes and random bytes, a failed engine, and a page on another origin. |
+| `npm test` | `tests/runtime/eval-service-bundle.test.js`: the published core and Lisp on the published Emacs under Node: values, errors, `call`, output, recursion limit, garbage collection; the indexes against the published package; files read on demand (what the start reads, a library required later, a read that fails, wrong bytes); the core package. |
+| `npm run test:eval-service` | `tools/scripts/probe-eval-service.mjs`: real Chrome, `docs/` from a plain static server without isolation headers: the worker, the client, the demo page, hashes and random bytes, a failed engine, and a page on another origin; files on demand and from the cache on the second visit; a server without range requests; a site with the core package; a copy of the site without an index. |

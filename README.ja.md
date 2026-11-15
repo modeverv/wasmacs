@@ -106,7 +106,7 @@ await emacs.eval('(list :sum (+ 1 2) :squares (vconcat (mapcar (lambda (n) (* n 
 // { sum: 3, squares: [1, 4, 9] }
 ```
 
-最初の利用者は [elisp-react](https://github.com/modeverv/elisp-react) です。Emacs Lisp で書いた React で、Web ページのプログラムが `.el` ファイルになり、ネイティブの Emacs をサーバーにすればアプリケーション全体が Emacs Lisp になります。サービス単体は `/app/eval-service.html` で試せます。API、値の変換規則、未解決の課題（最大のものは、約150MBあるビルド全体をダウンロードすること）は [doc/eval-service.md](doc/eval-service.md) にあります。Chrome での検証は `npm run test:eval-service` です。
+最初の利用者は [elisp-react](https://github.com/modeverv/elisp-react) です。Emacs Lisp で書いた React で、Web ページのプログラムが `.el` ファイルになり、ネイティブの Emacs をサーバーにすればアプリケーション全体が Emacs Lisp になります。サービス単体は `/app/eval-service.html` で試せます。ダウンロードするのは Emacs 本体（圧縮して 4.8 MB）と、Emacs 付属の Lisp 146 MB のうちプログラムが読んだファイルだけです。Emacs のコピーを自分のサイトに置く場合は、全体の代わりに 21.6 MB のコアパッケージを置けます。API、値の変換規則、ファイルの読み込み方、未解決の課題は [doc/eval-service.md](doc/eval-service.md) にあります。Chrome での検証は `npm run test:eval-service` です。
 
 ### エディタを埋め込む
 

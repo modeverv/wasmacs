@@ -76,14 +76,24 @@ const server = createServer(async (request, response) => {
       ? "text/javascript; charset=utf-8"
       : types.get(extname(filePath)) || "application/octet-stream";
 
-    response.writeHead(200, {
+    const headers = {
       "Cache-Control": "no-store",
-      "Content-Length": info.size,
       "Content-Type": contentType,
       // Required for SharedArrayBuffer (Atomics.wait in Workers)
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp",
-    });
+    };
+    // The eval service reads Emacs's files as ranges of the package, as
+    // from GitHub Pages.
+    const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.range || "");
+    if (range && Number(range[1]) <= Number(range[2]) && Number(range[1]) < info.size) {
+      const start = Number(range[1]);
+      const end = Math.min(Number(range[2]), info.size - 1);
+      response.writeHead(206, { ...headers, "Content-Length": end - start + 1, "Content-Range": `bytes ${start}-${end}/${info.size}` });
+      createReadStream(filePath, { start, end }).pipe(response);
+      return;
+    }
+    response.writeHead(200, { ...headers, "Content-Length": info.size });
     createReadStream(filePath).pipe(response);
   } catch {
     response.writeHead(404);
