@@ -29,6 +29,9 @@ export class EmacsEvalError extends Error {
   }
 }
 
+// One policy per page: createPolicy refuses a name twice.
+let trustedPolicy = null;
+
 export function createEmacsEvalService({
   workerUrl = new URL("./emacs-eval-worker.js", import.meta.url),
   onOutput = null,   // (text) => void: what `message' and `princ' print during a request
@@ -39,13 +42,24 @@ export function createEmacsEvalService({
   // (it imported this module with CORS), a same-origin blob imports the
   // worker script and tells it where it really lives.
   const scriptUrl = new URL(workerUrl, import.meta.url);
+  // A page that enforces Trusted Types (require-trusted-types-for 'script')
+  // accepts a worker's URL only from a policy: this one is "wasmacs-eval",
+  // which the page's trusted-types directive has to allow.
+  const trusted = (url) => {
+    try {
+      trustedPolicy ??= globalThis.trustedTypes?.createPolicy("wasmacs-eval", { createScriptURL: (each) => each }) ?? false;
+    } catch (_) {
+      trustedPolicy = false;
+    }
+    return trustedPolicy ? trustedPolicy.createScriptURL(String(url)) : url;
+  };
   let worker;
   if (scriptUrl.origin === globalThis.location?.origin) {
-    worker = new Worker(scriptUrl);
+    worker = new Worker(trusted(scriptUrl));
   } else {
     const bootstrap = `self.__wasmacsEvalWorkerUrl = ${JSON.stringify(scriptUrl.href)}; importScripts(self.__wasmacsEvalWorkerUrl);`;
     const blobUrl = URL.createObjectURL(new Blob([bootstrap], { type: "text/javascript" }));
-    worker = new Worker(blobUrl);
+    worker = new Worker(trusted(blobUrl));
     URL.revokeObjectURL(blobUrl);
   }
   const pending = new Map();

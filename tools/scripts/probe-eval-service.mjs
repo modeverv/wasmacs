@@ -67,6 +67,17 @@ function site({ ranges = true, core = false, index = true, copy = false } = {}) 
       else response.writeHead(self.buildId === "error" ? 503 : 404).end();
       return;
     }
+    // The demo page under Trusted Types.
+    if (path === "/trusted.html") {
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8",
+        "Content-Security-Policy": "require-trusted-types-for 'script'; trusted-types wasmacs-eval" })
+        .end(`<!doctype html><meta charset="utf-8"><title>trusted types</title>
+<script type="module">
+import { createEmacsEvalService } from "/app/src/emacs-eval-client.js";
+window.wasmacsEval = createEmacsEvalService();
+</script>`);
+      return;
+    }
     if (path === "/foreign.html") {
       response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(foreignPage(new URL(pageUrl).origin));
       return;
@@ -264,6 +275,11 @@ try {
   const back = await open(pageUrl);
   assert.deepEqual([back.cached, back.offline, main.seen.big], [true, false, 0]);
   pass("a server that has no build id (404) is not answered from the cache; with the id back, the cache is used again");
+
+  // A page that enforces Trusted Types.
+  await open(pageUrl.replace("/app/eval-service.html", "/trusted.html"));
+  assert.equal(await lisp("(+ 20 22)"), 42);
+  pass("a page that enforces Trusted Types starts the worker through the policy wasmacs-eval");
 
   // kill-emacs takes the engine down: that request and every later one reject.
   const killed = await lisp("(kill-emacs 0)");
