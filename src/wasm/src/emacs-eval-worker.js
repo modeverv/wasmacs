@@ -31,7 +31,8 @@
  * downloaded whole, as the editor does.
  *
  * What was downloaded is kept in the browser's Cache Storage under the
- * build id of the published site (../eval-build-id.json, written by
+ * place of the build and the build id of the published site
+ * (../eval-build-id.json, written by
  * src/build/build-site.mjs).  A later start asks the network only for that
  * id and takes everything else from the cache; a new build has a new id, is
  * downloaded once, and replaces the old one.  When the id cannot be had,
@@ -63,7 +64,14 @@ async function fetchBytes(url) {
 
 // ---- the files of Emacs, cached by build -------------------------------------
 
+// A cache is named after the place of the build as well as its id
+// (wasmacs-eval-<place>-<id>): two builds on one origin, say the published
+// one and an application's copy in its vendor/, keep a cache each instead
+// of deleting each other's.  A start deletes only older builds of its own
+// place, and caches named before places were (wasmacs-eval-<id>).
 const CACHE_PREFIX = "wasmacs-eval-";
+const PLACE_PREFIX = `${CACHE_PREFIX}${placeKey(ARTIFACT_DIR)}-`;
+const OLD_NAME = /^wasmacs-eval-[0-9a-f]{32}(-core)?$/;
 let cache = null;         // Cache of this build, or null: everything from the network
 let downloads = 0;        // files that were not in the cache
 
@@ -89,25 +97,32 @@ async function openBuildCache() {
   }
   try {
     if (!id) return;
-    cache = await caches.open(`${CACHE_PREFIX}${id}`);
+    cache = await caches.open(`${PLACE_PREFIX}${id}`);
     for (const name of await caches.keys()) {
-      if (name.startsWith(CACHE_PREFIX) && name !== `${CACHE_PREFIX}${id}`) await caches.delete(name);
+      if ((name.startsWith(PLACE_PREFIX) || OLD_NAME.test(name)) && name !== `${PLACE_PREFIX}${id}`) await caches.delete(name);
     }
   } catch (_) {
     cache = null;
   }
 }
 
-// The cache of the last build that was started, or null.  keys() lists
-// caches in the order they were created, and a start deletes the caches of
-// other builds, so there is one at most.
+// The cache of the last build of this place that was started, or null.
+// A start deletes the caches of other builds of its place, so there is one
+// at most.
 async function newestBuildCache() {
   try {
-    const name = (await caches.keys()).filter((each) => each.startsWith(CACHE_PREFIX)).pop();
+    const name = (await caches.keys()).filter((each) => each.startsWith(PLACE_PREFIX)).pop();
     return name ? await caches.open(name) : null;
   } catch (_) {
     return null;
   }
+}
+
+// A short name for the place of a build: FNV-1a of its URL, in hex.
+function placeKey(url) {
+  let hash = 0x811c9dc5;
+  for (const byte of new TextEncoder().encode(url)) hash = Math.imul(hash ^ byte, 0x01000193) >>> 0;
+  return hash.toString(16).padStart(8, "0");
 }
 
 // The bytes of URL: from the cache of this build, else from the network
