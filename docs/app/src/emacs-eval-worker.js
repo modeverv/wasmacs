@@ -6,9 +6,11 @@
  * emacs-eval-client.js.
  *
  *   -> { type: "start" }
- *   <- { type: "ready", version, bootMs, cached, files }   | { type: "failed", error }
+ *   <- { type: "ready", version, bootMs, cached, files, offline }   | { type: "failed", error }
  *      files: "on demand" (each of Emacs's files is fetched when Emacs
- *      reads it) or "all" (they were downloaded before the start)
+ *      reads it) or "all" (they were downloaded before the start);
+ *      offline: the build id could not be asked for, and the start came
+ *      from the cache of the last build
  *   -> { type: "eval", id, source, format }          format: "json" | "lisp"
  *   -> { type: "call", id, name, args, format }
  *   <- { type: "result", id, ok, value | error, output, ms }
@@ -32,8 +34,9 @@
  * build id of the published site (../eval-build-id.json, written by
  * src/build/build-site.mjs).  A later start asks the network only for that
  * id and takes everything else from the cache; a new build has a new id, is
- * downloaded once, and replaces the old one.  "ready" says whether this
- * start came from the cache.
+ * downloaded once, and replaces the old one.  When the id cannot be had,
+ * the start takes the cache as it is.  "ready" says whether this start came
+ * from the cache.
  */
 // Where this script is served from.  A page on another origin cannot start a
 // worker from here directly; the client then starts a blob worker that
@@ -64,19 +67,46 @@ const CACHE_PREFIX = "wasmacs-eval-";
 let cache = null;         // Cache of this build, or null: everything from the network
 let downloads = 0;        // files that were not in the cache
 
+let offline = false;       // the build id could not be asked for: started from the cache
+
 // Open the cache of the published build and drop those of older builds.
-// Without a build id (a development server) or without Cache Storage
-// (an insecure origin) nothing is cached.
+// Without a build id (a development server answers 404) or without Cache
+// Storage (an insecure origin) nothing is cached.  When the id cannot be
+// had (no network, a server error), the newest cache is used as it is,
+// and the id is asked for again next time.
 async function openBuildCache() {
+  if (typeof caches === "undefined") return;
+  let id;
   try {
-    const { id } = JSON.parse(new TextDecoder().decode(await fetchBytes(`${resolveRuntimeUrl("../eval-build-id.json")}?v=${CACHE_BUST}`)));
-    if (!id || typeof caches === "undefined") return;
+    const response = await fetch(`${resolveRuntimeUrl("../eval-build-id.json")}?v=${CACHE_BUST}`, { cache: "no-store" });
+    if (response.status >= 500) throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) return;
+    ({ id } = await response.json());
+  } catch (_) {
+    cache = await newestBuildCache();
+    offline = Boolean(cache);
+    return;
+  }
+  try {
+    if (!id) return;
     cache = await caches.open(`${CACHE_PREFIX}${id}`);
     for (const name of await caches.keys()) {
       if (name.startsWith(CACHE_PREFIX) && name !== `${CACHE_PREFIX}${id}`) await caches.delete(name);
     }
   } catch (_) {
     cache = null;
+  }
+}
+
+// The cache of the last build that was started, or null.  keys() lists
+// caches in the order they were created, and a start deletes the caches of
+// other builds, so there is one at most.
+async function newestBuildCache() {
+  try {
+    const name = (await caches.keys()).filter((each) => each.startsWith(CACHE_PREFIX)).pop();
+    return name ? await caches.open(name) : null;
+  } catch (_) {
+    return null;
   }
 }
 
@@ -296,7 +326,7 @@ async function start() {
   service = self.WasmacsEvalService.create({ Module, lisp: new TextDecoder().decode(lisp) });
   const info = service.start();
   post("ready", { version: info.version, bootMs: Math.round(performance.now() - t0),
-                  cached: Boolean(cache) && downloads === 0, files: filesMode });
+                  cached: Boolean(cache) && downloads === 0, files: filesMode, offline });
   storeReadFiles();
 }
 

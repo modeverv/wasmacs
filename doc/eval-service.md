@@ -56,6 +56,10 @@ await emacs.call("double", 21);                        // 42
 - `call(name, ...args)` calls a Lisp function with JSON-compatible arguments.
 - A Lisp error rejects with an `EmacsEvalError`: `symbol` (`"void-variable"`),
   `message`, `data` (the printed error object), `output`.
+- `ready` resolves with `{ version, bootMs, cached, files, offline }`:
+  `cached`, nothing of Emacs was downloaded; `files`, `"on demand"` or
+  `"all"` (see below); `offline`, the build id could not be asked for and
+  the start came from the cache of the last build.
 - `terminate()` ends the worker.
 - Definitions, variables and buffers live as long as the service. Requests
   are answered one at a time, in order.
@@ -205,9 +209,14 @@ checked.
    files](#emacss-own-files). The worker keeps all of this in the browser's
    Cache Storage under the build id of the site (`app/eval-build-id.json`),
    so later visits download nothing but that id; a new build is downloaded
-   once and replaces the old one. The cache belongs to the page's origin:
-   another site that uses the service has its own copy. There is no service
-   worker, so the page itself does not work offline. The sizes depend on
+   once and replaces the old one. When the id cannot be had (no network, a
+   server error), Emacs starts from the cache as it is and `ready` says
+   `offline: true`; the id is asked for again next time. A server that
+   answers 404 for the id (a development server) gets nothing from the
+   cache. The cache belongs to the page's origin: another site that uses the
+   service has its own copy. There is no service worker, so a page works
+   offline only as far as the browser's HTTP cache still holds the page,
+   the client and the worker. The sizes depend on
    the server compressing: a server that sends these files as they are
    makes the first visit 16.6 MB (measured on 2026-11-15: Caddy and nginx
    with common settings compress `temacs.wasm` and not the pdmp, 14.3 MB;
