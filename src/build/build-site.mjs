@@ -3,6 +3,7 @@ import { existsSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { PACKAGE_CHUNK_SIZE, writeEmacsPackages } from "./emacs-packages.mjs";
 
 const repoRoot = fileURLToPath(new URL("../..", import.meta.url));
 const wasmSource = join(repoRoot, "src", "wasm");
@@ -22,7 +23,7 @@ async function copyIfExists(from, to) {
   await cp(from, to, { recursive: true });
 }
 
-async function splitLargeDataFile(filePath, chunkSize = 32 * 1024 * 1024) {
+async function splitLargeDataFile(filePath, chunkSize = PACKAGE_CHUNK_SIZE) {
   if (!existsSync(filePath)) return;
   const bytes = await readFile(filePath);
   const partsDir = `${filePath}.parts`;
@@ -214,6 +215,9 @@ if (existsSync(docsTemacs) && !existsSync(docsTemacsJs)) {
 }
 await patchTemacsJsForAsyncPreload(docsTemacsJs);
 await patchTemacsJsForHostNetworkRelay(docsTemacsJs);
+// For the eval service, which reads Emacs's files one by one: where each
+// file is in the package, and a small package of the core files.
+await writeEmacsPackages(docsAtomicsPdump);
 await splitLargeDataFile(join(docsAtomicsPdump, "temacs.data"));
 
 // What the eval service caches in the browser, and under which id.

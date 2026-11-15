@@ -35,32 +35,67 @@ const foreignPage = (origin) => `<!doctype html><meta charset="utf-8"><title>ano
 import { createEmacsEvalService } from "${origin}/app/src/emacs-eval-client.js";
 window.wasmacsEval = createEmacsEvalService();
 </script>`;
-// Requests for the big files of Emacs (the pdmp, the parts of temacs.data).
-let bigDownloads = 0;
-const handler = (request, response) => {
-  const path = normalize(decodeURIComponent(new URL(request.url, "http://localhost").pathname));
-  if (/bootstrap-emacs\.pdmp$|temacs\.data\.parts\/part-|temacs\.wasm$/.test(path)) bigDownloads += 1;
-  if (path === "/foreign.html") {
-    response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(foreignPage(new URL(pageUrl).origin));
-    return;
-  }
-  const file = join(docsRoot, path);
-  if (!file.startsWith(docsRoot) || !existsSync(file) || !statSync(file).isFile()) {
-    response.writeHead(404).end("not found");
-    return;
-  }
-  // GitHub Pages answers every request with this header too.
-  response.writeHead(200, { "Content-Type": mimeTypes[extname(file)] || "application/octet-stream",
-                            "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" });
-  createReadStream(file).pipe(response);
-};
-const server = createServer(handler);
-const foreignServer = createServer(handler);
-await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
-await new Promise((resolve) => foreignServer.listen(0, "127.0.0.1", resolve));
-const pageUrl = `http://127.0.0.1:${server.address().port}/app/eval-service.html`;
+// A site that publishes docs/.  ranges: does it answer range requests (GitHub
+// Pages does, Python's http.server does not)?  core: it carries the core
+// package only, as elisp-studio's fetch-emacs.sh copies it.  index: false
+// for a copy of the site from before it had temacs.files.json.  `seen` counts
+// what was asked of it: big (the pdmp, temacs.wasm and whole parts of a
+// package), whole (whole parts of a package), ranges, preflights.
+const packageDir = "/artifacts/emacs-browser-atomics-pdump";
+function site({ ranges = true, core = false, index = true } = {}) {
+  const seen = { big: 0, whole: 0, ranges: 0, rangeBytes: 0, preflights: 0 };
+  const server = createServer((request, response) => {
+    let path = normalize(decodeURIComponent(new URL(request.url, "http://localhost").pathname));
+    if (request.method === "OPTIONS") {   // GitHub Pages refuses a preflight
+      seen.preflights += 1;
+      response.writeHead(405).end();
+      return;
+    }
+    if (path === "/foreign.html") {
+      response.writeHead(200, { "Content-Type": "text/html; charset=utf-8" }).end(foreignPage(new URL(pageUrl).origin));
+      return;
+    }
+    if (core && path.startsWith(`${packageDir}/temacs.data.parts/`)) path = "/missing";
+    if (!index && /temacs\.(core\.)?files\.json$|temacs\.core\.data$/.test(path)) path = "/missing";
+    if (core && path === `${packageDir}/temacs.files.json`) path = `${packageDir}/temacs.core.files.json`;
+    const file = join(docsRoot, path);
+    if (!file.startsWith(docsRoot) || !existsSync(file) || !statSync(file).isFile()) {
+      response.writeHead(404).end("not found");
+      return;
+    }
+    // GitHub Pages answers every request with this header too.
+    const headers = { "Content-Type": mimeTypes[extname(file)] || "application/octet-stream",
+                      "Cache-Control": "no-store", "Access-Control-Allow-Origin": "*" };
+    const isPart = /temacs\.data\.parts\/part-|temacs\.core\.data$/.test(path);
+    const range = ranges && /^bytes=(\d+)-(\d+)$/.exec(request.headers.range || "");
+    if (range) {
+      const size = statSync(file).size;
+      const start = Number(range[1]), end = Math.min(Number(range[2]), size - 1);
+      seen.ranges += 1;
+      seen.rangeBytes += end - start + 1;
+      response.writeHead(206, { ...headers, "Content-Range": `bytes ${start}-${end}/${size}`, "Content-Length": end - start + 1 });
+      createReadStream(file, { start, end }).pipe(response);
+      return;
+    }
+    if (isPart) seen.whole += 1;
+    if (isPart || /bootstrap-emacs\.pdmp$|temacs\.wasm$/.test(path)) seen.big += 1;
+    response.writeHead(200, headers);
+    createReadStream(file).pipe(response);
+  });
+  return { server, seen, listen: (host = "127.0.0.1") => new Promise((resolve) => server.listen(0, host, resolve)) };
+}
+const main = site();
+const foreign = site();
+const plain = site({ ranges: false });
+const coreSite = site({ core: true });
+const corePlain = site({ core: true, ranges: false });
+const older = site({ index: false });
+const sites = [main, foreign, plain, coreSite, corePlain, older];
+await Promise.all(sites.map((each) => each.listen()));
+const page = (each) => `http://127.0.0.1:${each.server.address().port}/app/eval-service.html`;
+const pageUrl = page(main);
 // "localhost" and "127.0.0.1" are different origins.
-const foreignUrl = `http://localhost:${foreignServer.address().port}/foreign.html`;
+const foreignUrl = `http://localhost:${foreign.server.address().port}/foreign.html`;
 
 const workDir = await mkdtemp(join(tmpdir(), "wasmacs-eval-"));
 let chrome = null, client = null;
@@ -80,14 +115,22 @@ try {
   const lisp = (source, options = {}) => js(`window.wasmacsEval.eval(${JSON.stringify(source)}, ${JSON.stringify(options)})
     .catch((error) => ({ error: error.symbol, message: error.message, output: error.output }))`);
 
+  // Open URL and wait for the service: what "ready" says.
+  const open = async (url) => {
+    await client.send("Page.navigate", { url }, sessionId);
+    await waitUntil(() => js("Boolean(window.wasmacsEval)").catch(() => false), `${url} loads the client`);
+    return js("window.wasmacsEval.ready");
+  };
+
   const t0 = Date.now();
-  await client.send("Page.navigate", { url: pageUrl }, sessionId);
-  await waitUntil(() => js("Boolean(window.wasmacsEval)").catch(() => false), "the page loads the client");
-  const info = await js("window.wasmacsEval.ready");
+  const info = await open(pageUrl);
   assert.equal(info.version, "30.2");
   assert.equal(info.cached, false);
-  assert.equal(bigDownloads > 3, true);
-  pass(`Emacs ${info.version} is ready: ${info.bootMs} ms in the worker, ${Date.now() - t0} ms from navigation (${bigDownloads} big files downloaded)`);
+  // Emacs itself is downloaded; of its 146 MB of Lisp, what the start reads.
+  assert.equal(info.files, "on demand");
+  assert.deepEqual([main.seen.big, main.seen.whole], [2, 0]);
+  assert.equal(main.seen.ranges < 10 && main.seen.rangeBytes < 1e6, true, `${main.seen.ranges} ranges, ${main.seen.rangeBytes} bytes`);
+  pass(`Emacs ${info.version} is ready: ${info.bootMs} ms in the worker, ${Date.now() - t0} ms from navigation; of Emacs's own files, ${main.seen.rangeBytes} bytes in ${main.seen.ranges} range requests`);
   assert.equal(await js("window.crossOriginIsolated"), false);
   assert.equal(await js("typeof SharedArrayBuffer"), "undefined");
   pass("the page is not cross-origin isolated and has no SharedArrayBuffer");
@@ -114,6 +157,12 @@ try {
   assert.equal(await lisp('(progn (write-region "saved" nil "/tmp/eval-note.txt" nil (quote silent)) (with-temp-buffer (insert-file-contents "/tmp/eval-note.txt") (buffer-string)))'), "saved");
   assert.equal(await lisp("(progn (require 'cl-lib) (require 'seq) (require 'subr-x) (cl-reduce #'+ (seq-filter #'cl-evenp (number-sequence 1 10))))"), 30);
   pass("message output is returned, buffers, files and the bundled Lisp libraries work");
+
+  // A library that is not in the pdmp is fetched when it is required.
+  const rangesBefore = main.seen.ranges;
+  assert.equal(await lisp("(progn (require 'calc) (calc-eval \"2^100\"))"), "1267650600228229401496703205376");
+  assert.equal(main.seen.ranges > rangesBefore && main.seen.whole === 0, true);
+  pass(`(require 'calc) fetched ${main.seen.ranges - rangesBefore} more files`);
 
   // What Lisp has for hashes, random bytes and sockets (doc/eval-service.md).
   assert.equal(await lisp("(secure-hash 'sha256 \"abc\")"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
@@ -156,17 +205,18 @@ try {
   await js("document.querySelector('#source').value = '(list :answer (* 6 7))'; document.querySelector('#run').click(); true");
   await waitUntil(() => js("/\"answer\": 42/.test(document.querySelector('#result').textContent)"), "the page shows the result");
   pass("the demo page evaluates the form in its text area");
-  // A second visit takes Emacs from Cache Storage: no big file is requested.
+  // A second visit takes Emacs from Cache Storage: nothing of Emacs is
+  // requested, not the files that were read on demand either.
   await pause(1500);               // the first visit is still writing the cache
-  bigDownloads = 0;
+  Object.assign(main.seen, { big: 0, ranges: 0 });
   const t1 = Date.now();
-  await client.send("Page.navigate", { url: pageUrl }, sessionId);
-  await waitUntil(() => js("Boolean(window.wasmacsEval)").catch(() => false), "the page loads again");
-  const again = await js("window.wasmacsEval.ready");
+  const again = await open(pageUrl);
   assert.equal(again.cached, true);
-  assert.equal(bigDownloads, 0);
+  assert.equal(again.files, "on demand");
   assert.equal(await lisp("(+ 1 2)"), 3);
-  pass(`a second visit starts from the browser's cache: ${again.bootMs} ms in the worker, ${Date.now() - t1} ms from navigation, nothing big downloaded`);
+  assert.equal(await lisp("(progn (require 'calc) (calc-eval \"2^10\"))"), "1024");
+  assert.deepEqual([main.seen.big, main.seen.whole, main.seen.ranges], [0, 0, 0]);
+  pass(`a second visit starts from the browser's cache: ${again.bootMs} ms in the worker, ${Date.now() - t1} ms from navigation, nothing of Emacs requested, calc included`);
 
   // kill-emacs takes the engine down: that request and every later one reject.
   const killed = await lisp("(kill-emacs 0)");
@@ -182,6 +232,42 @@ try {
   assert.equal((await js("window.wasmacsEval.ready")).version, "30.2");
   assert.deepEqual(await lisp("(list :origin \"elsewhere\" :sum (+ 20 22))"), { origin: "elsewhere", sum: 42 });
   pass(`a page on another origin (${new URL(foreignUrl).origin}) uses the service published at ${new URL(pageUrl).origin}`);
+  // Its range requests need no preflight (which GitHub Pages would refuse).
+  assert.equal(await js("window.wasmacsEval.ready.then((info) => info.files)"), "on demand");
+  assert.deepEqual([main.seen.preflights, main.seen.whole], [0, 0]);
+  pass("from another origin, too, the files are read on demand");
+
+  // A server that does not answer range requests: the whole package is
+  // downloaded before the start, as before.
+  const whole = await open(page(plain));
+  assert.equal(whole.files, "all");
+  assert.deepEqual([plain.seen.whole, plain.seen.ranges], [5, 0]);
+  assert.equal(await lisp("(progn (require 'calc) (calc-eval \"2^10\"))"), "1024");
+  pass(`without range requests the package is downloaded whole (${whole.bootMs} ms in the worker)`);
+
+  // A site with the core package only: Emacs Lisp and its library, not the
+  // editor's.
+  const coreInfo = await open(page(coreSite));
+  assert.equal(coreInfo.files, "on demand");
+  assert.equal(await lisp("(progn (require 'iso8601) (require 'cl-extra) (require 'generator) (nth 5 (iso8601-parse \"2026-11-15T10:00:00Z\")))"), 2026);
+  assert.equal(await lisp("(decode-coding-string (encode-coding-string \"日本語\" 'japanese-shift-jis) 'japanese-shift-jis)"), "日本語");
+  assert.equal((await lisp("(require 'calc)")).error, "file-missing");
+  assert.deepEqual([coreSite.seen.whole, coreSite.seen.ranges > 0], [0, true]);
+  pass(`a site with the core package: ${coreSite.seen.rangeBytes} bytes in ${coreSite.seen.ranges} range requests; calc is not there`);
+  const coreWhole = await open(page(corePlain));
+  assert.equal(coreWhole.files, "all");
+  assert.deepEqual([corePlain.seen.whole, corePlain.seen.ranges], [1, 0]);
+  assert.equal(await lisp("(progn (require 'iso8601) (nth 5 (iso8601-parse \"2026-11-15T10:00:00Z\")))"), 2026);
+  assert.equal((await lisp("(require 'calc)")).error, "file-missing");
+  pass("a site with the core package and no range requests downloads that package whole");
+
+  // A copy of the site from before there was an index (an older
+  // fetch-emacs.sh): the package the glue asks for, whole.
+  const old = await open(page(older));
+  assert.equal(old.files, "all");
+  assert.deepEqual([older.seen.whole, older.seen.ranges], [5, 0]);
+  assert.equal(await lisp("(progn (require 'calc) (calc-eval \"2^10\"))"), "1024");
+  pass("a copy of the site without an index still works: the whole package");
   console.log(`eval service probe passed — see ${logPath}`);
 } finally {
   await mkdir(join(repoRoot, "logs"), { recursive: true });
@@ -191,7 +277,6 @@ try {
     chrome.kill("SIGTERM");
     await Promise.race([new Promise((resolve) => chrome.once("exit", resolve)), pause(2000)]);
   }
-  server.close();
-  foreignServer.close();
+  for (const each of sites) each.server.close();
   await rm(workDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
 }

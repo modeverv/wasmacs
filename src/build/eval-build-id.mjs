@@ -12,6 +12,10 @@ export const evalBuildFiles = [
   "artifacts/emacs-browser-atomics-pdump/bootstrap-emacs.pdmp",
   // Names the sha256 of every part of temacs.data.
   "artifacts/emacs-browser-atomics-pdump/temacs.data.parts/manifest.json",
+  // Name the checksum of every file of Emacs, in the whole package and in
+  // the core package.
+  "artifacts/emacs-browser-atomics-pdump/temacs.files.json",
+  "artifacts/emacs-browser-atomics-pdump/temacs.core.files.json",
   "app/src/emacs-eval-core.js",
   "app/src/wasmacs-eval-service.el",
 ];

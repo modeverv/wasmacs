@@ -42,7 +42,8 @@ programs.  Each is under its own licence, not under MIT.  Paths are under
 
 | Files | Program | Licence |
 |---|---|---|
-| `emacs-browser-atomics-pdump/temacs.wasm`, `temacs.js`, `bootstrap-emacs.pdmp`, `temacs.data.parts/` | GNU Emacs 30.2, with its `lisp/` and `etc/`, changed by `src/c/patches/` | GPL-3.0-or-later |
+| `emacs-browser-atomics-pdump/temacs.wasm`, `temacs.js`, `bootstrap-emacs.pdmp`, `temacs.data.parts/`, `temacs.core.data` (a part of the same `lisp/` and `etc/`) | GNU Emacs 30.2, with its `lisp/` and `etc/`, changed by `src/c/patches/` | GPL-3.0-or-later |
+| `emacs-browser-atomics-pdump/temacs.files.json`, `temacs.core.files.json` | wasmacs: where the files of Emacs are in those packages | MIT |
 | (linked into Emacs) | SQLite 3.54.1 | public domain |
 | `userland/busybox.wasm`, `busybox.js` | BusyBox 1.38.0, changed by `src/userland/busybox/patches/` | GPL-2.0-only |
 | `userland/git.wasm`, `git.js`, `git-http.wasm`, `git-http.js` | git 2.52.1, with `src/userland/git/http-browser.c` in place of its libcurl transport; zlib 1.3.1 | GPL-2.0-only; zlib: Zlib |

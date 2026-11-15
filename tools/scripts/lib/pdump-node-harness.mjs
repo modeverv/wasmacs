@@ -66,6 +66,8 @@ function loadUserlandLayout() {
  *   extraPrograms directories searched for program images before the userland dir
  *   kernelSource  path of a wasmacs-kernel.js to use instead of the one next to
  *                 the userland (or, without a userland, the one in src/)
+ *   preloadData   an ArrayBuffer to give the glue as temacs.data instead of
+ *                 the package of artifactDir (an empty one: see evalService)
  * batchEval and interactiveSession also take `prepare(emacs)`, called after
  * boot and before Emacs runs (to put files into the filesystem).
  */
@@ -74,12 +76,13 @@ export async function bootEmacs({
   userland = false,
   extraPrograms = [],
   kernelSource = process.env.WASMACS_KERNEL_JS || null,
+  preloadData = null,
 } = {}) {
   const temacsJs = existsSync(`${artifactDir}/temacs`) ? `${artifactDir}/temacs` : `${artifactDir}/temacs.js`;
   const require = createRequire(`${artifactDir}/package.json`);
   const code = readFileSync(temacsJs, "utf8");
   const pdmpBytes = readFileSync(`${artifactDir}/bootstrap-emacs.pdmp`);
-  const preloadData = readPreloadData(artifactDir);
+  preloadData = preloadData || readPreloadData(artifactDir);
 
   let resolveReady;
   const ready = new Promise((resolve) => { resolveReady = resolve; });
@@ -406,10 +409,17 @@ export async function initSession({ userland = buildUserlandDir, argv, chunks = 
  * (src/wasm/src/emacs-eval-core.js) on a freshly booted runtime.
  * Returns { service, info, emacs }: service.eval(source, { format }) and
  * service.call(name, args) answer { ok, value | error, output }.
+ * With `files` ({ index, read, have, onRead, onError }: the arguments of
+ * WasmacsEvalFiles.installFiles) Emacs's own files are read on demand, as
+ * in the worker, instead of coming from the whole package.
  */
-export async function evalService({ appDir = `${repoRoot}src/wasm/src`, ...bootOptions } = {}) {
-  const emacs = await bootEmacs(bootOptions);
+export async function evalService({ appDir = `${repoRoot}src/wasm/src`, files = null, ...bootOptions } = {}) {
+  const emacs = await bootEmacs(files ? { ...bootOptions, preloadData: new ArrayBuffer(0) } : bootOptions);
   vm.runInContext(readFileSync(`${appDir}/emacs-eval-core.js`, "utf8"), emacs.context, { filename: "emacs-eval-core.js" });
+  if (files) {
+    emacs.context.__wasmacsEvalFiles = files;
+    vm.runInContext("WasmacsEvalFiles.installFiles({ FS: Module.FS, ...__wasmacsEvalFiles })", emacs.context);
+  }
   emacs.context.__wasmacsEvalLisp = readFileSync(`${appDir}/wasmacs-eval-service.el`, "utf8");
   const core = vm.runInContext("WasmacsEvalService.create({ Module, lisp: __wasmacsEvalLisp })", emacs.context);
   // Replies are built in the vm context; hand out objects of this realm.
