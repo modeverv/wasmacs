@@ -179,6 +179,16 @@ does):
 `(require 'calc)` then fetches 13 files: 0.08 s locally, 0.8 s at 30 Mbit/s
 with 40 ms of latency.
 
+## Testing Lisp in this Emacs
+
+`tools/scripts/ert.mjs` runs an ERT suite in the published WebAssembly Emacs 30.2 under Node, the Emacs pages run, so that an application's CI does not have to trust a native Emacs of another version:
+
+```sh
+node tools/scripts/ert.mjs --root ../elisp-react -L lisp -L test -c react -c react-testing -l react-test -l react-testing-test
+```
+
+`--root` (default: the current directory) is copied into Emacs's filesystem as `/project`; `-L` adds a directory of it to `load-path`; `-c` byte-compiles a file (warnings are errors) and loads it, `-l` loads one as it is, in the order given; `--selector` takes a regexp of test names. It exits 0 when every test passed.
+
 ## Hashes, random bytes, sockets
 
 What Lisp has in this Emacs for an application that signs people in, makes
