@@ -191,6 +191,18 @@ try {
   assert.equal(await lisp("(progn (require 'cl-lib) (require 'seq) (require 'subr-x) (cl-reduce #'+ (seq-filter #'cl-evenp (number-sequence 1 10))))"), 30);
   pass("message output is returned, buffers, files and the bundled Lisp libraries work");
 
+  // Hooks run (issue #21: Emacs was started up to kill-emacs, which stops
+  // them for good, and every hook returned at once).
+  assert.deepEqual(await lisp(`(progn
+    (defvar wasmacs-probe-hook nil)
+    (defvar wasmacs-probe-seen nil)
+    (add-hook 'wasmacs-probe-hook (lambda (x) (push x wasmacs-probe-seen)))
+    (run-hook-with-args 'wasmacs-probe-hook 1)
+    (run-hooks 'wasmacs-probe-hook-zero)
+    (vconcat wasmacs-probe-seen))`), [1]);
+  assert.equal(await lisp(`(let ((seen nil)) (with-temp-buffer (add-hook 'after-change-functions (lambda (&rest _) (setq seen t)) nil t) (insert "x")) seen)`), true);
+  pass("hooks run: run-hook-with-args from Lisp, after-change-functions from C");
+
   // A library that is not in the pdmp is fetched when it is required.
   const rangesBefore = main.seen.ranges;
   assert.equal(await lisp("(progn (require 'calc) (calc-eval \"2^100\"))"), "1267650600228229401496703205376");

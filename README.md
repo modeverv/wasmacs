@@ -470,7 +470,7 @@ wasmacs also changes, compiles and publishes other people's programs, and those 
 
 - **Changes to them** are under the licence of the program they change: the Emacs patches in `src/c/patches/` are GPL-3.0-or-later, the BusyBox patches and the git adapter GPL-2.0-only, the CPython patches PSF-2.0.
 - **The published site** (`docs/artifacts/`) holds GNU Emacs 30.2, GNU grep and GNU diffutils (GPL-3.0-or-later), BusyBox and git (GPL-2.0-only), CPython (PSF-2.0) and SQLite (public domain), compiled with Emscripten (MIT). It is not under MIT.
-- **Their source**, the exact archives they were built from, is kept as the files of the release [`sources-2026-11-15`](https://github.com/modeverv/wasmacs/releases/tag/sources-2026-11-15); with the patches and build scripts of this repository it is the complete corresponding source.
+- **Their source**, the exact archives they were built from, is kept as the files of the release [`sources-2026-11-16`](https://github.com/modeverv/wasmacs/releases/tag/sources-2026-11-16); with the patches and build scripts of this repository it is the complete corresponding source.
 
 [NOTICE.md](NOTICE.md) has the whole table: which file is under which licence, versions, checksums. The texts are in [LICENSES/](LICENSES), and the site publishes all of it under [`licenses/`](https://modeverv.github.io/wasmacs/licenses/NOTICE.txt). A copy of the published files on another site distributes these programs under the same licences and should carry that directory. When the published programs are rebuilt from other sources, the release and `NOTICE.md` change with them.
 

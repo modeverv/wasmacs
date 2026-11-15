@@ -60,7 +60,7 @@ from a CDN; it is not in this repository.
 
 The exact source archives the programs were built from are kept with this
 repository, as files of the release
-[`sources-2026-11-15`](https://github.com/modeverv/wasmacs/releases/tag/sources-2026-11-15):
+[`sources-2026-11-16`](https://github.com/modeverv/wasmacs/releases/tag/sources-2026-11-16):
 
 | Archive | SHA-256 | Where it came from |
 |---|---|---|
