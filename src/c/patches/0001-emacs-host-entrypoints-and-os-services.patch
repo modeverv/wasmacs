@@ -1,12 +1,9 @@
 --- a/src/emacs.c
 +++ b/src/emacs.c
-@@ -653,11 +653,1312 @@
- 	   locale-coding-system.  */
- 	Vcommand_line_args
- 	  = Fcons (build_unibyte_string (argv[i]), Vcommand_line_args);
-+    }
-+
-+  unbind_to (count, Qnil);
+@@ -656,8 +656,1317 @@
+     }
+ 
+   unbind_to (count, Qnil);
 +}
 +
 +static char *wasmacs_last_eval_result;
@@ -362,8 +359,8 @@
 +  wasmacs_last_os_gc_permission_state = state;
 +  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
 +  return wasmacs_last_os_gc_permission_state;
-+}
-+
+ }
+ 
 +__attribute__ ((used, visibility ("default")))
 +const char *
 +wasmacs_os_root_safety_probe (void)
@@ -978,8 +975,8 @@
 +      wasmacs_store_c_string_result ("unavailable:busy");
 +      WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
 +      return 3;
-     }
- 
++    }
++
 +  if (garbage_collection_inhibited)
 +    {
 +      wasmacs_store_c_string_result ("unavailable:gc-inhibited");
@@ -990,17 +987,25 @@
 +  specpdl_ref count = SPECPDL_INDEX ();
 +  specbind (Qsymbols_with_pos_enabled, Qnil);
 +  garbage_collect ();
-   unbind_to (count, Qnil);
++  unbind_to (count, Qnil);
 +  wasmacs_store_c_string_result ("garbage-collected");
 +  WASMACS_LEAVE_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
 +  return 0;
- }
- 
++}
++
 +__attribute__ ((used, visibility ("default")))
 +int
 +wasmacs_eval_string (const char *utf8)
 +{
 +  WASMACS_ENTER_HOST_ENTRYPOINT (saved_stack_bottom, saved_stack_top);
++
++  /* The eval service starts Emacs in batch mode and lets it run on to
++     kill-emacs, which ends main () but not the runtime.  shut_down_emacs
++     has then stopped hooks for good (Vrun_hooks = Qnil), so run-hooks and
++     run-hook-with-args would return at once in every later call.  Emacs
++     lives on here, and so do its hooks.  */
++  if (NILP (Vrun_hooks))
++    Vrun_hooks = intern_c_string ("run-hooks");
 +
 +  if (wasmacs_command_busy)
 +    {
@@ -1313,7 +1318,7 @@
  DEFUN ("invocation-name", Finvocation_name, Sinvocation_name, 0, 0, 0,
         doc: /* Return the program name that was used to run Emacs.
  Any directory names are omitted.  */)
-@@ -2237,6 +3651,17 @@
+@@ -2237,6 +3546,17 @@
    init_fileio ();
    init_lread ();
  
@@ -1331,7 +1336,7 @@
    /* If "-version" was specified, produce version information and
       exit.  We do it here because the code below needs to call Lisp
       primitives, which cannot be done safely before we call all the
-@@ -3594,6 +5019,7 @@
+@@ -3594,6 +4914,7 @@
  
    defsubr (&Skill_emacs);
  

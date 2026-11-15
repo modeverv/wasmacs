@@ -271,9 +271,14 @@ checked.
    build sets no `MAXIMUM_MEMORY`). Lisp cannot see how much is used:
    `garbage-collect` is inhibited during a request and returns nil.
 9. **Emacs is "killed".** Batch startup ends with `kill-emacs`, whose hooks
-   have run. Nothing was found broken by that, but it is an unusual state for
-   Emacs to continue in; a dedicated "initialise and return" entry point in
-   the patch layer would be cleaner.
+   have run. Its `shut_down_emacs` also stopped hooks for good
+   (`Vrun_hooks = Qnil`): until 2026-11-16 `run-hooks`,
+   `run-hook-with-args` and the hooks C runs (`after-change-functions`)
+   returned at once in every request ([#21](https://github.com/modeverv/wasmacs/issues/21)).
+   `wasmacs_eval_string` now gives it back; the probe checks a hook of
+   each kind. It is still an unusual state for Emacs to continue in; a
+   dedicated "initialise and return" entry point in the patch layer would
+   be cleaner.
 
 ## Tests
 

@@ -409,7 +409,7 @@ wasmacs は、他の人が書いたプログラムを変更し、コンパイル
 
 - **変更部分**は、変更対象のプログラムのライセンスに従います。`src/c/patches/` の Emacs へのパッチは GPL-3.0-or-later、BusyBox へのパッチと git 用のアダプターは GPL-2.0-only、CPython へのパッチは PSF-2.0 です。
 - **公開サイト**（`docs/artifacts/`）には、GNU Emacs 30.2、GNU grep、GNU diffutils（GPL-3.0-or-later）、BusyBox、git（GPL-2.0-only）、CPython（PSF-2.0）、SQLite（パブリックドメイン）を、Emscripten（MIT）でコンパイルしたものが入っています。これらは MIT ではありません。
-- **ソース**は、ビルドに使ったアーカイブそのものを、リリース [`sources-2026-11-15`](https://github.com/modeverv/wasmacs/releases/tag/sources-2026-11-15) のファイルとして置いています。このリポジトリのパッチとビルドスクリプトを合わせると、公開しているプログラムに対応するソースの全体になります。
+- **ソース**は、ビルドに使ったアーカイブそのものを、リリース [`sources-2026-11-16`](https://github.com/modeverv/wasmacs/releases/tag/sources-2026-11-16) のファイルとして置いています。このリポジトリのパッチとビルドスクリプトを合わせると、公開しているプログラムに対応するソースの全体になります。
 
 どのファイルがどのライセンスか、バージョン、チェックサムの一覧は [NOTICE.md](NOTICE.md) にあります。ライセンスの全文は [LICENSES/](LICENSES) にあり、公開サイトも同じものを [`licenses/`](https://modeverv.github.io/wasmacs/licenses/NOTICE.txt) で配信しています。公開しているファイルを別のサイトにコピーすると、これらのプログラムを同じライセンスで配布することになります。そのときは、このディレクトリも一緒に置いてください。公開するプログラムを別のソースからビルドし直したときは、リリースと `NOTICE.md` も合わせて更新します。
 
