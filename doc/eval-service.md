@@ -134,8 +134,10 @@ build and is in place before Emacs starts the next time.
   no Org, Gnus, Calc, programming modes or input methods: `(require 'calc)`
   is `file-missing` there. A site that carries its own copy of Emacs can
   carry this instead of the 146 MB, under the name `temacs.files.json`
-  (elisp-studio's `fetch-emacs.sh` does that). The published site has both
-  and uses the whole package.
+  (elisp-studio's `fetch-emacs.sh --core` does that; without the option it
+  copies the whole package, so that a program finds on its own site what
+  it found in the studio). The published site has both and uses the whole
+  package.
 - **A copy of the site without an index** (made by an older
   `fetch-emacs.sh`) gets the whole package, as before.
 
@@ -205,7 +207,12 @@ checked.
    so later visits download nothing but that id; a new build is downloaded
    once and replaces the old one. The cache belongs to the page's origin:
    another site that uses the service has its own copy. There is no service
-   worker, so the page itself does not work offline. Reading on demand was
+   worker, so the page itself does not work offline. The sizes depend on
+   the server compressing: a server that sends these files as they are
+   makes the first visit 16.6 MB (measured on 2026-11-15: Caddy and nginx
+   with common settings compress `temacs.wasm` and not the pdmp, 14.3 MB;
+   elisp-studio's project server sends gzip copies that `fetch-emacs.sh`
+   keeps next to the files, 4.8 MB). Reading on demand was
    tried in Chrome only; a browser that sends a preflight for a range
    request to another origin gets the whole package from GitHub Pages
    instead (the same origin is not affected).
