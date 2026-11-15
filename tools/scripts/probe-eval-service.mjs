@@ -148,6 +148,11 @@ try {
   assert.deepEqual([main.seen.big, main.seen.whole], [2, 0]);
   assert.equal(main.seen.ranges < 10 && main.seen.rangeBytes < 1e6, true, `${main.seen.ranges} ranges, ${main.seen.rangeBytes} bytes`);
   pass(`Emacs ${info.version} is ready: ${info.bootMs} ms in the worker, ${Date.now() - t0} ms from navigation; of Emacs's own files, ${main.seen.rangeBytes} bytes in ${main.seen.ranges} range requests`);
+  const progress = await js("window.wasmacsProgress");
+  assert.equal(progress[0].phase, "build id");
+  assert.equal(progress.at(-1).phase, "emacs");
+  assert.equal(progress.some((step) => step.phase === "download" && /temacs\.wasm$/.test(step.url) && step.bytes > 1e6), true);
+  pass(`the start reports its progress: ${progress.map((step) => step.phase === "download" ? step.url.split("/").pop() : step.phase).join(", ")}`);
   assert.equal(await js("window.crossOriginIsolated"), false);
   assert.equal(await js("typeof SharedArrayBuffer"), "undefined");
   pass("the page is not cross-origin isolated and has no SharedArrayBuffer");
@@ -235,6 +240,7 @@ try {
   assert.deepEqual([main.seen.big, main.seen.whole, main.seen.ranges], [0, 0, 0]);
   pass(`a second visit starts from the browser's cache: ${again.bootMs} ms in the worker, ${Date.now() - t1} ms from navigation, nothing of Emacs requested, calc included`);
   assert.equal(again.offline, false);
+  assert.deepEqual((await js("window.wasmacsProgress")).map((step) => step.phase), ["build id", "emacs"]);
 
   // The build id cannot be had (a server error, no network): Emacs starts
   // from the cache of the last build all the same, and asks again next time.

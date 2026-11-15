@@ -49,7 +49,15 @@ const resultEl = document.querySelector("#result");
 const timingEl = document.querySelector("#timing");
 const lispFormat = document.querySelector("#lisp-format");
 
-const emacs = createEmacsEvalService();
+// How the start goes, for the status line, the console and tests.
+window.wasmacsProgress = [];
+const emacs = createEmacsEvalService({
+  onProgress(step) {
+    window.wasmacsProgress.push(step);
+    statusEl.textContent = step.phase === "download" ? `Downloading ${step.url.split("/").pop()}…`
+      : step.phase === "emacs" ? "Starting Emacs…" : "Starting…";
+  },
+});
 // For the console and for tests.
 window.wasmacsEval = emacs;
 

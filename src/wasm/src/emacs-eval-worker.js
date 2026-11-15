@@ -6,6 +6,9 @@
  * emacs-eval-client.js.
  *
  *   -> { type: "start" }
+ *   <- { type: "progress", phase, url, bytes }   while starting: phase is
+ *      "build id", "download" (a file that was not in the cache: url,
+ *      bytes) or "emacs" (Emacs itself is starting)
  *   <- { type: "ready", version, bootMs, cached, files, offline }   | { type: "failed", error }
  *      files: "on demand" (each of Emacs's files is fetched when Emacs
  *      reads it) or "all" (they were downloaded before the start);
@@ -57,8 +60,13 @@ function post(type, payload = {}) {
 }
 
 async function fetchBytes(url) {
-  const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  let response;
+  try {
+    response = await fetch(url, { cache: "no-store" });
+  } catch (error) {
+    throw new Error(`${url.replace(/\?v=\w+$/, "")}: ${error?.message || error}`);
+  }
+  if (!response.ok) throw new Error(`${url.replace(/\?v=\w+$/, "")}: HTTP ${response.status}`);
   return new Uint8Array(await response.arrayBuffer());
 }
 
@@ -136,6 +144,7 @@ async function loadBytes(url) {
   }
   const bytes = await fetchBytes(`${url}?v=${CACHE_BUST}`);
   downloads += 1;
+  post("progress", { phase: "download", url, bytes: bytes.length });
   if (cache) {
     // Not awaited: storing must not delay the start.  A failure (quota)
     // only means another download next time.
@@ -291,6 +300,7 @@ async function fetchSplitPreloadedPackage(packageName, expectedSize) {
 
 async function start() {
   const t0 = performance.now();
+  post("progress", { phase: "build id" });
   await openBuildCache();
   const [pdmp, lisp, wasmBinary, files] = await Promise.all([
     loadBytes(`${ARTIFACT_DIR}/bootstrap-emacs.pdmp`),
@@ -329,6 +339,7 @@ async function start() {
   };
   self.Module = Module;
   await importCached(`${ARTIFACT_DIR}/temacs.js`);
+  post("progress", { phase: "emacs" });
   await ready;
 
   const FS = Module.FS;

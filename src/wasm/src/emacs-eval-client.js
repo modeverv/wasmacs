@@ -32,6 +32,8 @@ export class EmacsEvalError extends Error {
 export function createEmacsEvalService({
   workerUrl = new URL("./emacs-eval-worker.js", import.meta.url),
   onOutput = null,   // (text) => void: what `message' and `princ' print during a request
+  onProgress = null, // ({ phase, url, bytes }) => void: how the start goes ("build id",
+                     // "download" of a file not in the cache, "emacs")
 } = {}) {
   // A worker has to come from the page's own origin.  For a page elsewhere
   // (it imported this module with CORS), a same-origin blob imports the
@@ -66,6 +68,8 @@ export function createEmacsEvalService({
                      offline: Boolean(msg.offline) });
     } else if (msg.type === "failed") {
       failAll(new Error(`Emacs eval service: ${msg.error}`));
+    } else if (msg.type === "progress") {
+      if (onProgress) onProgress({ phase: msg.phase, url: msg.url ?? null, bytes: msg.bytes ?? null });
     } else if (msg.type === "log") {
       console.warn("[emacs eval service]", msg.text);
     } else if (msg.type === "result") {
