@@ -214,7 +214,10 @@ checked.
    `offline: true`; the id is asked for again next time. A server that
    answers 404 for the id (a development server) gets nothing from the
    cache. The cache belongs to the page's origin: another site that uses the
-   service has its own copy. There is no service worker, so a page works
+   service has its own copy. On one origin, each place the service is served
+   from (the published site, an application's copy in its `vendor/`) has a
+   cache of its own, and a new build replaces only the old one of its
+   place. There is no service worker, so a page works
    offline only as far as the browser's HTTP cache still holds the page,
    the client and the worker. The sizes depend on
    the server compressing: a server that sends these files as they are

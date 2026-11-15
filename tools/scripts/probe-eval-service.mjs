@@ -45,11 +45,18 @@ const packageDir = "/artifacts/emacs-browser-atomics-pdump";
 // buildId: how the site answers for app/eval-build-id.json: "ok", "error"
 // (503), "unreachable" (the connection is dropped) or "missing" (404, as a
 // development server).
-function site({ ranges = true, core = false, index = true } = {}) {
+// copy: the site also serves docs/ under /copy/, as another build (its own
+// build id), the way an application keeps a copy in its vendor/.
+function site({ ranges = true, core = false, index = true, copy = false } = {}) {
   const seen = { big: 0, whole: 0, ranges: 0, rangeBytes: 0, preflights: 0 };
   const self = { seen, buildId: "ok" };
   const server = createServer((request, response) => {
     let path = normalize(decodeURIComponent(new URL(request.url, "http://localhost").pathname));
+    if (copy && path === "/copy/app/eval-build-id.json") {
+      response.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" }).end('{"id":"0123456789abcdef0123456789abcdef"}');
+      return;
+    }
+    if (copy && path.startsWith("/copy/")) path = path.slice("/copy".length);
     if (request.method === "OPTIONS") {   // GitHub Pages refuses a preflight
       seen.preflights += 1;
       response.writeHead(405).end();
@@ -99,7 +106,8 @@ const plain = site({ ranges: false });
 const coreSite = site({ core: true });
 const corePlain = site({ core: true, ranges: false });
 const older = site({ index: false });
-const sites = [main, foreign, plain, coreSite, corePlain, older];
+const twoBuilds = site({ copy: true });
+const sites = [main, foreign, plain, coreSite, corePlain, older, twoBuilds];
 await Promise.all(sites.map((each) => each.listen()));
 const page = (each) => `http://127.0.0.1:${each.server.address().port}/app/eval-service.html`;
 const pageUrl = page(main);
@@ -301,6 +309,23 @@ try {
   assert.deepEqual([older.seen.whole, older.seen.ranges], [5, 0]);
   assert.equal(await lisp("(progn (require 'calc) (calc-eval \"2^10\"))"), "1024");
   pass("a copy of the site without an index still works: the whole package");
+
+  // Two builds on one origin (the site and a copy with another build id
+  // under /copy/) keep a cache each: going back and forth downloads nothing.
+  const first = page(twoBuilds), second = first.replace("/app/", "/copy/app/");
+  for (const url of [first, second]) {
+    twoBuilds.seen.big = 0;
+    assert.equal((await open(url)).cached, false);
+    assert.equal(twoBuilds.seen.big, 2);
+    await pause(1500);             // the cache is still being written
+  }
+  for (const url of [first, second, first]) {
+    twoBuilds.seen.big = 0;
+    assert.equal((await open(url)).cached, true);
+    assert.equal(twoBuilds.seen.big, 0);
+  }
+  assert.deepEqual(await js("caches.keys().then((names) => names.filter((name) => name.startsWith('wasmacs-eval-')).length)"), 2);
+  pass("two builds on one origin keep a cache each and do not evict each other");
   console.log(`eval service probe passed — see ${logPath}`);
 } finally {
   await mkdir(join(repoRoot, "logs"), { recursive: true });
