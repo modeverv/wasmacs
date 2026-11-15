@@ -349,7 +349,7 @@ async function start() {
   FS.chmod("/temacs", 0o755);
   FS.createDataFile("/", "bootstrap-emacs.pdmp", pdmp, true, true, true);
 
-  service = self.WasmacsEvalService.create({ Module, lisp: new TextDecoder().decode(lisp) });
+  service = self.WasmacsEvalService.create({ Module, lisp: new TextDecoder().decode(lisp), deferCollection: true });
   const info = service.start();
   post("ready", { version: info.version, bootMs: Math.round(performance.now() - t0),
                   cached: Boolean(cache) && downloads === 0, files: filesMode, offline });
@@ -377,4 +377,15 @@ self.onmessage = (event) => {
   }
   post("result", { id: msg.id, ...reply, ms: performance.now() - t0 });
   storeReadFiles();
+  // Collect after the answer is on its way, when no request is waiting.
+  scheduleCollection();
 };
+
+let collection = null;
+function scheduleCollection() {
+  if (collection !== null) return;
+  collection = setTimeout(() => {
+    collection = null;
+    try { service?.collectIfDue(); } catch (_) { /* the next request reports a broken engine */ }
+  }, 0);
+}
