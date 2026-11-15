@@ -238,7 +238,8 @@ checked.
    `temacs.files.json`, `temacs.data.parts/`, `temacs.core.data` and
    `temacs.core.files.json`) is part of the contract now.
 8. **Memory.** The module reserves 1 GiB of linear memory at start (the
-   product's setting) and can grow to 4 GiB. Lisp cannot see how much is used:
+   product's setting) and can grow to 2 GiB, Emscripten's default maximum (the
+   build sets no `MAXIMUM_MEMORY`). Lisp cannot see how much is used:
    `garbage-collect` is inhibited during a request and returns nil.
 9. **Emacs is "killed".** Batch startup ends with `kill-emacs`, whose hooks
    have run. Nothing was found broken by that, but it is an unusual state for
